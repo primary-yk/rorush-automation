@@ -2,7 +2,8 @@ import "./bootstrap-env.js";
 import { closeDb, getDb } from "./db/database.js";
 import { startApiServer } from "./api/server.js";
 import { engine } from "./worker/engine.js";
-import { loadConfig } from "./config.js";
+import { loadConfig, projectRoot } from "./config.js";
+import { listAccounts } from "./db/repositories.js";
 import { startPilotRelayClient, stopPilotRelayClient } from "./relay/pilot-client.js";
 
 process.on("uncaughtException", (err) => {
@@ -18,6 +19,11 @@ async function main() {
   const cfg = loadConfig();
   await startApiServer();
   console.log(`Automation API listening on http://${cfg.AUTOMATION_API_HOST}:${cfg.AUTOMATION_API_PORT}`);
+  console.log(`Database: ${cfg.DATABASE_PATH} (${listAccounts().length} account(s))`);
+  if (!cfg.ENCRYPTION_KEY?.trim()) {
+    console.warn("WARNING: ENCRYPTION_KEY missing in .env — you cannot save RoRush accounts until it is set.");
+  }
+  console.log(`Project root: ${projectRoot()}`);
   void engine.start();
   startPilotRelayClient();
 }

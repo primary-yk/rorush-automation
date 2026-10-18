@@ -1,5 +1,5 @@
 import express from "express";
-import { loadConfig } from "../config.js";
+import { loadConfig, projectRoot } from "../config.js";
 import {
   deleteAccount,
   getSettings,
@@ -32,7 +32,14 @@ export function createApiServer() {
   app.use(express.json({ limit: "256kb" }));
 
   app.get("/health", (_req, res) => {
-    res.json({ ok: true });
+    const cfg = loadConfig();
+    res.json({
+      ok: true,
+      projectRoot: projectRoot(),
+      databasePath: cfg.DATABASE_PATH,
+      accountCount: listAccounts().length,
+      encryptionConfigured: !!cfg.ENCRYPTION_KEY?.trim(),
+    });
   });
 
   app.get("/api/settings", (_req, res) => {
