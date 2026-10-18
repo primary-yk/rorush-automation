@@ -1,4 +1,4 @@
-# RoRush Automation (self-hosted)
+# Rush Pilot (self-hosted)
 
 Node.js + TypeScript automation module for [RoRush](https://rorush.com) with a small Next.js dashboard. It uses the same public web API and SignalR hub as the site (`https://api.rorush.com`), including:
 
@@ -37,7 +37,9 @@ npm run dev
 - Dashboard: http://127.0.0.1:43123
 - Automation API: http://127.0.0.1:43124
 
-3. In the dashboard, add accounts with nickname + email/password **or** paste a session JWT from DevTools (Application → localStorage / network `Authorization` header after login).
+3. Activate your **license key** on the dashboard (included with purchase). Vendors: see [docs/LICENSE-VENDOR.md](docs/LICENSE-VENDOR.md).
+
+4. Add accounts with nickname + email/password **or** paste a session JWT from DevTools (Application → localStorage / network `Authorization` header after login).
 
 Optional env for captcha site keys (copy from DevTools when hCaptcha / Turnstile loads on rorush.com):
 

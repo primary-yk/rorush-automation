@@ -1,5 +1,32 @@
 import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { loadConfig, reloadEnv } from "../config.js";
+
+const ENV_PATH = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", ".env");
+
+function readEnvFileFlag(name: string): boolean {
+  try {
+    const text = fs.readFileSync(ENV_PATH, "utf8");
+    for (const line of text.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const eq = trimmed.indexOf("=");
+      if (eq <= 0) continue;
+      if (trimmed.slice(0, eq).trim() !== name) continue;
+      const s = trimmed
+        .slice(eq + 1)
+        .trim()
+        .replace(/^["']|["']$/g, "")
+        .toLowerCase();
+      return s === "1" || s === "true" || s === "yes" || s === "on";
+    }
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
 
 export type LicensePayload = {
   v: 1;
@@ -52,8 +79,14 @@ function envFlag(name: string): boolean {
 
 export function licenseDevSkip(): boolean {
   reloadEnv();
+  if (
+    readEnvFileFlag("LICENSE_DEV_SKIP") ||
+    readEnvFileFlag("_LICENSE_DEV_SKIP") ||
+    readEnvFileFlag("RUSH_PILOT_DEV")
+  ) {
+    return true;
+  }
   if (loadConfig().LICENSE_DEV_SKIP) return true;
-  // Common .env typos / aliases (owner dev machines only)
   return (
     envFlag("LICENSE_DEV_SKIP") ||
     envFlag("_LICENSE_DEV_SKIP") ||

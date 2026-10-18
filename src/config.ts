@@ -1,7 +1,15 @@
 import dotenv from "dotenv";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 
-dotenv.config();
+const ENV_PATH = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".env");
+
+function loadDotenv(): void {
+  dotenv.config({ path: ENV_PATH, override: true });
+}
+
+loadDotenv();
 
 const envSchema = z.object({
   ENCRYPTION_KEY: z.string().min(1).optional(),
@@ -27,7 +35,7 @@ export type AppConfig = z.infer<typeof envSchema>;
 let cached: AppConfig | null = null;
 
 export function reloadEnv(): void {
-  dotenv.config({ override: true });
+  dotenv.config({ path: ENV_PATH, override: true });
   cached = null;
 }
 
