@@ -1,3 +1,4 @@
+import "./bootstrap-env.js";
 import { closeDb, getDb } from "./db/database.js";
 import { startApiServer } from "./api/server.js";
 import { engine } from "./worker/engine.js";

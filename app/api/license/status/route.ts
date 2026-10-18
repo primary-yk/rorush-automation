@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { envTruthy } from "@/lib/env-path";
+import { licenseDevSkipEnabled } from "@/lib/env-path";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  if (envTruthy("LICENSE_DEV_SKIP") || envTruthy("_LICENSE_DEV_SKIP") || envTruthy("RUSH_PILOT_DEV")) {
+  if (process.env.RUSH_PILOT_DEV_SKIP === "true" || licenseDevSkipEnabled()) {
     return NextResponse.json({
       active: true,
       devSkip: true,
