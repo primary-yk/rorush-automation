@@ -169,23 +169,20 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
     <AppShell tab={tab} onTab={setTab} engineOnline={apiOk} headerExtra={pauseToggle}>
       {capmonsterMissing && (
         <Card className="mb-8 border-amber-500/35 bg-amber-500/[0.08]" glow="none">
-          <p className="text-sm font-semibold text-amber-100">CapMonster not configured — rain join will fail</p>
+          <p className="text-sm font-semibold text-amber-100">Captcha API key missing — rain join will fail</p>
           <p className="mt-2 text-sm leading-relaxed text-slate-400">
-            RoRush requires an hCaptcha token for rain. Rush Pilot sends that to{" "}
-            <strong className="text-slate-300">CapMonster Cloud</strong> using{" "}
-            <code className="rounded-lg bg-black/40 px-2 py-0.5 font-mono text-xs text-amber-100">
-              CAPMONSTER_API_KEY
-            </code>{" "}
-            in your project{" "}
-            <code className="rounded-lg bg-black/40 px-2 py-0.5 font-mono text-xs">.env</code> file (same folder as{" "}
-            <code className="font-mono text-xs">npm run dev</code>). After adding the key,{" "}
-            <strong className="text-slate-300">stop and restart</strong>{" "}
-            <code className="font-mono text-xs">npm run dev</code>.
+            RoRush rain uses <strong className="text-slate-300">hCaptcha</strong>. Use{" "}
+            <strong className="text-slate-300">2Captcha</strong> or CapSolver (CapMonster no longer supports hCaptcha
+            API). In{" "}
+            <code className="rounded-lg bg-black/40 px-2 py-0.5 font-mono text-xs">~/rush-pilot/.env</code> add:
           </p>
-          <p className="mt-3 text-xs text-slate-500">
-            In WSL:{" "}
-            <code className="text-slate-400">nano ~/rush-pilot/.env</code> → add key →{" "}
-            <code className="text-slate-400">npm run test-captcha</code>
+          <pre className="mt-3 overflow-x-auto rounded-lg bg-black/50 p-3 font-mono text-xs text-amber-100/90">
+            CAPTCHA_API_KEY=your_2captcha_key{"\n"}CAPTCHA_PROVIDER=2captcha
+          </pre>
+          <p className="mt-3 text-sm text-slate-400">
+            Then <strong className="text-slate-300">Ctrl+C</strong> and restart{" "}
+            <code className="font-mono text-xs">npm run dev</code>, run{" "}
+            <code className="font-mono text-xs">npm run test-captcha</code>, refresh this page.
           </p>
         </Card>
       )}
