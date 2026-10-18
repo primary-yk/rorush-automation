@@ -3,7 +3,9 @@ import { loadConfig } from "../config.js";
 
 export type CaptchaKind = "hcaptcha" | "turnstile";
 
-const HCAPTCHA_SITEKEY = process.env.RORUSH_HCAPTCHA_SITEKEY ?? "";
+/** Default from RoRush web client (override via env if they rotate keys). */
+const DEFAULT_HCAPTCHA_SITEKEY = "d5eed048-d092-4296-8496-a040aaccc710";
+const HCAPTCHA_SITEKEY = process.env.RORUSH_HCAPTCHA_SITEKEY ?? DEFAULT_HCAPTCHA_SITEKEY;
 const TURNSTILE_SITEKEY = process.env.RORUSH_TURNSTILE_SITEKEY ?? "";
 const PAGE_URL = process.env.RORUSH_SITE_URL ?? "https://rorush.com/";
 

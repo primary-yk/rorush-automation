@@ -2,6 +2,7 @@ import { v4 as uuid } from "uuid";
 import { solveCaptcha } from "../captcha/capmonster.js";
 import { loadConfig } from "../config.js";
 import { appendLog, recordRainJoin, updateAccount } from "../db/repositories.js";
+import { SIGNALR } from "../rorush/endpoints.js";
 import { RoRushHub } from "../rorush/signalr-hub.js";
 import type { RainState } from "../rorush/types.js";
 import { ensureAuthenticated } from "../accounts/session-manager.js";
@@ -38,7 +39,11 @@ export async function joinRainForAccount(input: {
     new Promise((resolve) => {
       const timeout = setTimeout(() => {
         cleanup();
-        resolve({ ok: false, message: "Rain join timed out" });
+        resolve({
+          ok: false,
+          message:
+            "Rain join timed out (no success/failure from RoRush — often captcha or joining too late in the window)",
+        });
       }, 30_000);
 
       const onSuccess = (payload: unknown) => {
@@ -54,8 +59,8 @@ export async function joinRainForAccount(input: {
         resolve({ ok: false, message: p.message ?? "Rain join failed" });
       };
 
-      const offOk = hub.on("ReceiveJoinRainSuccess", onSuccess);
-      const offFail = hub.on("ReceiveRainFailure", onFailure);
+      const offOk = hub.on(SIGNALR.rain.receiveJoinSuccess, onSuccess);
+      const offFail = hub.on(SIGNALR.rain.receiveFailure, onFailure);
 
       const cleanup = () => {
         clearTimeout(timeout);
@@ -71,11 +76,17 @@ export async function joinRainForAccount(input: {
       message: "Sending rain join",
       detail: `${rain.rainId} · pool ${rainAmount} coins`,
     });
+    const outcomePromise = waitForOutcome();
     if (!captchaToken) {
       captchaToken = await solveCaptcha("hcaptcha");
     }
+    if (!captchaToken) {
+      throw new Error(
+        "Captcha token missing — set CAPMONSTER_API_KEY (and check CapMonster balance)",
+      );
+    }
     await hub.joinRain({ reqId, rainId: rain.rainId, captchaToken });
-    let outcome = await waitForOutcome();
+    let outcome = await outcomePromise;
 
     if (!outcome.ok && isWagerRejection(outcome.message) && account.limbo_wager_enabled) {
       appendLog({
@@ -158,24 +169,29 @@ async function joinOnce(
   rainId: string,
   captchaToken: string | null,
 ): Promise<{ ok: boolean; message: string }> {
-  await hub.joinRain({ reqId, rainId, captchaToken });
   return new Promise((resolve) => {
     const timeout = setTimeout(() => resolve({ ok: false, message: "Retry timed out" }), 30_000);
-    const offOk = hub.on("ReceiveJoinRainSuccess", (p) => {
-      const payload = p as { reqId?: string };
-      if (payload.reqId !== reqId) return;
+    const finish = (result: { ok: boolean; message: string }) => {
       clearTimeout(timeout);
       offOk();
       offFail();
-      resolve({ ok: true, message: "Joined rain after wager" });
+      resolve(result);
+    };
+    const offOk = hub.on(SIGNALR.rain.receiveJoinSuccess, (p) => {
+      const payload = p as { reqId?: string };
+      if (payload.reqId && payload.reqId !== reqId) return;
+      finish({ ok: true, message: "Joined rain after wager" });
     });
-    const offFail = hub.on("ReceiveRainFailure", (p) => {
+    const offFail = hub.on(SIGNALR.rain.receiveFailure, (p) => {
       const payload = p as { reqId?: string; message?: string };
       if (payload.reqId && payload.reqId !== reqId) return;
-      clearTimeout(timeout);
-      offOk();
-      offFail();
-      resolve({ ok: false, message: payload.message ?? "Retry failed" });
+      finish({ ok: false, message: payload.message ?? "Retry failed" });
+    });
+    void hub.joinRain({ reqId, rainId, captchaToken }).catch((err) => {
+      finish({
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+      });
     });
   });
 }
