@@ -43,6 +43,9 @@ export type ActivityLog = {
 };
 
 function clientApiUrl(path: string): string {
+  // Browser: always same-origin (Next on 43123 → rewrite to automation API).
+  // Direct :43124 often fails from Windows → WSL; curl in Ubuntu still uses the API process.
+  if (typeof window !== "undefined") return path;
   const base = (process.env.NEXT_PUBLIC_AUTOMATION_API_URL ?? "").replace(/\/$/, "");
   return base ? `${base}${path}` : path;
 }
