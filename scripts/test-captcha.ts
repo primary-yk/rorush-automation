@@ -5,7 +5,11 @@
  */
 import "../src/bootstrap-env.js";
 import { loadConfig, projectRoot } from "../src/config.js";
-import { solveCaptcha } from "../src/captcha/capmonster.js";
+import {
+  detectCaptchaProvider,
+  resolveCaptchaProvider,
+  solveCaptcha,
+} from "../src/captcha/solve.js";
 
 async function main() {
   const cfg = loadConfig();
@@ -19,6 +23,18 @@ async function main() {
     process.exit(1);
   }
   console.log("CAPMONSTER_API_KEY: loaded (" + cfg.CAPMONSTER_API_KEY.length + " chars)");
+  const detected = await detectCaptchaProvider(cfg.CAPMONSTER_API_KEY);
+  const provider = await resolveCaptchaProvider(cfg.CAPMONSTER_API_KEY);
+  console.log(
+    "Captcha provider:",
+    provider,
+    detected ? `(detected via balance: ${detected})` : "(from CAPTCHA_PROVIDER or default)",
+  );
+  if (!detected && provider === "capmonster") {
+    console.warn(
+      "Could not verify key with getBalance — if solve fails, set CAPTCHA_PROVIDER=2captcha or capsolver",
+    );
+  }
   console.log("Requesting one hCaptcha token (may take 15–60s)…");
   const token = await solveCaptcha("hcaptcha");
   if (!token) {
