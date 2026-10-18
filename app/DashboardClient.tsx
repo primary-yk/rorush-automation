@@ -33,7 +33,7 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
   const [newSession, setNewSession] = useState("");
   const [discordChannel, setDiscordChannel] = useState(initial.settings?.discordChannelId ?? "");
   const [discordToken, setDiscordToken] = useState("");
-  const [discordReportWebhook, setDiscordReportWebhook] = useState("");
+  const [relayConnected, setRelayConnected] = useState<boolean | null>(null);
   const [savingAccount, setSavingAccount] = useState(false);
 
   const apiOk = !error && settings != null;
@@ -64,9 +64,14 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
       setLoading(false);
     }
     try {
-      const [a, l] = await Promise.all([dashboardApi.listAccounts(), dashboardApi.listLogs()]);
+      const [a, l, relay] = await Promise.all([
+        dashboardApi.listAccounts(),
+        dashboardApi.listLogs(),
+        dashboardApi.getDiscordRelayStatus().catch(() => ({ relayConfigured: false, connected: false })),
+      ]);
       setAccounts(a);
       setLogs(l);
+      setRelayConnected(relay.connected);
     } catch (e) {
       setError((prev) => prev ?? (e instanceof Error ? e.message : String(e)));
     }
@@ -328,59 +333,23 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
 
           <Card glow="violet">
             <SectionTitle
-              title="Private thread reports"
-              description="Post limbo hits/misses, rain results, and your account list to a Discord thread via webhook. Create a webhook inside the private thread (Integrations → Webhooks)."
+              title="Discord bot (recommended)"
+              description="Use the vendor Rush Pilot bot: /activate your license, get a private thread for limbo hits/misses, rain, and accounts. Set DISCORD_BOT_RELAY_URL in .env — see docs/DISCORD-BOT.md."
             />
-            <div className="grid max-w-lg gap-4">
-              {settings && (
-                <Toggle
-                  label="Send reports to thread"
-                  description="Limbo, rain, account changes"
-                  checked={settings.discordReportEnabled ?? false}
-                  onChange={async (v) => {
-                    const s = await dashboardApi.patchSettings({ discordReportEnabled: v });
-                    setSettings(s);
-                  }}
-                />
-              )}
-              <Input
-                type="password"
-                placeholder={
-                  settings?.hasDiscordReportWebhook
-                    ? "New webhook URL (leave blank to keep)"
-                    : "https://discord.com/api/webhooks/…"
-                }
-                value={discordReportWebhook}
-                onChange={(e) => setDiscordReportWebhook(e.target.value)}
-              />
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="soft"
-                  onClick={async () => {
-                    const s = await dashboardApi.patchSettings({
-                      discordReportWebhook: discordReportWebhook || null,
-                    });
-                    setSettings(s);
-                    setDiscordReportWebhook("");
-                    toast.push("Report webhook saved", "success");
-                  }}
-                >
-                  Save webhook
-                </Button>
-                <Button
-                  variant="ghost"
-                  onClick={async () => {
-                    try {
-                      await dashboardApi.testDiscordReport();
-                      toast.push("Test message sent to your thread", "success");
-                    } catch (e) {
-                      toast.push(e instanceof Error ? e.message : "Test failed", "error");
-                    }
-                  }}
-                >
-                  Send test
-                </Button>
-              </div>
+            <div className="rounded-xl border border-white/[0.08] bg-black/30 px-4 py-3 text-sm">
+              <p className="text-slate-300">
+                Bot relay:{" "}
+                {relayConnected === true ? (
+                  <span className="text-emerald-400">Connected</span>
+                ) : relayConnected === false ? (
+                  <span className="text-amber-400/90">Not connected — check .env and /activate in Discord</span>
+                ) : (
+                  <span className="text-slate-500">…</span>
+                )}
+              </p>
+              <p className="mt-2 text-xs leading-relaxed text-slate-500">
+                Commands: /status · /accounts · /pause · /resume — or use this dashboard; same engine.
+              </p>
             </div>
           </Card>
 

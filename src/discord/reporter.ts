@@ -1,6 +1,7 @@
 import { fetch } from "undici";
 import { decryptField } from "../accounts/session-manager.js";
 import { getSettings, listAccounts } from "../db/repositories.js";
+import { isRelayConnected, sendPilotEvent } from "../relay/pilot-client.js";
 
 type Embed = {
   title: string;
@@ -23,7 +24,13 @@ function webhookConfigured(): string | null {
   return url;
 }
 
-export async function postPilotEmbed(embed: Embed): Promise<void> {
+async function deliverEmbed(embed: Embed): Promise<void> {
+  if (isRelayConnected()) {
+    const t = embed.title.toLowerCase();
+    const kind = t.includes("limbo") ? "limbo" : t.includes("account") ? "accounts" : t.includes("rain") ? "rain" : "system";
+    sendPilotEvent({ type: "event", kind, embed });
+    return;
+  }
   const url = webhookConfigured();
   if (!url) return;
   try {
@@ -63,7 +70,7 @@ export async function reportLimboOutcome(input: {
   if (input.rainId) {
     fields.push({ name: "Rain", value: input.rainId, inline: false });
   }
-  await postPilotEmbed({
+  await deliverEmbed({
     title,
     color,
     fields,
@@ -78,7 +85,7 @@ export async function reportRainOutcome(input: {
   rainId: string;
   poolCoins?: number;
 }): Promise<void> {
-  await postPilotEmbed({
+  await deliverEmbed({
     title: input.success ? "Rain joined" : "Rain failed",
     color: input.success ? COLOR_HIT : COLOR_WARN,
     fields: [
@@ -110,7 +117,7 @@ export async function reportAccountSnapshot(reason: string): Promise<void> {
           })
           .join("\n");
 
-  await postPilotEmbed({
+  await deliverEmbed({
     title: "Accounts attached",
     description: lines.slice(0, 3800),
     color: COLOR_INFO,
@@ -119,11 +126,13 @@ export async function reportAccountSnapshot(reason: string): Promise<void> {
 }
 
 export async function sendTestReport(): Promise<{ ok: boolean; error?: string }> {
-  const url = webhookConfigured();
-  if (!url) {
-    return { ok: false, error: "Enable reports and save a valid Discord webhook URL first." };
+  if (!isRelayConnected() && !webhookConfigured()) {
+    return {
+      ok: false,
+      error: "Connect DISCORD_BOT_RELAY_URL and /activate in the bot, or set a report webhook.",
+    };
   }
-  await postPilotEmbed({
+  await deliverEmbed({
     title: "Test message",
     description: "Rush Pilot can reach your private thread. Limbo and rain events will appear here.",
     color: COLOR_INFO,

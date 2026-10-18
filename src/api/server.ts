@@ -16,6 +16,7 @@ import {
 import { encryptField, setSessionToken } from "../accounts/session-manager.js";
 import { isIgnorableCaseError } from "../automation/case-errors.js";
 import { reportAccountSnapshot, sendTestReport } from "../discord/reporter.js";
+import { isRelayConnected } from "../relay/pilot-client.js";
 import { engine } from "../worker/engine.js";
 export function createApiServer() {
   const app = express();
@@ -78,6 +79,13 @@ export function createApiServer() {
       hasDiscordToken: !!next.discord_token_enc,
       discordReportEnabled: !!next.discord_report_enabled,
       hasDiscordReportWebhook: !!next.discord_report_webhook_enc,
+    });
+  });
+
+  app.get("/api/discord/relay-status", (_req, res) => {
+    res.json({
+      relayConfigured: !!process.env.DISCORD_BOT_RELAY_URL?.trim(),
+      connected: isRelayConnected(),
     });
   });
 

@@ -102,6 +102,18 @@ export function clearLicense(): void {
   });
 }
 
+/** Raw license string for bot relay auth (local only). */
+export function getStoredLicenseKey(): string | null {
+  if (licenseDevSkip()) return null;
+  const s = getSettings();
+  if (!s.license_key_enc) return null;
+  try {
+    return decryptField(s.license_key_enc);
+  } catch {
+    return null;
+  }
+}
+
 export function revalidateStoredLicense(): void {
   const payload = readStoredPayload();
   if (!payload) return;

@@ -18,6 +18,9 @@ npx tsx scripts/license-keygen.ts
 ```bash
 # .env contains LICENSE_PRIVATE_KEY=...
 npx tsx scripts/issue-license.ts --id customer-alias --days 365 --plan standard
+
+# Optional: embed customer's Discord user id for your support bot / private threads
+npx tsx scripts/issue-license.ts --id customer-alias --days 365 --discord-user 123456789012345678
 ```
 
 Copy the printed `RP1.…` key into your sale email.

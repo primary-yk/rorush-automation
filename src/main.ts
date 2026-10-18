@@ -3,6 +3,7 @@ import { closeDb, getDb } from "./db/database.js";
 import { startApiServer } from "./api/server.js";
 import { engine } from "./worker/engine.js";
 import { loadConfig } from "./config.js";
+import { startPilotRelayClient, stopPilotRelayClient } from "./relay/pilot-client.js";
 
 process.on("uncaughtException", (err) => {
   console.error("[fatal]", err.message);
@@ -18,6 +19,7 @@ async function main() {
   await startApiServer();
   console.log(`Automation API listening on http://${cfg.AUTOMATION_API_HOST}:${cfg.AUTOMATION_API_PORT}`);
   void engine.start();
+  startPilotRelayClient();
 }
 
 main().catch((err) => {
@@ -26,12 +28,14 @@ main().catch((err) => {
 });
 
 process.on("SIGINT", async () => {
+  stopPilotRelayClient();
   await engine.stop();
   closeDb();
   process.exit(0);
 });
 
 process.on("SIGTERM", async () => {
+  stopPilotRelayClient();
   await engine.stop();
   closeDb();
   process.exit(0);
