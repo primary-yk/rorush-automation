@@ -3,7 +3,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 
-const ENV_PATH = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".env");
+const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const ENV_PATH = path.resolve(PROJECT_ROOT, ".env");
+
+export function projectRoot(): string {
+  return PROJECT_ROOT;
+}
 
 function loadDotenv(): void {
   dotenv.config({ path: ENV_PATH, override: true });
@@ -41,7 +46,11 @@ export function reloadEnv(): void {
 
 export function loadConfig(): AppConfig {
   if (!cached) {
-    cached = envSchema.parse(process.env);
+    const raw = envSchema.parse(process.env);
+    const DATABASE_PATH = path.isAbsolute(raw.DATABASE_PATH)
+      ? raw.DATABASE_PATH
+      : path.resolve(PROJECT_ROOT, raw.DATABASE_PATH);
+    cached = { ...raw, DATABASE_PATH };
   }
   return cached;
 }

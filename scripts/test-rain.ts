@@ -3,6 +3,7 @@
  *
  *   npx tsx scripts/test-rain.ts              # listen 3 min, log hub events
  *   npx tsx scripts/test-rain.ts --join       # also attempt join on join stage (needs CAPMONSTER_API_KEY)
+ *   npx tsx scripts/test-rain.ts --any        # use first account even if Join rain is off (listen/login test)
  */
 import "../src/bootstrap-env.js";
 import { getDb } from "../src/db/database.js";
@@ -11,22 +12,47 @@ import { ensureAuthenticated } from "../src/accounts/session-manager.js";
 import { joinRainForAccount, parseRain, rainJoinWindowOpen } from "../src/automation/rain-join.js";
 import { RoRushHub } from "../src/rorush/signalr-hub.js";
 import { SIGNALR } from "../src/rorush/endpoints.js";
-import { loadConfig } from "../src/config.js";
+import { loadConfig, projectRoot } from "../src/config.js";
 
 const attemptJoin = process.argv.includes("--join");
+const useAnyAccount = process.argv.includes("--any");
 const listenMs = Number(process.env.RAIN_TEST_LISTEN_MS ?? 180_000);
+
+function rainEnabled(row: { join_rain: number }): boolean {
+  return Number(row.join_rain) !== 0;
+}
 
 async function main() {
   getDb();
-  const accounts = listAccounts().filter((a) => a.join_rain);
-  if (accounts.length === 0) {
-    console.error("No accounts with join_rain enabled in the database.");
+  const cfg = loadConfig();
+  console.log("Project folder:", projectRoot());
+  console.log("Database file:", cfg.DATABASE_PATH);
+  console.log("");
+
+  const all = listAccounts();
+  if (all.length === 0) {
+    console.error("No RoRush accounts in the database.");
+    console.error("Add one at http://127.0.0.1:43123 (run npm run dev first).");
     process.exit(1);
   }
-  const account = accounts[0]!;
+
+  const withRain = all.filter((a) => rainEnabled(a));
+  if (withRain.length === 0 && !useAnyAccount) {
+    console.error("No accounts with Join rain enabled in THIS database file.\n");
+    for (const a of all) {
+      console.error(`  • #${a.id} ${a.nickname} — join_rain=${rainEnabled(a) ? "on" : "OFF"} (raw=${a.join_rain})`);
+    }
+    console.error("\nFix: open dashboard → Accounts → turn ON “Join rain” for your account.");
+    console.error("Or run: npx tsx scripts/test-rain.ts --any   (login + listen only, no join unless --join)");
+    process.exit(1);
+  }
+
+  const account = (withRain[0] ?? all[0])!;
+  if (!rainEnabled(account) && useAnyAccount) {
+    console.warn("Note: Join rain is OFF for this account — use --join only after enabling it in the dashboard.");
+  }
   console.log(`Using account #${account.id} (${account.nickname})`);
 
-  const cfg = loadConfig();
   if (attemptJoin && !cfg.CAPMONSTER_API_KEY) {
     console.error("Set CAPMONSTER_API_KEY in .env before using --join");
     process.exit(1);
