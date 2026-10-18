@@ -56,6 +56,12 @@ export function LicenseGate({
           <p className="mt-4 text-center text-xs text-slate-500">
             Need a key? Contact the seller — not RoRush support.
           </p>
+          <p className="mt-3 text-center text-xs text-slate-600">
+            Owner testing on your own PC? In Ubuntu run{" "}
+            <code className="text-slate-400">nano ~/rush-pilot/.env</code>, add{" "}
+            <code className="text-slate-400">LICENSE_DEV_SKIP=true</code>, save, then Ctrl+C and{" "}
+            <code className="text-slate-400">npm run dev</code> again.
+          </p>
         </Card>
       </div>
     </main>

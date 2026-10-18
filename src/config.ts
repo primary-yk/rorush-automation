@@ -15,10 +15,11 @@ const envSchema = z.object({
   MAX_REQUEST_FAILURES: z.coerce.number().int().positive().default(3),
   DATABASE_PATH: z.string().default("./data/rorush-automation.db"),
   LICENSE_PUBLIC_KEY: z.string().optional(),
-  LICENSE_DEV_SKIP: z
-    .string()
-    .optional()
-    .transform((v) => v === "1" || v === "true" || v === "yes"),
+  LICENSE_DEV_SKIP: z.preprocess((v) => {
+    if (v === undefined || v === null || v === "") return false;
+    const s = String(v).trim().toLowerCase();
+    return s === "1" || s === "true" || s === "yes" || s === "on";
+  }, z.boolean()),
 });
 
 export type AppConfig = z.infer<typeof envSchema>;
