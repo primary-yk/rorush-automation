@@ -10,6 +10,7 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_AUTOMATION_API_URL:
       process.env.NEXT_PUBLIC_AUTOMATION_API_URL ?? `http://${apiHost}:${apiPort}`,
     RUSH_PILOT_DEV_SKIP: devSkip ? "true" : "false",
+    NEXT_PUBLIC_RUSH_PILOT_DEV_SKIP: devSkip ? "true" : "false",
   },
   async rewrites() {
     const port = apiPort;

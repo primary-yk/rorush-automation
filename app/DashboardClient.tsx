@@ -6,6 +6,7 @@ import { Toggle } from "@/components/Toggle";
 import { Button, Card, Input, SectionTitle, StatusPill } from "@/components/ui";
 import { LicenseGate } from "@/components/LicenseGate";
 import { dashboardApi, type Account, type ActivityLog, type LicenseStatus, type Settings } from "@/lib/api";
+import { DEV_LICENSE, licenseUnlocked, ownerDevSkipEnabled } from "@/lib/license-unlocked";
 
 export type DashboardBootstrap = {
   license: LicenseStatus | null;
@@ -16,14 +17,16 @@ export type DashboardBootstrap = {
 };
 
 export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
-  const [license, setLicense] = useState<LicenseStatus | null>(initial.license);
+  const [license, setLicense] = useState<LicenseStatus | null>(
+    initial.license ?? (ownerDevSkipEnabled() ? DEV_LICENSE : null),
+  );
   const [settings, setSettings] = useState<Settings | null>(initial.settings);
   const [accounts, setAccounts] = useState<Account[]>(initial.accounts);
   const [logs, setLogs] = useState<ActivityLog[]>(initial.logs);
   const [error, setError] = useState<string | null>(initial.error);
-  const [licenseReady, setLicenseReady] = useState(false);
+  const [licenseReady, setLicenseReady] = useState(ownerDevSkipEnabled());
   const [loading, setLoading] = useState(
-    !!initial.license?.active && initial.settings == null && initial.error == null,
+    licenseUnlocked(initial.license) && initial.settings == null && initial.error == null,
   );
 
   const [newNick, setNewNick] = useState("");
@@ -54,6 +57,10 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
   }, []);
 
   useEffect(() => {
+    if (ownerDevSkipEnabled()) {
+      setLicense(DEV_LICENSE);
+      return;
+    }
     void dashboardApi
       .getLicenseStatus()
       .then((s) => setLicense(s))
@@ -61,7 +68,7 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
   }, []);
 
   useEffect(() => {
-    if (!licenseReady || !license?.active) return;
+    if (!licenseReady || !licenseUnlocked(license)) return;
     const force = window.setTimeout(() => setLoading(false), 5000);
     void refresh();
     const t = setInterval(() => void refresh(), 15_000);
@@ -69,9 +76,9 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
       window.clearTimeout(force);
       clearInterval(t);
     };
-  }, [refresh, license?.active, licenseReady]);
+  }, [refresh, license, licenseReady]);
 
-  if (!licenseReady) {
+  if (!licenseReady && !ownerDevSkipEnabled()) {
     return (
       <main className="flex min-h-screen items-center justify-center px-4">
         <p className="animate-pulse-soft text-slate-400">Checking license…</p>
@@ -79,7 +86,7 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
     );
   }
 
-  if (license && !license.active) {
+  if (!ownerDevSkipEnabled() && license && !licenseUnlocked(license)) {
     return (
       <LicenseGate
         initial={license}
@@ -107,7 +114,7 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
     await refresh();
   }
 
-  const apiOk = !error && settings != null;
+  const apiOk = !error && settings != null && licenseUnlocked(license);
 
   if (loading) {
     return (
