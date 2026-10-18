@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { loadConfig } from "../config.js";
+import { loadConfig, reloadEnv } from "../config.js";
 
 export type LicensePayload = {
   v: 1;
@@ -51,6 +51,7 @@ function envFlag(name: string): boolean {
 }
 
 export function licenseDevSkip(): boolean {
+  reloadEnv();
   if (loadConfig().LICENSE_DEV_SKIP) return true;
   // Common .env typos / aliases (owner dev machines only)
   return (

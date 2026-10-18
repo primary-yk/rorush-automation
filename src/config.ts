@@ -26,6 +26,11 @@ export type AppConfig = z.infer<typeof envSchema>;
 
 let cached: AppConfig | null = null;
 
+export function reloadEnv(): void {
+  dotenv.config({ override: true });
+  cached = null;
+}
+
 export function loadConfig(): AppConfig {
   if (!cached) {
     cached = envSchema.parse(process.env);

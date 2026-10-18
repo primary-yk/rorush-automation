@@ -1,5 +1,6 @@
 import { encryptField, decryptField } from "../accounts/session-manager.js";
 import { getSettings, updateSettings } from "../db/repositories.js";
+import { reloadEnv } from "../config.js";
 import { licenseDevSkip, parseLicenseKey, type LicensePayload } from "./verify.js";
 
 export type LicenseStatus = {
@@ -27,6 +28,7 @@ function readStoredPayload(): LicensePayload | null {
 }
 
 export function getLicenseStatus(): LicenseStatus {
+  reloadEnv();
   if (licenseDevSkip()) {
     return {
       active: true,
