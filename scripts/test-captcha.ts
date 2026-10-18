@@ -14,17 +14,18 @@ import {
 async function main() {
   const cfg = loadConfig();
   console.log("Project:", projectRoot());
-  if (!cfg.CAPMONSTER_API_KEY) {
-    console.error("\nCAPMONSTER_API_KEY is not set in .env");
+  const key = cfg.CAPTCHA_API_KEY ?? cfg.CAPMONSTER_API_KEY;
+  if (!key) {
+    console.error("\nCAPTCHA_API_KEY or CAPMONSTER_API_KEY is not set in .env");
     console.error("1. Sign up at https://capmonster.cloud");
     console.error("2. Add to ~/rush-pilot/.env:");
     console.error("   CAPMONSTER_API_KEY=your_key_here");
     console.error("3. Restart npm run dev (Ctrl+C, then npm run dev again)");
     process.exit(1);
   }
-  console.log("CAPMONSTER_API_KEY: loaded (" + cfg.CAPMONSTER_API_KEY.length + " chars)");
-  const detected = await detectCaptchaProvider(cfg.CAPMONSTER_API_KEY);
-  const provider = await resolveCaptchaProvider(cfg.CAPMONSTER_API_KEY);
+  console.log("Captcha API key: loaded (" + key.length + " chars)");
+  const detected = await detectCaptchaProvider(key);
+  const provider = await resolveCaptchaProvider(key);
   console.log(
     "Captcha provider:",
     provider,

@@ -24,6 +24,12 @@ const envSchema = z.object({
     .enum(["auto", "capmonster", "2captcha", "capsolver", "twocaptcha"])
     .optional()
     .default("auto"),
+  /** Preferred name for any provider key (2Captcha/CapSolver for RoRush rain hCaptcha). */
+  CAPTCHA_API_KEY: z.preprocess((v) => {
+    if (v === undefined || v === null || v === "") return undefined;
+    const t = String(v).trim();
+    return t.length ? t : undefined;
+  }, z.string().optional()),
   CAPMONSTER_API_KEY: z.preprocess((v) => {
     if (v === undefined || v === null || v === "") return undefined;
     const t = String(v).trim();
@@ -49,6 +55,10 @@ let cached: AppConfig | null = null;
 export function reloadEnv(): void {
   loadProjectEnv();
   cached = null;
+}
+
+export function captchaApiKey(cfg: AppConfig = loadConfig()): string | undefined {
+  return cfg.CAPTCHA_API_KEY ?? cfg.CAPMONSTER_API_KEY;
 }
 
 export function loadConfig(): AppConfig {

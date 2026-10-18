@@ -1,4 +1,4 @@
-import { loadConfig, reloadEnv } from "../config.js";
+import { captchaApiKey, loadConfig, reloadEnv } from "../config.js";
 import {
   appendLog,
   getSettings,
@@ -219,11 +219,12 @@ export class AutomationEngine {
       appendLog({ category: "rain", message: "Rain join skipped (global pause)", detail: rain.rainId });
       return;
     }
-    if (!loadConfig().CAPMONSTER_API_KEY) {
+    if (!captchaApiKey()) {
       appendLog({
         category: "rain",
-        message: "Rain join skipped (CAPMONSTER_API_KEY missing in .env)",
-        detail: "Add key to .env in project root (not only nano.env) and restart npm run dev",
+        message: "Rain join skipped (captcha API key missing in .env)",
+        detail:
+          "RoRush rain needs hCaptcha — use CAPTCHA_API_KEY + CAPTCHA_PROVIDER=2captcha (CapMonster no longer supports hCaptcha)",
       });
       return;
     }

@@ -81,7 +81,7 @@ export async function joinRainForAccount(input: {
     }
     if (!captchaToken) {
       throw new Error(
-        "Captcha token missing — set CAPMONSTER_API_KEY (and check CapMonster balance)",
+        "Captcha token missing — set CAPTCHA_API_KEY (2Captcha/CapSolver for hCaptcha rain) and CAPTCHA_PROVIDER",
       );
     }
     const outcomePromise = waitForOutcome();

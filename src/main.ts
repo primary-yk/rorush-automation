@@ -2,7 +2,7 @@ import "./bootstrap-env.js";
 import { closeDb, getDb } from "./db/database.js";
 import { startApiServer } from "./api/server.js";
 import { engine } from "./worker/engine.js";
-import { loadConfig, projectRoot } from "./config.js";
+import { captchaApiKey, loadConfig, projectRoot } from "./config.js";
 import { listAccounts } from "./db/repositories.js";
 import { startPilotRelayClient, stopPilotRelayClient } from "./relay/pilot-client.js";
 
@@ -24,9 +24,9 @@ async function main() {
     console.warn("WARNING: ENCRYPTION_KEY missing in .env — you cannot save RoRush accounts until it is set.");
   }
   const rainAccounts = listAccounts().filter((a) => a.join_rain);
-  if (rainAccounts.length > 0 && !cfg.CAPMONSTER_API_KEY) {
+  if (rainAccounts.length > 0 && !captchaApiKey(cfg)) {
     console.warn(
-      "WARNING: CAPMONSTER_API_KEY missing in .env — rain join will fail until you add a CapMonster key and restart.",
+      "WARNING: CAPTCHA_API_KEY missing — rain needs hCaptcha (2Captcha/CapSolver; CapMonster no longer supports hCaptcha API).",
     );
   }
   console.log(`Project root: ${projectRoot()}`);

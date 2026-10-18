@@ -1,5 +1,5 @@
 import express from "express";
-import { loadConfig, projectRoot } from "../config.js";
+import { captchaApiKey, loadConfig, projectRoot } from "../config.js";
 import {
   deleteAccount,
   getSettings,
@@ -39,7 +39,7 @@ export function createApiServer() {
       databasePath: cfg.DATABASE_PATH,
       accountCount: listAccounts().length,
       encryptionConfigured: !!cfg.ENCRYPTION_KEY?.trim(),
-      capmonsterConfigured: !!cfg.CAPMONSTER_API_KEY,
+      capmonsterConfigured: !!captchaApiKey(cfg),
     });
   });
 
@@ -53,7 +53,7 @@ export function createApiServer() {
       hasDiscordToken: !!s.discord_token_enc,
       discordReportEnabled: !!s.discord_report_enabled,
       hasDiscordReportWebhook: !!s.discord_report_webhook_enc,
-      capmonsterConfigured: !!cfg.CAPMONSTER_API_KEY,
+      capmonsterConfigured: !!captchaApiKey(cfg),
     });
   });
 

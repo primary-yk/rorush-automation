@@ -1,5 +1,10 @@
 import { fetch } from "undici";
-import { loadConfig, reloadEnv } from "../config.js";
+import { captchaApiKey, loadConfig, reloadEnv } from "../config.js";
+
+const CAPMONSTER_NO_HCAPTCHA =
+  "CapMonster Cloud no longer supports hCaptcha via API (RoRush rain still uses hCaptcha). " +
+  "Your CapMonster balance is fine for other captcha types, but for rain you need a 2Captcha or CapSolver key: " +
+  "sign up at 2captcha.com, top up ~$3, put that API key in .env as CAPTCHA_API_KEY=..., set CAPTCHA_PROVIDER=2captcha, restart npm run dev.";
 
 export type CaptchaKind = "hcaptcha" | "turnstile";
 export type CaptchaProvider = "capmonster" | "2captcha" | "capsolver";
@@ -130,6 +135,9 @@ async function createAndPoll(
     const code = createJson.errorCode ?? "";
     const desc = createJson.errorDescription ?? "createTask failed";
     if (code === "ERROR_TASK_NOT_SUPPORTED" || /task type/i.test(desc)) {
+      if (provider === "capmonster" && kind === "hcaptcha") {
+        throw new Error(`${desc}\n\n${CAPMONSTER_NO_HCAPTCHA}`);
+      }
       throw new Error(
         `${desc}\n\nYour key is for ${providerHint(provider)} If you use 2Captcha or CapSolver, set CAPTCHA_PROVIDER in .env.`,
       );
@@ -169,7 +177,7 @@ export async function resolveCaptchaProvider(clientKey: string): Promise<Captcha
 
 export async function solveCaptcha(kind: CaptchaKind): Promise<string | null> {
   reloadEnv();
-  const clientKey = loadConfig().CAPMONSTER_API_KEY;
+  const clientKey = captchaApiKey();
   if (!clientKey) return null;
 
   const provider = await resolveCaptchaProvider(clientKey);

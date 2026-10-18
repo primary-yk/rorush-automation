@@ -6,7 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import "../src/bootstrap-env.js";
 import { ENV_FALLBACK_FILES } from "../src/bootstrap-env.js";
-import { loadConfig, projectRoot } from "../src/config.js";
+import { captchaApiKey, loadConfig, projectRoot } from "../src/config.js";
 import { getDb } from "../src/db/database.js";
 import { listAccounts } from "../src/db/repositories.js";
 import { automationApiOrigin } from "../lib/automation-url.js";
@@ -43,10 +43,16 @@ async function main() {
     "ENCRYPTION_KEY:",
     cfg.ENCRYPTION_KEY?.trim() ? "set (required to save passwords)" : "MISSING — accounts cannot be saved",
   );
+  const capKey = captchaApiKey(cfg);
   console.log(
-    "CAPMONSTER_API_KEY:",
-    cfg.CAPMONSTER_API_KEY ? `set (${cfg.CAPMONSTER_API_KEY.length} chars)` : "MISSING — rain join will fail",
+    "Captcha API key (CAPTCHA_API_KEY or CAPMONSTER_API_KEY):",
+    capKey ? `set (${capKey.length} chars)` : "MISSING — rain join will fail",
   );
+  if (capKey && (cfg.CAPTCHA_PROVIDER === "auto" || cfg.CAPTCHA_PROVIDER === "capmonster")) {
+    console.log(
+      "  Note: RoRush rain = hCaptcha. CapMonster Cloud removed hCaptcha API — use 2Captcha + CAPTCHA_PROVIDER=2captcha",
+    );
+  }
 
   getDb();
   const accounts = listAccounts();
@@ -78,8 +84,10 @@ async function main() {
   } else {
     console.log("• Login problems: npm run test-login  then  npm run update-account -- --id 1 --email … --password '…'");
   }
-  if (!cfg.CAPMONSTER_API_KEY) {
-    console.log("• Rain captcha: add CAPMONSTER_API_KEY to .env, restart npm run dev, run npm run test-captcha");
+  if (!capKey) {
+    console.log(
+      "• Rain captcha: CAPTCHA_API_KEY= (from 2captcha.com) + CAPTCHA_PROVIDER=2captcha, then npm run test-captcha",
+    );
   }
   console.log("• Find stray databases: find ~ -name 'rorush-automation.db' 2>/dev/null");
 }
