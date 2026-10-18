@@ -15,8 +15,8 @@ async function main() {
   getDb();
   const cfg = loadConfig();
   await startApiServer();
-  await engine.start();
   console.log(`Automation API listening on http://${cfg.AUTOMATION_API_HOST}:${cfg.AUTOMATION_API_PORT}`);
+  void engine.start();
 }
 
 main().catch((err) => {

@@ -64,8 +64,13 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <main className="flex min-h-screen items-center justify-center">
+      <main className="flex min-h-screen max-w-lg flex-col items-center justify-center gap-4 px-6 text-center">
         <p className="animate-pulse-soft text-slate-400">Connecting to automation engine…</p>
+        <p className="text-sm text-slate-500">
+          If this lasts more than ~15 seconds, check the Ubuntu window running{" "}
+          <code className="text-slate-400">npm run dev</code> — you need both{" "}
+          <code className="text-slate-400">[0]</code> and <code className="text-slate-400">[1]</code> running.
+        </p>
       </main>
     );
   }

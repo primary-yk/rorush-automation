@@ -38,6 +38,7 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
     cache: "no-store",
+    signal: init?.signal ?? AbortSignal.timeout(12_000),
   });
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { error?: string };
