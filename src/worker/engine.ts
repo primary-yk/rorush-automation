@@ -15,6 +15,7 @@ import { pollDiscordChannel } from "../discord/watcher.js";
 import { ensureAuthenticated } from "../accounts/session-manager.js";
 import { RoRushHub } from "../rorush/signalr-hub.js";
 import type { RainState } from "../rorush/types.js";
+import { isLicenseActive } from "../license/service.js";
 
 export class AutomationEngine {
   private running = false;
@@ -26,6 +27,13 @@ export class AutomationEngine {
   private statusTimer: NodeJS.Timeout | null = null;
 
   async start(): Promise<void> {
+    if (!isLicenseActive()) {
+      appendLog({
+        category: "system",
+        message: "Automation idle — activate a license on the dashboard to start.",
+      });
+      return;
+    }
     if (this.running) return;
     this.running = true;
     appendLog({ category: "system", message: "Automation engine started" });

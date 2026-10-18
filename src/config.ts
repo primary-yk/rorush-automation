@@ -14,6 +14,11 @@ const envSchema = z.object({
   REQUEST_MIN_INTERVAL_MS: z.coerce.number().int().positive().default(350),
   MAX_REQUEST_FAILURES: z.coerce.number().int().positive().default(3),
   DATABASE_PATH: z.string().default("./data/rorush-automation.db"),
+  LICENSE_PUBLIC_KEY: z.string().optional(),
+  LICENSE_DEV_SKIP: z
+    .string()
+    .optional()
+    .transform((v) => v === "1" || v === "true" || v === "yes"),
 });
 
 export type AppConfig = z.infer<typeof envSchema>;

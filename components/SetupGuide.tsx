@@ -5,13 +5,12 @@ import { Card, SectionTitle } from "./ui";
 
 const STEPS = [
   {
-    title: "Get the code (Windows + WSL)",
+    title: "Install on your PC (Windows)",
     body: (
       <>
-        Install WSL: PowerShell (Admin) → <code className="rounded bg-black/40 px-1">wsl --install</code> → restart.
-        In <strong>Ubuntu</strong>, install Origin, sign in, clone{" "}
-        <code className="rounded bg-black/40 px-1">goshennoshen/rush-pilot</code>.
-        Origin does not run in PowerShell.
+        Install <strong>Ubuntu (WSL)</strong> from PowerShell:{" "}
+        <code className="rounded bg-black/40 px-1">wsl --install</code>, restart, then open Ubuntu from the Start menu.
+        Unzip or clone your copy of Rush Pilot into your home folder (from your purchase — not a public link).
       </>
     ),
   },
@@ -22,26 +21,27 @@ const STEPS = [
         In the project folder: copy <code className="rounded bg-black/40 px-1">.env.example</code> to{" "}
         <code className="rounded bg-black/40 px-1">.env</code>, set{" "}
         <code className="rounded bg-black/40 px-1">ENCRYPTION_KEY</code> (random 32-byte base64). Optional:{" "}
-        <code className="rounded bg-black/40 px-1">CAPMONSTER_API_KEY</code> for rain/captcha.
+        <code className="rounded bg-black/40 px-1">CAPMONSTER_API_KEY</code> for rain captchas.
       </>
     ),
   },
   {
-    title: "Start the app",
+    title: "Activate & run",
     body: (
       <>
         Run <code className="rounded bg-black/40 px-1">npm install</code> once, then{" "}
-        <code className="rounded bg-black/40 px-1">npm run dev</code> and leave the terminal open. Open this page at{" "}
-        <code className="rounded bg-black/40 px-1">http://127.0.0.1:43123</code>.
+        <code className="rounded bg-black/40 px-1">npm run dev</code> and leave the terminal open. Open{" "}
+        <code className="rounded bg-black/40 px-1">http://127.0.0.1:43123</code>, paste your license key, then add
+        RoRush accounts below.
       </>
     ),
   },
   {
-    title: "Add a RoRush account below",
+    title: "Add a RoRush account",
     body: (
       <>
-        Use a nickname plus your RoRush email and password. Passwords stay encrypted on your machine and are never
-        shown in the activity log. Turn on Join rain / Auto-open cases per account.
+        Nickname plus RoRush email and password (encrypted locally). Turn on Join rain / Auto-open cases per account.
+        Turn Global pause off when you want automation running.
       </>
     ),
   },
@@ -56,7 +56,7 @@ export function SetupGuide({ apiOk }: { apiOk: boolean }) {
         <SectionTitle
           eyebrow="New here"
           title="Setup checklist"
-          description="Follow these once. The dashboard only works while npm run dev is running in your project folder."
+          description="One-time steps. Keep npm run dev running while you use this page."
         />
         <button
           type="button"
@@ -82,16 +82,8 @@ export function SetupGuide({ apiOk }: { apiOk: boolean }) {
         </ol>
       )}
       <p className="mt-4 text-xs text-slate-500">
-        Repo:{" "}
-        <a
-          className="text-violet-300 underline-offset-2 hover:underline"
-          href="https://cursor.com/codebase/goshennoshen/rush-pilot"
-          target="_blank"
-          rel="noreferrer"
-        >
-          cursor.com/codebase/goshennoshen/rush-pilot
-        </a>{" "}
-        · Full doc: <code className="text-slate-400">docs/GETTING-STARTED.md</code>
+        Detailed guides: <code className="text-slate-400">docs/GETTING-STARTED.md</code> ·{" "}
+        <code className="text-slate-400">docs/WINDOWS-SETUP.md</code>
       </p>
     </Card>
   );

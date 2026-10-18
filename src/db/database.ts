@@ -15,8 +15,27 @@ export function getDb(): Database.Database {
     db.pragma("journal_mode = WAL");
     db.pragma("foreign_keys = ON");
     db.exec(SCHEMA_SQL);
+    migrateSettings(db);
   }
   return db;
+}
+
+function migrateSettings(db: Database.Database): void {
+  const cols = new Set(
+    (db.prepare("PRAGMA table_info(settings)").all() as Array<{ name: string }>).map((c) => c.name),
+  );
+  const add: Array<[string, string]> = [
+    ["license_key_enc", "TEXT"],
+    ["license_payload_json", "TEXT"],
+    ["license_id", "TEXT"],
+    ["license_plan", "TEXT"],
+    ["license_exp", "INTEGER"],
+  ];
+  for (const [name, type] of add) {
+    if (!cols.has(name)) {
+      db.exec(`ALTER TABLE settings ADD COLUMN ${name} ${type}`);
+    }
+  }
 }
 
 export function closeDb(): void {

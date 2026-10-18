@@ -30,6 +30,11 @@ export type SettingsRow = {
   discord_enabled: number;
   discord_channel_id: string | null;
   discord_token_enc: string | null;
+  license_key_enc: string | null;
+  license_payload_json: string | null;
+  license_id: string | null;
+  license_plan: string | null;
+  license_exp: number | null;
   updated_at: string;
 };
 
@@ -43,13 +48,19 @@ export function updateSettings(patch: Partial<Omit<SettingsRow, "id">>): Setting
   getDb()
     .prepare(
       `UPDATE settings SET global_pause = ?, discord_enabled = ?, discord_channel_id = ?,
-       discord_token_enc = ?, updated_at = ? WHERE id = 1`,
+       discord_token_enc = ?, license_key_enc = ?, license_payload_json = ?,
+       license_id = ?, license_plan = ?, license_exp = ?, updated_at = ? WHERE id = 1`,
     )
     .run(
       next.global_pause,
       next.discord_enabled,
       next.discord_channel_id,
       next.discord_token_enc,
+      next.license_key_enc ?? null,
+      next.license_payload_json ?? null,
+      next.license_id ?? null,
+      next.license_plan ?? null,
+      next.license_exp ?? null,
       next.updated_at,
     );
   return getSettings();

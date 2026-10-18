@@ -17,6 +17,15 @@ export type Account = {
   lifetimeEarnings: { rain: number; cases: number; codes: number; total: number };
 };
 
+export type LicenseStatus = {
+  active: boolean;
+  devSkip: boolean;
+  plan: string | null;
+  licenseId: string | null;
+  expiresAt: string | null;
+  message: string | null;
+};
+
 export type Settings = {
   globalPause: boolean;
   discordEnabled: boolean;
@@ -54,6 +63,9 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const dashboardApi = {
+  getLicenseStatus: () => api<LicenseStatus>("/api/license/status"),
+  activateLicense: (key: string) =>
+    api<LicenseStatus>("/api/license/activate", { method: "POST", body: JSON.stringify({ key }) }),
   getSettings: () => api<Settings>("/api/settings"),
   patchSettings: (body: Partial<Settings & { discordToken?: string | null }>) =>
     api<Settings>("/api/settings", { method: "PATCH", body: JSON.stringify(body) }),

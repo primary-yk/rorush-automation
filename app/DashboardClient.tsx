@@ -4,9 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import { SetupGuide } from "@/components/SetupGuide";
 import { Toggle } from "@/components/Toggle";
 import { Button, Card, Input, SectionTitle, StatusPill } from "@/components/ui";
-import { dashboardApi, type Account, type ActivityLog, type Settings } from "@/lib/api";
+import { LicenseGate } from "@/components/LicenseGate";
+import { dashboardApi, type Account, type ActivityLog, type LicenseStatus, type Settings } from "@/lib/api";
 
 export type DashboardBootstrap = {
+  license: LicenseStatus | null;
   settings: Settings | null;
   accounts: Account[];
   logs: ActivityLog[];
@@ -14,11 +16,14 @@ export type DashboardBootstrap = {
 };
 
 export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
+  const [license, setLicense] = useState<LicenseStatus | null>(initial.license);
   const [settings, setSettings] = useState<Settings | null>(initial.settings);
   const [accounts, setAccounts] = useState<Account[]>(initial.accounts);
   const [logs, setLogs] = useState<ActivityLog[]>(initial.logs);
   const [error, setError] = useState<string | null>(initial.error);
-  const [loading, setLoading] = useState(initial.settings == null && initial.error == null);
+  const [loading, setLoading] = useState(
+    !!initial.license?.active && initial.settings == null && initial.error == null,
+  );
 
   const [newNick, setNewNick] = useState("");
   const [newUser, setNewUser] = useState("");
@@ -48,6 +53,7 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
   }, []);
 
   useEffect(() => {
+    if (!license?.active) return;
     const force = window.setTimeout(() => setLoading(false), 5000);
     void refresh();
     const t = setInterval(() => void refresh(), 15_000);
@@ -55,7 +61,20 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
       window.clearTimeout(force);
       clearInterval(t);
     };
-  }, [refresh]);
+  }, [refresh, license?.active]);
+
+  if (license && !license.active) {
+    return (
+      <LicenseGate
+        initial={license}
+        onActivated={(status) => {
+          setLicense(status);
+          setLoading(true);
+          void refresh();
+        }}
+      />
+    );
+  }
 
   async function createAccount() {
     if (!newNick.trim()) return;
@@ -97,9 +116,14 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
             Rush <span className="bg-gradient-to-r from-violet-300 to-fuchsia-400 bg-clip-text text-transparent">Pilot</span>
           </h1>
           <p className="mt-3 max-w-xl text-base leading-relaxed text-slate-400">
-            Your private control panel for RoRush rain joins, reward cases, and optional Discord codes. Runs on your PC
-            or VPS — not on our servers.
+            Self-hosted RoRush automation — rain, cases, and optional Discord codes. Everything runs on your machine.
           </p>
+          {license?.active && license.plan && (
+            <p className="mt-2 text-xs text-slate-500">
+              License · {license.plan}
+              {license.expiresAt ? ` · renews ${new Date(license.expiresAt).toLocaleDateString()}` : ""}
+            </p>
+          )}
         </div>
         {settings && (
           <Toggle
