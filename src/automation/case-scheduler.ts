@@ -14,6 +14,7 @@ import {
 import { AUTO_OPEN_CASE_KINDS, CASE_KIND } from "../rorush/endpoints.js";
 import { RoRushHub } from "../rorush/signalr-hub.js";
 import { ensureAuthenticated } from "../accounts/session-manager.js";
+import { isIgnorableCaseError } from "./case-errors.js";
 
 function parseUnlockMs(value: unknown): number | null {
   if (typeof value === "number") return value;
@@ -33,6 +34,11 @@ export async function refreshCaseSchedulesForAccount(accountId: number): Promise
   if (!account.auto_open_cases) return;
 
   purgeDisallowedCaseSchedules(accountId, AUTO_OPEN_CASE_KINDS);
+
+  const current = listAccounts().find((a) => a.id === accountId);
+  if (current?.last_error && isIgnorableCaseError(current.last_error)) {
+    updateAccount(accountId, { status: "idle", last_error: null });
+  }
 
   const dailyInfo = await client.getDailyCasesInfo().catch(() => null);
 
@@ -159,6 +165,13 @@ export async function openDueCases(accountHubs: Map<number, RoRushHub>): Promise
           category: "cases",
           message: "Opened case",
           detail: `${row.case_id} (+${outcome.reward})`,
+        });
+      } else if (isIgnorableCaseError(outcome.message)) {
+        appendLog({
+          accountId: row.account_id,
+          category: "cases",
+          message: "Skipped case (not auto-opened)",
+          detail: outcome.message,
         });
       } else {
         updateAccount(row.account_id, { status: "error", last_error: outcome.message });

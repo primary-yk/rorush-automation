@@ -14,6 +14,7 @@ import {
   updateSettings,
 } from "../db/repositories.js";
 import { encryptField, setSessionToken } from "../accounts/session-manager.js";
+import { isIgnorableCaseError } from "../automation/case-errors.js";
 import { engine } from "../worker/engine.js";
 export function createApiServer() {
   const app = express();
@@ -66,9 +67,12 @@ export function createApiServer() {
   });
 
   app.get("/api/rush-accounts", (_req, res) => {
-    res.json(
-      listAccounts().map(publicAccount),
-    );
+    for (const a of listAccounts()) {
+      if (a.last_error && isIgnorableCaseError(a.last_error)) {
+        updateAccount(a.id, { status: "idle", last_error: null });
+      }
+    }
+    res.json(listAccounts().map(publicAccount));
   });
 
   app.post("/api/rush-accounts", async (req, res) => {
@@ -112,6 +116,7 @@ export function createApiServer() {
       limboWagerEnabled: boolean;
       limboMultiplier: number;
       limboBetCoins: number;
+      clearError?: boolean;
       password: string;
       sessionToken: string;
       apiKey: string;
@@ -128,6 +133,10 @@ export function createApiServer() {
     if (body.limboWagerEnabled !== undefined) patch.limbo_wager_enabled = body.limboWagerEnabled ? 1 : 0;
     if (body.limboMultiplier !== undefined) patch.limbo_multiplier = body.limboMultiplier;
     if (body.limboBetCoins !== undefined) patch.limbo_bet_coins = body.limboBetCoins;
+    if (body.clearError) {
+      patch.last_error = null;
+      patch.status = "idle";
+    }
     if (body.password !== undefined) patch.password_enc = body.password ? encryptField(body.password) : null;
     if (body.proxyUrl !== undefined) patch.proxy_url = body.proxyUrl;
     if (body.sessionToken !== undefined) {

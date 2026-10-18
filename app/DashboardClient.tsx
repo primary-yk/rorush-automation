@@ -329,7 +329,20 @@ function AccountCard({ account, onChange }: { account: Account; onChange: () => 
         <StatusPill ok={ok} label={account.status} />
       </div>
       {account.lastError && (
-        <p className="mt-3 rounded-lg bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{account.lastError}</p>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-rose-500/10 px-3 py-2">
+          <p className="text-sm text-rose-200">{account.lastError}</p>
+          <Button
+            variant="ghost"
+            className="shrink-0 py-1.5 text-xs"
+            onClick={async () => {
+              await dashboardApi.patchAccount(account.id, { clearError: true });
+              toast.push("Alert cleared", "success");
+              await onChange();
+            }}
+          >
+            Dismiss
+          </Button>
+        </div>
       )}
       <div className="mt-5 grid gap-2 sm:grid-cols-3">
         <Toggle

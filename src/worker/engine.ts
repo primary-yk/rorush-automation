@@ -12,6 +12,7 @@ import {
   refreshAllCaseSchedules,
 } from "../automation/case-scheduler.js";
 import { pollDiscordChannel } from "../discord/watcher.js";
+import { isIgnorableCaseError } from "../automation/case-errors.js";
 import { ensureAuthenticated } from "../accounts/session-manager.js";
 import { RoRushHub } from "../rorush/signalr-hub.js";
 import type { RainState } from "../rorush/types.js";
@@ -152,11 +153,16 @@ export class AutomationEngine {
           client.getBalance(),
           client.getLevel(),
         ]);
-        updateAccount(account.id, {
+        const patch: Parameters<typeof updateAccount>[1] = {
           balance: typeof balance.balance === "number" ? balance.balance / 100 : null,
           level: level.level ?? null,
           status: "idle",
-        });
+        };
+        const row = listAccounts().find((a) => a.id === account.id);
+        if (row?.last_error && isIgnorableCaseError(row.last_error)) {
+          patch.last_error = null;
+        }
+        updateAccount(account.id, patch);
       } catch {
         /* logged in ensureAuthenticated */
       }
