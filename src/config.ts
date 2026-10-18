@@ -1,17 +1,16 @@
-import dotenv from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
+import { loadProjectEnv } from "./bootstrap-env.js";
 
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const ENV_PATH = path.resolve(PROJECT_ROOT, ".env");
 
 export function projectRoot(): string {
   return PROJECT_ROOT;
 }
 
 function loadDotenv(): void {
-  dotenv.config({ path: ENV_PATH, override: true });
+  loadProjectEnv();
 }
 
 loadDotenv();
@@ -44,7 +43,7 @@ export type AppConfig = z.infer<typeof envSchema>;
 let cached: AppConfig | null = null;
 
 export function reloadEnv(): void {
-  dotenv.config({ path: ENV_PATH, override: true });
+  loadProjectEnv();
   cached = null;
 }
 

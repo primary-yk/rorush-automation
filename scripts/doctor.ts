@@ -3,7 +3,9 @@
  *   npm run doctor
  */
 import fs from "node:fs";
+import path from "node:path";
 import "../src/bootstrap-env.js";
+import { ENV_FALLBACK_FILES } from "../src/bootstrap-env.js";
 import { loadConfig, projectRoot } from "../src/config.js";
 import { getDb } from "../src/db/database.js";
 import { listAccounts } from "../src/db/repositories.js";
@@ -17,6 +19,24 @@ async function main() {
   console.log("=== Rush Pilot doctor ===\n");
   console.log("Project folder:", root);
   console.log(".env exists:", fs.existsSync(envPath) ? "yes" : "NO — copy .env.example to .env");
+  for (const name of ENV_FALLBACK_FILES) {
+    const alt = path.join(root, name);
+    if (!fs.existsSync(alt)) continue;
+    const text = fs.readFileSync(alt, "utf8");
+    const hasCap = /^\s*CAPMONSTER_API_KEY\s*=/m.test(text);
+    console.log(
+      `${name} exists:`,
+      hasCap ? "yes (fallback — we load this if .env is missing the key)" : "yes",
+    );
+    if (hasCap && !cfg.CAPMONSTER_API_KEY) {
+      console.log(
+        `  ⚠ CAPMONSTER line is in ${name} but still not loaded — check for typos (CAPMONSTER_API_KEY=...)`,
+      );
+    }
+    if (name === "nano.env" && hasCap) {
+      console.log("  Tip: rename to .env when you can:  mv nano.env .env");
+    }
+  }
   console.log("Database file:", cfg.DATABASE_PATH);
   console.log("Database exists:", fs.existsSync(cfg.DATABASE_PATH) ? "yes" : "no (will be created on first write)");
   console.log(
