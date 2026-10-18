@@ -10,6 +10,9 @@ export type Account = {
   autoOpenCases: boolean;
   autoRedeemCodes: boolean;
   minCodeLevel: number;
+  limboWagerEnabled: boolean;
+  limboMultiplier: number;
+  limboBetCoins: number;
   status: string;
   lastError: string | null;
   balance: number | null;

@@ -13,6 +13,9 @@ export type AccountRow = {
   auto_open_cases: number;
   auto_redeem_codes: number;
   min_code_level: number;
+  limbo_wager_enabled: number;
+  limbo_multiplier: number;
+  limbo_bet_coins: number;
   status: string;
   last_error: string | null;
   balance: number | null;
@@ -112,7 +115,8 @@ export function updateAccount(
     .prepare(
       `UPDATE accounts SET nickname = ?, username = ?, password_enc = ?, session_jwt_enc = ?, api_key_enc = ?,
        proxy_url = ?, join_rain = ?, min_rain_amount = ?, auto_open_cases = ?, auto_redeem_codes = ?,
-       min_code_level = ?, status = ?, last_error = ?, balance = ?, level = ?,
+       min_code_level = ?, limbo_wager_enabled = ?, limbo_multiplier = ?, limbo_bet_coins = ?,
+       status = ?, last_error = ?, balance = ?, level = ?,
        lifetime_rain = ?, lifetime_cases = ?, lifetime_codes = ?, updated_at = ?
        WHERE id = ?`,
     )
@@ -128,6 +132,9 @@ export function updateAccount(
       next.auto_open_cases,
       next.auto_redeem_codes,
       next.min_code_level,
+      next.limbo_wager_enabled,
+      next.limbo_multiplier,
+      next.limbo_bet_coins,
       next.status,
       next.last_error,
       next.balance,

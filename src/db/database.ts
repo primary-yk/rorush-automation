@@ -16,8 +16,25 @@ export function getDb(): Database.Database {
     db.pragma("foreign_keys = ON");
     db.exec(SCHEMA_SQL);
     migrateSettings(db);
+    migrateAccounts(db);
   }
   return db;
+}
+
+function migrateAccounts(db: Database.Database): void {
+  const cols = new Set(
+    (db.prepare("PRAGMA table_info(accounts)").all() as Array<{ name: string }>).map((c) => c.name),
+  );
+  const add: Array<[string, string]> = [
+    ["limbo_wager_enabled", "INTEGER NOT NULL DEFAULT 1"],
+    ["limbo_multiplier", "REAL NOT NULL DEFAULT 1.1"],
+    ["limbo_bet_coins", "REAL NOT NULL DEFAULT 1"],
+  ];
+  for (const [name, type] of add) {
+    if (!cols.has(name)) {
+      db.exec(`ALTER TABLE accounts ADD COLUMN ${name} ${type}`);
+    }
+  }
 }
 
 function migrateSettings(db: Database.Database): void {

@@ -109,6 +109,9 @@ export function createApiServer() {
       autoOpenCases: boolean;
       autoRedeemCodes: boolean;
       minCodeLevel: number;
+      limboWagerEnabled: boolean;
+      limboMultiplier: number;
+      limboBetCoins: number;
       password: string;
       sessionToken: string;
       apiKey: string;
@@ -122,6 +125,9 @@ export function createApiServer() {
     if (body.autoOpenCases !== undefined) patch.auto_open_cases = body.autoOpenCases ? 1 : 0;
     if (body.autoRedeemCodes !== undefined) patch.auto_redeem_codes = body.autoRedeemCodes ? 1 : 0;
     if (body.minCodeLevel !== undefined) patch.min_code_level = body.minCodeLevel;
+    if (body.limboWagerEnabled !== undefined) patch.limbo_wager_enabled = body.limboWagerEnabled ? 1 : 0;
+    if (body.limboMultiplier !== undefined) patch.limbo_multiplier = body.limboMultiplier;
+    if (body.limboBetCoins !== undefined) patch.limbo_bet_coins = body.limboBetCoins;
     if (body.password !== undefined) patch.password_enc = body.password ? encryptField(body.password) : null;
     if (body.proxyUrl !== undefined) patch.proxy_url = body.proxyUrl;
     if (body.sessionToken !== undefined) {
@@ -188,6 +194,9 @@ function publicAccount(a: ReturnType<typeof listAccounts>[number]) {
     autoOpenCases: !!a.auto_open_cases,
     autoRedeemCodes: !!a.auto_redeem_codes,
     minCodeLevel: a.min_code_level,
+    limboWagerEnabled: !!a.limbo_wager_enabled,
+    limboMultiplier: a.limbo_multiplier,
+    limboBetCoins: a.limbo_bet_coins,
     status: a.status,
     lastError: a.last_error,
     balance: a.balance,

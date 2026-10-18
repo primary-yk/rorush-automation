@@ -71,17 +71,24 @@ export async function joinRainForAccount(input: {
     await hub.joinRain({ reqId, rainId: rain.rainId, captchaToken });
     let outcome = await waitForOutcome();
 
-    if (!outcome.ok && isWagerRejection(outcome.message)) {
+    if (!outcome.ok && isWagerRejection(outcome.message) && account.limbo_wager_enabled) {
       appendLog({
         accountId,
         category: "rain",
         message: "Wager requirement detected; placing limbo bet",
         detail: outcome.message,
       });
-      await placeMinLimboBet(accountId, client, hub);
+      await placeMinLimboBet(accountId, client, hub, account);
       const retryReq = uuid();
       const retryOutcome = await joinOnce(hub, retryReq, rain.rainId, captchaToken);
       outcome = retryOutcome;
+    } else if (!outcome.ok && isWagerRejection(outcome.message)) {
+      appendLog({
+        accountId,
+        category: "rain",
+        message: "Wager required but limbo wager is off for this account",
+        detail: outcome.message,
+      });
     }
 
     recordRainJoin({
@@ -151,19 +158,22 @@ async function placeMinLimboBet(
   accountId: number,
   client: import("../rorush/http-client.js").RoRushHttpClient,
   hub: RoRushHub,
+  account: { limbo_multiplier: number; limbo_bet_coins: number },
 ): Promise<void> {
   const { creds } = await ensureAuthenticated(accountId);
   const reqId = uuid();
-  const multiplier = 110; // 1.10x in site units (cents)
-  const amount = 100; // minimum play amount in coin cents — tune via env if needed
-  const minAmount = Number(process.env.LIMBO_MIN_BET_CENTS ?? amount);
-  const minMultiplier = Number(process.env.LIMBO_MIN_MULTIPLIER_CENTS ?? multiplier);
+  const envBetCents = Number(process.env.LIMBO_MIN_BET_CENTS ?? NaN);
+  const envMultCents = Number(process.env.LIMBO_MIN_MULTIPLIER_CENTS ?? NaN);
+  const betCoins = Number.isFinite(envBetCents) ? envBetCents / 100 : account.limbo_bet_coins;
+  const mult = Number.isFinite(envMultCents) ? envMultCents / 100 : account.limbo_multiplier;
+  const amountCents = Math.max(1, Math.round(betCoins * 100));
+  const multiplierCents = Math.max(110, Math.round(mult * 100));
 
   await hub.playLimbo({
     reqId,
-    amount: minAmount,
+    amount: amountCents,
     currency: "CRYPTO",
-    multiplier: Math.max(minMultiplier, 110),
+    multiplier: multiplierCents,
   });
 
   await new Promise<void>((resolve, reject) => {

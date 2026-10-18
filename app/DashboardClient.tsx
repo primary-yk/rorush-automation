@@ -360,6 +360,55 @@ function AccountCard({ account, onChange }: { account: Account; onChange: () => 
           }}
         />
       </div>
+      <div className="mt-5 rounded-xl border border-amber-500/15 bg-amber-500/[0.04] p-4">
+        <p className="text-sm font-medium text-amber-100/90">Limbo wager (rain fix)</p>
+        <p className="mt-1 text-xs leading-relaxed text-slate-500">
+          If rain says you need more wager, Pilot places one small limbo bet then retries join once.
+        </p>
+        <div className="mt-3">
+          <Toggle
+            label="Auto limbo wager"
+            description="On when rain rejects for wager"
+            checked={account.limboWagerEnabled}
+            onChange={async (v) => {
+              await dashboardApi.patchAccount(account.id, { limboWagerEnabled: v });
+              await onChange();
+            }}
+          />
+        </div>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <label className="text-sm text-slate-400">
+            Multiplier (min 1.1×)
+            <Input
+              type="number"
+              step="0.01"
+              min={1.1}
+              className="mt-1"
+              defaultValue={account.limboMultiplier}
+              onBlur={async (e) => {
+                const v = Math.max(1.1, Number(e.target.value) || 1.1);
+                await dashboardApi.patchAccount(account.id, { limboMultiplier: v });
+                await onChange();
+              }}
+            />
+          </label>
+          <label className="text-sm text-slate-400">
+            Bet size (coins)
+            <Input
+              type="number"
+              step="0.01"
+              min={0.01}
+              className="mt-1"
+              defaultValue={account.limboBetCoins}
+              onBlur={async (e) => {
+                const v = Math.max(0.01, Number(e.target.value) || 1);
+                await dashboardApi.patchAccount(account.id, { limboBetCoins: v });
+                await onChange();
+              }}
+            />
+          </label>
+        </div>
+      </div>
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <label className="text-sm text-slate-400">
           Min rain amount (coins)
