@@ -6,11 +6,13 @@ export function Toggle({
   checked,
   onChange,
   label,
+  description,
   disabled,
 }: {
   checked: boolean;
   onChange: (v: boolean) => void;
   label: string;
+  description?: string;
   disabled?: boolean;
 }) {
   return (
@@ -19,26 +21,31 @@ export function Toggle({
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={clsx(
-        "flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm transition",
-        checked ? "border-accent/40 bg-accent/10 text-accent" : "border-border bg-panel text-muted",
+        "flex w-full items-start gap-3 rounded-xl border px-3 py-2.5 text-left transition sm:w-auto sm:min-w-[160px]",
+        checked
+          ? "border-emerald-500/30 bg-emerald-500/10"
+          : "border-white/10 bg-black/20 hover:border-white/20",
         disabled && "opacity-50",
       )}
       aria-pressed={checked}
     >
       <span
         className={clsx(
-          "h-4 w-8 rounded-full p-0.5 transition",
-          checked ? "bg-accent/30" : "bg-slate-700",
+          "mt-0.5 h-5 w-9 shrink-0 rounded-full p-0.5 transition",
+          checked ? "bg-emerald-500/40" : "bg-slate-600",
         )}
       >
         <span
           className={clsx(
-            "block h-3 w-3 rounded-full bg-white transition",
+            "block h-4 w-4 rounded-full bg-white shadow transition",
             checked ? "translate-x-4" : "translate-x-0",
           )}
         />
       </span>
-      {label}
+      <span>
+        <span className="block text-sm font-medium text-slate-100">{label}</span>
+        {description && <span className="mt-0.5 block text-xs text-slate-500">{description}</span>}
+      </span>
     </button>
   );
 }

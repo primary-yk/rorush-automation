@@ -16,7 +16,8 @@ No encryption reverse-engineering or anti-bot bypass: captchas go through CapMon
 
 ## Setup
 
-**Windows, never done this before?** → **[docs/WINDOWS-SETUP.md](docs/WINDOWS-SETUP.md)** (copy-paste steps).
+**Start from zero (step-by-step):** **[docs/GETTING-STARTED.md](docs/GETTING-STARTED.md)**  
+**Windows + WSL details:** **[docs/WINDOWS-SETUP.md](docs/WINDOWS-SETUP.md)**
 
 1. Copy env and generate an encryption key:
 

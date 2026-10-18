@@ -7,5 +7,31 @@
 }
 
 body {
-  @apply bg-[#0b0d12] text-slate-100 antialiased;
+  @apply min-h-screen bg-[#07080c] text-slate-100 antialiased;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(124, 58, 237, 0.35), transparent),
+    radial-gradient(ellipse 60% 40% at 100% 50%, rgba(16, 185, 129, 0.12), transparent),
+    radial-gradient(ellipse 50% 30% at 0% 80%, rgba(217, 70, 239, 0.1), transparent);
+}
+
+.font-display {
+  font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+}
+
+.font-mono {
+  font-family: var(--font-mono), ui-monospace, monospace;
+}
+
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 2s ease-in-out infinite;
 }
