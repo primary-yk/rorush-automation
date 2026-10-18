@@ -17,6 +17,15 @@ import { engine } from "../worker/engine.js";
 
 export function createApiServer() {
   const app = express();
+  app.use((_req, res, next) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET,PATCH,POST,DELETE,OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    next();
+  });
+  app.options("*", (_req, res) => {
+    res.sendStatus(204);
+  });
   app.use(express.json({ limit: "256kb" }));
 
   app.get("/health", (_req, res) => {

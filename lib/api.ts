@@ -33,8 +33,13 @@ export type ActivityLog = {
   created_at: string;
 };
 
+function clientApiUrl(path: string): string {
+  const base = (process.env.NEXT_PUBLIC_AUTOMATION_API_URL ?? "").replace(/\/$/, "");
+  return base ? `${base}${path}` : path;
+}
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, {
+  const res = await fetch(clientApiUrl(path), {
     ...init,
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
     cache: "no-store",
