@@ -16,6 +16,8 @@ No encryption reverse-engineering or anti-bot bypass: captchas go through CapMon
 
 ## Setup
 
+**Windows, never done this before?** → **[docs/WINDOWS-SETUP.md](docs/WINDOWS-SETUP.md)** (copy-paste steps).
+
 1. Copy env and generate an encryption key:
 
 ```bash
