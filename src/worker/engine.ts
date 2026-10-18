@@ -211,11 +211,17 @@ export class AutomationEngine {
     }
   }
 
+  /** Reconnect rain hub + case schedules — use when accounts are added/removed or auth changes. */
   async reloadAccounts(): Promise<void> {
     await refreshAllCaseSchedules();
     await this.sharedRainHub?.disconnect();
     this.sharedRainHub = null;
     await this.ensureSharedRainListener();
+  }
+
+  /** Lightweight refresh when only per-account toggles change (no SignalR reconnect). */
+  async refreshCaseSchedulesOnly(): Promise<void> {
+    await refreshAllCaseSchedules();
   }
 }
 

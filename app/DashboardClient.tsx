@@ -43,6 +43,14 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
 
   const accountsById = useMemo(() => new Map(accounts.map((a) => [a.id, a.nickname])), [accounts]);
 
+  const mergeAccount = useCallback((updated: Account) => {
+    setAccounts((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
+  }, []);
+
+  const removeAccountById = useCallback((id: number) => {
+    setAccounts((prev) => prev.filter((a) => a.id !== id));
+  }, []);
+
   const refresh = useCallback(async () => {
     try {
       const s = await dashboardApi.getSettings();
@@ -104,16 +112,30 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
     }
   }
 
+  const [pausePending, setPausePending] = useState(false);
   const pauseToggle =
     settings != null ? (
       <Toggle
         label="Global pause"
         description={settings.globalPause ? "All automation stopped" : "Automation running"}
         checked={settings.globalPause}
-        onChange={async (v) => {
-          const s = await dashboardApi.patchSettings({ globalPause: v });
-          setSettings(s);
-          toast.push(v ? "Automation paused" : "Automation resumed", "info");
+        pending={pausePending}
+        compact
+        onChange={(v) => {
+          const prev = settings.globalPause;
+          setSettings({ ...settings, globalPause: v });
+          setPausePending(true);
+          void dashboardApi
+            .patchSettings({ globalPause: v })
+            .then((s) => {
+              setSettings(s);
+              toast.push(v ? "Automation paused" : "Automation resumed", "info");
+            })
+            .catch((e) => {
+              setSettings({ ...settings, globalPause: prev });
+              toast.push(e instanceof Error ? e.message : "Could not update pause", "error");
+            })
+            .finally(() => setPausePending(false));
         }}
       />
     ) : null;
@@ -266,7 +288,14 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
                   <p className="text-slate-400">No accounts yet — add one on the left.</p>
                 </Card>
               ) : (
-                accounts.map((a) => <AccountCard key={a.id} account={a} onChange={refresh} />)
+                accounts.map((a) => (
+                  <AccountCard
+                    key={a.id}
+                    account={a}
+                    onAccountUpdate={mergeAccount}
+                    onRemove={removeAccountById}
+                  />
+                ))
               )}
             </div>
           </div>

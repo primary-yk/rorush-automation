@@ -9,6 +9,7 @@ export function Toggle({
   description,
   disabled,
   compact,
+  pending,
 }: {
   checked: boolean;
   onChange: (v: boolean) => void;
@@ -16,14 +17,16 @@ export function Toggle({
   description?: string;
   disabled?: boolean;
   compact?: boolean;
+  pending?: boolean;
 }) {
   return (
     <button
       type="button"
-      disabled={disabled}
+      disabled={disabled || pending}
       onClick={() => onChange(!checked)}
       className={clsx(
-        "flex w-full items-start gap-3 rounded-xl border px-3.5 py-3 text-left transition",
+        "flex w-full touch-manipulation items-start gap-3 rounded-xl border px-3.5 py-3 text-left transition active:scale-[0.99]",
+        pending && "opacity-70",
         checked
           ? "border-emerald-500/35 bg-emerald-500/[0.08] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
           : "border-white/[0.08] bg-black/25 hover:border-white/15 hover:bg-black/35",

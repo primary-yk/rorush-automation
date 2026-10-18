@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Toggle } from "./Toggle";
 import { Button, Card, Input, StatusPill } from "./ui";
 import { useToast } from "./Toast";
@@ -15,25 +15,62 @@ function avatarGradient(nickname: string): string {
   return `linear-gradient(135deg, hsl(${hue} 70% 45%), hsl(${(hue + 40) % 360} 65% 35%))`;
 }
 
-export function AccountCard({ account, onChange }: { account: Account; onChange: () => Promise<void> }) {
+export function AccountCard({
+  account,
+  onAccountUpdate,
+  onRemove,
+}: {
+  account: Account;
+  onAccountUpdate: (account: Account) => void;
+  onRemove: (id: number) => void;
+}) {
   const toast = useToast();
+  const [local, setLocal] = useState(account);
   const [removing, setRemoving] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const ok = account.status !== "error";
+  const [pending, setPending] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLocal(account);
+  }, [account]);
+
+  const ok = local.status !== "error";
+
+  const applyPatch = useCallback(
+    async (key: string, optimistic: Partial<Account>, body: Record<string, unknown>) => {
+      setPending(key);
+      let rollback: Account | null = null;
+      setLocal((cur) => {
+        rollback = cur;
+        return { ...cur, ...optimistic };
+      });
+      try {
+        const updated = await dashboardApi.patchAccount(account.id, body);
+        onAccountUpdate(updated);
+        setLocal(updated);
+      } catch (e) {
+        if (rollback) setLocal(rollback);
+        toast.push(e instanceof Error ? e.message : "Update failed", "error");
+      } finally {
+        setPending(null);
+      }
+    },
+    [account.id, onAccountUpdate, toast],
+  );
 
   async function removeAccount() {
     if (
       !window.confirm(
-        `Remove "${account.nickname}" from Rush Pilot?\n\nThis does not delete your RoRush site account.`,
+        `Remove "${local.nickname}" from Rush Pilot?\n\nThis does not delete your RoRush site account.`,
       )
     ) {
       return;
     }
     setRemoving(true);
     try {
-      await dashboardApi.deleteAccount(account.id);
-      toast.push(`Removed ${account.nickname}`, "success");
-      await onChange();
+      await dashboardApi.deleteAccount(local.id);
+      toast.push(`Removed ${local.nickname}`, "success");
+      onRemove(local.id);
     } catch (e) {
       toast.push(e instanceof Error ? e.message : "Could not remove account", "error");
     } finally {
@@ -41,95 +78,84 @@ export function AccountCard({ account, onChange }: { account: Account; onChange:
     }
   }
 
-  const initials = account.nickname
+  const initials = local.nickname
     .split(/\s+/)
     .map((w) => w[0])
     .join("")
     .slice(0, 2)
     .toUpperCase();
 
+  const busy = pending != null;
+
   return (
-    <Card hover className="overflow-visible">
+    <Card className="overflow-visible">
       <div className="flex flex-wrap items-start gap-4">
         <div
           className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl text-lg font-bold text-white shadow-lg"
-          style={{ background: avatarGradient(account.nickname) }}
+          style={{ background: avatarGradient(local.nickname) }}
         >
           {initials}
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
-              <h3 className="text-xl font-semibold tracking-tight text-white">{account.nickname}</h3>
-              <p className="mt-0.5 text-sm text-slate-400">
-                {account.username ?? "Session login"}
-              </p>
+              <h3 className="text-xl font-semibold tracking-tight text-white">{local.nickname}</h3>
+              <p className="mt-0.5 text-sm text-slate-400">{local.username ?? "Session login"}</p>
             </div>
-            <StatusPill ok={ok} label={account.status} />
+            <StatusPill ok={ok} label={local.status} />
           </div>
           <div className="mt-4 grid grid-cols-3 gap-2 sm:gap-3">
-            <StatChip label="Balance" value={account.balance != null ? account.balance.toFixed(2) : "—"} />
-            <StatChip label="Level" value={account.level != null ? String(account.level) : "—"} />
-            <StatChip
-              label="Lifetime"
-              value={account.lifetimeEarnings.total.toFixed(2)}
-              accent
-            />
+            <StatChip label="Balance" value={local.balance != null ? local.balance.toFixed(2) : "—"} />
+            <StatChip label="Level" value={local.level != null ? String(local.level) : "—"} />
+            <StatChip label="Lifetime" value={local.lifetimeEarnings.total.toFixed(2)} accent />
           </div>
         </div>
       </div>
 
-      {account.lastError && (
+      {local.lastError && (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3">
-          <p className="text-sm text-rose-100">{account.lastError}</p>
+          <p className="min-w-0 flex-1 text-sm text-rose-100">{local.lastError}</p>
           <Button
             variant="ghost"
-            className="shrink-0 py-1.5 text-xs"
-            onClick={async () => {
-              await dashboardApi.patchAccount(account.id, { clearError: true });
-              toast.push("Alert cleared", "success");
-              await onChange();
-            }}
+            className="shrink-0 touch-manipulation py-1.5 text-xs"
+            disabled={pending === "dismiss"}
+            onClick={() =>
+              void applyPatch("dismiss", { lastError: null, status: "idle" }, { clearError: true })
+            }
           >
-            Dismiss
+            {pending === "dismiss" ? "…" : "Dismiss"}
           </Button>
         </div>
       )}
 
-      <div className="mt-6 grid gap-2 sm:grid-cols-3">
+      <div className={clsx("mt-6 grid gap-2 sm:grid-cols-3", busy && "pointer-events-none opacity-90")}>
         <Toggle
           label="Join rain"
           description="Auto-join chat rains"
-          checked={account.joinRain}
-          onChange={async (v) => {
-            await dashboardApi.patchAccount(account.id, { joinRain: v });
-            await onChange();
-          }}
+          checked={local.joinRain}
+          pending={pending === "joinRain"}
+          onChange={(v) => void applyPatch("joinRain", { joinRain: v }, { joinRain: v })}
         />
         <Toggle
           label="Auto-open cases"
           description="Daily, weekly & monthly"
-          checked={account.autoOpenCases}
-          onChange={async (v) => {
-            await dashboardApi.patchAccount(account.id, { autoOpenCases: v });
-            await onChange();
-          }}
+          checked={local.autoOpenCases}
+          pending={pending === "autoOpenCases"}
+          onChange={(v) => void applyPatch("autoOpenCases", { autoOpenCases: v }, { autoOpenCases: v })}
         />
         <Toggle
           label="Redeem codes"
           description="Discord promos"
-          checked={account.autoRedeemCodes}
-          onChange={async (v) => {
-            await dashboardApi.patchAccount(account.id, { autoRedeemCodes: v });
-            await onChange();
-          }}
+          checked={local.autoRedeemCodes}
+          pending={pending === "autoRedeemCodes"}
+          onChange={(v) => void applyPatch("autoRedeemCodes", { autoRedeemCodes: v }, { autoRedeemCodes: v })}
         />
       </div>
 
       <button
         type="button"
         onClick={() => setAdvancedOpen((v) => !v)}
-        className="mt-5 flex w-full items-center justify-between rounded-xl border border-white/[0.06] bg-black/20 px-4 py-3 text-left text-sm text-slate-300 transition hover:border-white/10"
+        className="mt-5 flex w-full touch-manipulation items-center justify-between rounded-xl border border-white/[0.06] bg-black/20 px-4 py-3 text-left text-sm text-slate-300 transition hover:border-white/10"
       >
         <span>Limbo wager & filters</span>
         <span className={clsx("text-slate-500 transition", advancedOpen && "rotate-180")}>▾</span>
@@ -143,11 +169,11 @@ export function AccountCard({ account, onChange }: { account: Account; onChange:
           <Toggle
             label="Auto limbo wager"
             description="When rain requires recent play"
-            checked={account.limboWagerEnabled}
-            onChange={async (v) => {
-              await dashboardApi.patchAccount(account.id, { limboWagerEnabled: v });
-              await onChange();
-            }}
+            checked={local.limboWagerEnabled}
+            pending={pending === "limboWagerEnabled"}
+            onChange={(v) =>
+              void applyPatch("limboWagerEnabled", { limboWagerEnabled: v }, { limboWagerEnabled: v })
+            }
           />
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm text-slate-400">
@@ -157,11 +183,11 @@ export function AccountCard({ account, onChange }: { account: Account; onChange:
                 step="0.01"
                 min={1.1}
                 className="mt-1.5"
-                defaultValue={account.limboMultiplier}
+                defaultValue={local.limboMultiplier}
+                disabled={busy}
                 onBlur={async (e) => {
                   const v = Math.max(1.1, Number(e.target.value) || 1.1);
-                  await dashboardApi.patchAccount(account.id, { limboMultiplier: v });
-                  await onChange();
+                  await applyPatch("limboMultiplier", { limboMultiplier: v }, { limboMultiplier: v });
                 }}
               />
             </label>
@@ -172,11 +198,11 @@ export function AccountCard({ account, onChange }: { account: Account; onChange:
                 step="0.01"
                 min={0.01}
                 className="mt-1.5"
-                defaultValue={account.limboBetCoins}
+                defaultValue={local.limboBetCoins}
+                disabled={busy}
                 onBlur={async (e) => {
                   const v = Math.max(0.01, Number(e.target.value) || 1);
-                  await dashboardApi.patchAccount(account.id, { limboBetCoins: v });
-                  await onChange();
+                  await applyPatch("limboBetCoins", { limboBetCoins: v }, { limboBetCoins: v });
                 }}
               />
             </label>
@@ -188,10 +214,11 @@ export function AccountCard({ account, onChange }: { account: Account; onChange:
                 type="number"
                 step="0.01"
                 className="mt-1.5"
-                defaultValue={account.minRainAmount}
+                defaultValue={local.minRainAmount}
+                disabled={busy}
                 onBlur={async (e) => {
-                  await dashboardApi.patchAccount(account.id, { minRainAmount: Number(e.target.value) });
-                  await onChange();
+                  const v = Number(e.target.value);
+                  await applyPatch("minRainAmount", { minRainAmount: v }, { minRainAmount: v });
                 }}
               />
             </label>
@@ -200,10 +227,11 @@ export function AccountCard({ account, onChange }: { account: Account; onChange:
               <Input
                 type="number"
                 className="mt-1.5"
-                defaultValue={account.minCodeLevel}
+                defaultValue={local.minCodeLevel}
+                disabled={busy}
                 onBlur={async (e) => {
-                  await dashboardApi.patchAccount(account.id, { minCodeLevel: Number(e.target.value) });
-                  await onChange();
+                  const v = Number(e.target.value);
+                  await applyPatch("minCodeLevel", { minCodeLevel: v }, { minCodeLevel: v });
                 }}
               />
             </label>
@@ -211,7 +239,12 @@ export function AccountCard({ account, onChange }: { account: Account; onChange:
         </div>
       )}
 
-      <Button variant="danger" className="mt-5 w-full sm:w-auto" disabled={removing} onClick={() => void removeAccount()}>
+      <Button
+        variant="danger"
+        className="mt-5 w-full touch-manipulation sm:w-auto"
+        disabled={removing}
+        onClick={() => void removeAccount()}
+      >
         {removing ? "Removing…" : "Remove from Pilot"}
       </Button>
     </Card>
@@ -220,7 +253,10 @@ export function AccountCard({ account, onChange }: { account: Account; onChange:
 
 function StatChip({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
-    <div className="rounded-xl border border-white/[0.06] bg-black/25 px-3 py-2.5 text-center">
+    <div
+      className="rounded-xl border border-white/[0.06] bg-black/25 px-3 py-2.5 text-center select-none"
+      aria-hidden
+    >
       <p className="text-[10px] font-medium uppercase tracking-wider text-slate-500">{label}</p>
       <p className={clsx("mt-0.5 text-sm font-semibold tabular-nums", accent ? "text-emerald-300" : "text-white")}>
         {value}

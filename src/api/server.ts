@@ -150,8 +150,23 @@ export function createApiServer() {
       res.status(404).json({ error: "Not found" });
       return;
     }
-    await engine.reloadAccounts();
+
+    const authChanged =
+      body.sessionToken !== undefined || body.password !== undefined || body.apiKey !== undefined;
+    const caseToggleChanged = body.autoOpenCases !== undefined;
+
     res.json(publicAccount(updated));
+
+    // Respond first — toggles/dismiss should feel instant; heavy work runs after.
+    if (authChanged) {
+      void engine.reloadAccounts().catch((err) => {
+        console.error("[patch account reload]", err instanceof Error ? err.message : String(err));
+      });
+    } else if (caseToggleChanged) {
+      void engine.refreshCaseSchedulesOnly().catch((err) => {
+        console.error("[patch case schedules]", err instanceof Error ? err.message : String(err));
+      });
+    }
   });
 
   app.delete("/api/rush-accounts/:id", async (req, res) => {
