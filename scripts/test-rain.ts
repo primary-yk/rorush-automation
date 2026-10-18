@@ -55,8 +55,6 @@ async function main() {
   listenerHub.on(SIGNALR.rain.receiveAmountUpdated, (p) => logEvent("ReceiveRainAmountUpdated", p));
   listenerHub.on(SIGNALR.rain.receiveFinished, (p) => logEvent("ReceiveRainFinished", p));
 
-  listenerHub.on(SIGNALR.rain.receiveCurrent, (p) => logEvent("ReceiveCurrentRains", p));
-
   listenerHub.on(SIGNALR.rain.receiveJoinStageStart, (payload) => {
     const rain = parseRain(payload);
     if (!rain || joinedThisRain || !attemptJoin) return;
