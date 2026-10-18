@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { FormattedDateTime } from "@/components/FormattedDateTime";
 import { SetupGuide } from "@/components/SetupGuide";
 import { Toggle } from "@/components/Toggle";
 import { Button, Card, Input, SectionTitle, StatusPill } from "@/components/ui";
@@ -239,7 +240,7 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
             {logs.map((log) => (
               <li key={log.id} className="rounded-lg border border-white/5 bg-black/20 px-3 py-2">
                 <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                  <span>{new Date(log.created_at).toLocaleString()}</span>
+                  <FormattedDateTime iso={log.created_at} />
                   <span className="rounded bg-white/5 px-1.5 py-0.5 uppercase tracking-wide">{log.category}</span>
                 </div>
                 <p className="mt-1 text-slate-200">{log.message}</p>
