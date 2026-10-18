@@ -113,13 +113,14 @@ export class AutomationEngine {
       }
     });
     this.sharedRainHub.on(SIGNALR.rain.receiveJoinStageStart, (payload) => {
-      const rain = parseRain(payload) ?? this.activeRain;
+      const partial = parseRain(payload);
+      const rain = partial ? this.mergeRainState(partial) : this.activeRain;
       if (rain) {
         this.activeRain = rain;
         appendLog({
           category: "rain",
           message: "Rain join stage started",
-          detail: rain.rainId,
+          detail: `${rain.rainId} · window ${rainJoinWindowOpen(rain) ? "open" : "closed"}`,
         });
         this.scheduleRainJoinAttempt(rain, "join_stage");
       }

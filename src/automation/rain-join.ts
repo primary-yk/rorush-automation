@@ -48,8 +48,7 @@ export async function joinRainForAccount(input: {
       }, 30_000);
 
       const onSuccess = (payload: unknown) => {
-        const p = payload as { reqId?: string };
-        if (p.reqId && p.reqId !== reqId) return;
+        if (!matchesJoinReqId(payload, reqId)) return;
         cleanup();
         resolve({ ok: true, message: "Joined rain" });
       };
@@ -77,7 +76,6 @@ export async function joinRainForAccount(input: {
       message: "Sending rain join",
       detail: `${rain.rainId} · pool ${rainAmount} coins`,
     });
-    const outcomePromise = waitForOutcome();
     if (!captchaToken) {
       captchaToken = await solveCaptcha("hcaptcha");
     }
@@ -86,6 +84,7 @@ export async function joinRainForAccount(input: {
         "Captcha token missing — set CAPMONSTER_API_KEY (and check CapMonster balance)",
       );
     }
+    const outcomePromise = waitForOutcome();
     await hub.joinRain({ reqId, rainId: rain.rainId, captchaToken });
     let outcome = await outcomePromise;
 
@@ -187,8 +186,7 @@ async function joinOnce(
       resolve(result);
     };
     const offOk = hub.on(SIGNALR.rain.receiveJoinSuccess, (p) => {
-      const payload = p as { reqId?: string };
-      if (payload.reqId && payload.reqId !== reqId) return;
+      if (!matchesJoinReqId(p, reqId)) return;
       finish({ ok: true, message: "Joined rain after wager" });
     });
     const offFail = hub.on(SIGNALR.rain.receiveFailure, (p) => {
@@ -295,6 +293,16 @@ async function placeLimboWagerBet(
   void creds;
 }
 
+/** RoRush sends success as the reqId string; failures use `{ reqId, message }`. */
+export function matchesJoinReqId(payload: unknown, reqId: string): boolean {
+  if (typeof payload === "string") return payload === reqId;
+  if (payload && typeof payload === "object") {
+    const id = (payload as { reqId?: string }).reqId;
+    return !id || id === reqId;
+  }
+  return false;
+}
+
 export function parseRain(payload: unknown): RainState | null {
   if (!payload || typeof payload !== "object") return null;
   const p = payload as Record<string, unknown>;
@@ -305,15 +313,40 @@ export function parseRain(payload: unknown): RainState | null {
       ? p.amount
       : typeof p.totalAmount === "number"
         ? p.totalAmount
+        : typeof p.baseAmount === "number"
+          ? p.baseAmount
+          : undefined;
+  const hasTipStage = typeof p.tipStageDuration === "number";
+  const createdTimestamp =
+    typeof p.createdTimestamp === "number"
+      ? p.createdTimestamp
+      : hasTipStage && typeof p.timestamp === "number"
+        ? p.timestamp
+        : undefined;
+  let joinStageStartTimestamp: number | null =
+    typeof p.joinStageStartTimestamp === "number" ? p.joinStageStartTimestamp : null;
+  // ReceiveRainJoinStageStart uses `timestamp`, not joinStageStartTimestamp (see RoRush web client).
+  if (
+    joinStageStartTimestamp == null &&
+    !hasTipStage &&
+    typeof p.timestamp === "number" &&
+    typeof p.joinStageDuration === "number"
+  ) {
+    joinStageStartTimestamp = p.timestamp;
+  }
+  const joinStageDuration =
+    typeof p.joinStageDuration === "number"
+      ? p.joinStageDuration
+      : joinStageStartTimestamp != null
+        ? 90_000
         : undefined;
   return {
     rainId,
     amount: amountRaw != null ? amountRaw / 100 : undefined,
-    createdTimestamp: typeof p.createdTimestamp === "number" ? p.createdTimestamp : undefined,
+    createdTimestamp,
     tipStageDuration: typeof p.tipStageDuration === "number" ? p.tipStageDuration : undefined,
-    joinStageStartTimestamp:
-      typeof p.joinStageStartTimestamp === "number" ? p.joinStageStartTimestamp : null,
-    joinStageDuration: typeof p.joinStageDuration === "number" ? p.joinStageDuration : undefined,
+    joinStageStartTimestamp,
+    joinStageDuration,
   };
 }
 
