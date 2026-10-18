@@ -21,7 +21,11 @@ const envSchema = z.object({
   RORUSH_API_BASE: z.string().url().default("https://api.rorush.com"),
   RORUSH_SEC_RUSH: z.string().default("836457212"),
   RORUSH_PROXY_URL: z.string().optional(),
-  CAPMONSTER_API_KEY: z.string().optional(),
+  CAPMONSTER_API_KEY: z.preprocess((v) => {
+    if (v === undefined || v === null || v === "") return undefined;
+    const t = String(v).trim();
+    return t.length ? t : undefined;
+  }, z.string().optional()),
   AUTOMATION_API_HOST: z.string().default("127.0.0.1"),
   AUTOMATION_API_PORT: z.coerce.number().int().positive().default(43124),
   REQUEST_MIN_INTERVAL_MS: z.coerce.number().int().positive().default(350),

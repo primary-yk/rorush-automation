@@ -23,6 +23,12 @@ async function main() {
   if (!cfg.ENCRYPTION_KEY?.trim()) {
     console.warn("WARNING: ENCRYPTION_KEY missing in .env — you cannot save RoRush accounts until it is set.");
   }
+  const rainAccounts = listAccounts().filter((a) => a.join_rain);
+  if (rainAccounts.length > 0 && !cfg.CAPMONSTER_API_KEY) {
+    console.warn(
+      "WARNING: CAPMONSTER_API_KEY missing in .env — rain join will fail until you add a CapMonster key and restart.",
+    );
+  }
   console.log(`Project root: ${projectRoot()}`);
   void engine.start();
   startPilotRelayClient();

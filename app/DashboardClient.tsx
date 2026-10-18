@@ -41,6 +41,7 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
   const totalEarnings = accounts.reduce((n, a) => n + a.lifetimeEarnings.total, 0);
   const rainEnabled = accounts.filter((a) => a.joinRain).length;
   const casesEnabled = accounts.filter((a) => a.autoOpenCases).length;
+  const capmonsterMissing = apiOk && rainEnabled > 0 && settings?.capmonsterConfigured === false;
 
   const accountsById = useMemo(() => new Map(accounts.map((a) => [a.id, a.nickname])), [accounts]);
 
@@ -166,6 +167,29 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
 
   return (
     <AppShell tab={tab} onTab={setTab} engineOnline={apiOk} headerExtra={pauseToggle}>
+      {capmonsterMissing && (
+        <Card className="mb-8 border-amber-500/35 bg-amber-500/[0.08]" glow="none">
+          <p className="text-sm font-semibold text-amber-100">CapMonster not configured — rain join will fail</p>
+          <p className="mt-2 text-sm leading-relaxed text-slate-400">
+            RoRush requires an hCaptcha token for rain. Rush Pilot sends that to{" "}
+            <strong className="text-slate-300">CapMonster Cloud</strong> using{" "}
+            <code className="rounded-lg bg-black/40 px-2 py-0.5 font-mono text-xs text-amber-100">
+              CAPMONSTER_API_KEY
+            </code>{" "}
+            in your project{" "}
+            <code className="rounded-lg bg-black/40 px-2 py-0.5 font-mono text-xs">.env</code> file (same folder as{" "}
+            <code className="font-mono text-xs">npm run dev</code>). After adding the key,{" "}
+            <strong className="text-slate-300">stop and restart</strong>{" "}
+            <code className="font-mono text-xs">npm run dev</code>.
+          </p>
+          <p className="mt-3 text-xs text-slate-500">
+            In WSL:{" "}
+            <code className="text-slate-400">nano ~/rush-pilot/.env</code> → add key →{" "}
+            <code className="text-slate-400">npm run test-captcha</code>
+          </p>
+        </Card>
+      )}
+
       {error && (
         <Card className="mb-8 border-rose-500/30 bg-rose-500/[0.06]" glow="none">
           <p className="text-sm font-semibold text-rose-100">Can’t reach the automation engine</p>

@@ -23,7 +23,10 @@ async function main() {
     "ENCRYPTION_KEY:",
     cfg.ENCRYPTION_KEY?.trim() ? "set (required to save passwords)" : "MISSING — accounts cannot be saved",
   );
-  console.log("CAPMONSTER_API_KEY:", cfg.CAPMONSTER_API_KEY?.trim() ? "set" : "not set (rain captcha will fail)");
+  console.log(
+    "CAPMONSTER_API_KEY:",
+    cfg.CAPMONSTER_API_KEY ? `set (${cfg.CAPMONSTER_API_KEY.length} chars)` : "MISSING — rain join will fail",
+  );
 
   getDb();
   const accounts = listAccounts();
@@ -54,6 +57,9 @@ async function main() {
     console.log("• Or: npm run add-account -- --nick Main --email you@mail.com --password 'secret'");
   } else {
     console.log("• Login problems: npm run test-login  then  npm run update-account -- --id 1 --email … --password '…'");
+  }
+  if (!cfg.CAPMONSTER_API_KEY) {
+    console.log("• Rain captcha: add CAPMONSTER_API_KEY to .env, restart npm run dev, run npm run test-captcha");
   }
   console.log("• Find stray databases: find ~ -name 'rorush-automation.db' 2>/dev/null");
 }

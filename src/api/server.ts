@@ -39,11 +39,13 @@ export function createApiServer() {
       databasePath: cfg.DATABASE_PATH,
       accountCount: listAccounts().length,
       encryptionConfigured: !!cfg.ENCRYPTION_KEY?.trim(),
+      capmonsterConfigured: !!cfg.CAPMONSTER_API_KEY,
     });
   });
 
   app.get("/api/settings", (_req, res) => {
     const s = getSettings();
+    const cfg = loadConfig();
     res.json({
       globalPause: !!s.global_pause,
       discordEnabled: !!s.discord_enabled,
@@ -51,6 +53,7 @@ export function createApiServer() {
       hasDiscordToken: !!s.discord_token_enc,
       discordReportEnabled: !!s.discord_report_enabled,
       hasDiscordReportWebhook: !!s.discord_report_webhook_enc,
+      capmonsterConfigured: !!cfg.CAPMONSTER_API_KEY,
     });
   });
 

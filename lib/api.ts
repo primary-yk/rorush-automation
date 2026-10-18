@@ -36,6 +36,8 @@ export type Settings = {
   hasDiscordToken: boolean;
   discordReportEnabled: boolean;
   hasDiscordReportWebhook: boolean;
+  /** True when automation process loaded CAPMONSTER_API_KEY from .env */
+  capmonsterConfigured?: boolean;
 };
 
 export type ActivityLog = {
