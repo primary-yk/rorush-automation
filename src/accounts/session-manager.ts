@@ -67,21 +67,46 @@ export async function ensureAuthenticated(accountId: number): Promise<{
     if (!creds) throw new Error("No credentials configured");
 
     let client = new RoRushHttpClient(creds, account.proxy_url);
-    try {
-      await client.authStatus();
-    } catch {
-      updateAccount(accountId, { session_jwt_enc: null });
+    const sessionInvalid = await validateSession(client);
+    if (sessionInvalid) {
+      updateAccount(accountId, { session_jwt_enc: null, api_key_enc: null });
       account = getAccount(accountId)!;
       creds = await resolveCredentials(account);
       if (!creds) throw new Error("Session expired and re-login failed");
       client = new RoRushHttpClient(creds, account.proxy_url);
-      await client.authStatus();
+      const stillBad = await validateSession(client);
+      if (stillBad) throw new Error("Session expired and re-login failed");
     }
 
     return { account, client, creds };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     updateAccount(accountId, { status: "error", last_error: message });
+    throw err;
+  }
+}
+
+function looksLikeAuthError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes("401") ||
+    m.includes("403") ||
+    m.includes("unauthorized") ||
+    m.includes("not authenticated") ||
+    m.includes("invalid token") ||
+    m.includes("session expired")
+  );
+}
+
+/** Returns true when stored JWT should be discarded and login retried. */
+async function validateSession(client: RoRushHttpClient): Promise<boolean> {
+  try {
+    const status = await client.authStatus();
+    if (status.authenticated === false) return true;
+    return false;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (looksLikeAuthError(message)) return true;
     throw err;
   }
 }

@@ -12,6 +12,7 @@
     "update-account": "tsx scripts/update-account-cli.ts",
     "test-login": "tsx scripts/test-login.ts",
     "test-captcha": "tsx scripts/test-captcha.ts",
+    "preflight": "tsx scripts/preflight.ts",
     "build": "next build && tsc -p tsconfig.server.json",
     "start": "NODE_ENV=production concurrently -k \"node dist/main.js\" \"next start -p 43123 -H 127.0.0.1\"",
     "test": "vitest run",

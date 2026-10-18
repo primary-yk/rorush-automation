@@ -30,7 +30,7 @@ async function main() {
     );
   }
   console.log(`Project root: ${projectRoot()}`);
-  void engine.start();
+  await engine.start();
   startPilotRelayClient();
 }
 

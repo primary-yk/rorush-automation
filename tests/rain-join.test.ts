@@ -16,14 +16,16 @@ describe("isWagerRejection", () => {
 });
 
 describe("rainJoinWindowOpen", () => {
-  it("opens after tip stage ends", () => {
+  it("opens after tip stage ends with bounded join duration", () => {
     const rain: RainState = {
       rainId: "1",
       createdTimestamp: 1_000,
       tipStageDuration: 500,
+      joinStageDuration: 2_000,
     };
     expect(rainJoinWindowOpen(rain, 1_500)).toBe(true);
     expect(rainJoinWindowOpen(rain, 1_400)).toBe(false);
+    expect(rainJoinWindowOpen(rain, 3_600)).toBe(false);
   });
 
   it("stays closed when timing fields are missing", () => {

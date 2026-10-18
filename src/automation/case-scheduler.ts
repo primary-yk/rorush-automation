@@ -99,8 +99,10 @@ export async function openDueCases(accountHubs: Map<number, RoRushHub>): Promise
         const { creds } = await ensureAuthenticated(row.account_id);
         hub = new RoRushHub(creds, {}, account.proxy_url);
         await hub.connect();
-        await hub.subscribeCaseUnboxing();
+        await hub.ensureCaseSubscribed();
         accountHubs.set(row.account_id, hub);
+      } else {
+        await hub.ensureCaseSubscribed();
       }
 
       const reqId = uuid();

@@ -1,5 +1,5 @@
 import { fetch } from "undici";
-import { loadConfig } from "../config.js";
+import { loadConfig, reloadEnv } from "../config.js";
 
 export type CaptchaKind = "hcaptcha" | "turnstile";
 
@@ -22,6 +22,7 @@ type CapMonsterTask =
     };
 
 export async function solveCaptcha(kind: CaptchaKind): Promise<string | null> {
+  reloadEnv();
   const apiKey = loadConfig().CAPMONSTER_API_KEY;
   if (!apiKey) return null;
 

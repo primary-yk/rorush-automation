@@ -1,11 +1,16 @@
-import { loadConfig } from "../config.js";
+import { loadConfig, reloadEnv } from "../config.js";
 import {
   appendLog,
   getSettings,
   listAccounts,
   updateAccount,
 } from "../db/repositories.js";
-import { joinRainForAccount, parseRain, rainJoinWindowOpen } from "../automation/rain-join.js";
+import {
+  isWagerRejection,
+  joinRainForAccount,
+  parseRain,
+  rainJoinWindowOpen,
+} from "../automation/rain-join.js";
 import {
   msUntilNextCaseUnlock,
   openDueCases,
@@ -17,13 +22,13 @@ import { ensureAuthenticated } from "../accounts/session-manager.js";
 import { SIGNALR } from "../rorush/endpoints.js";
 import { RoRushHub } from "../rorush/signalr-hub.js";
 import type { RainState } from "../rorush/types.js";
+import { HubRegistry } from "./hub-registry.js";
 
 export class AutomationEngine {
   private running = false;
   private sharedRainHub: RoRushHub | null = null;
-  private accountHubs = new Map<number, RoRushHub>();
+  private readonly accountHubs = new HubRegistry();
   private activeRain: RainState | null = null;
-  /** Avoid spamming JoinRain on repeated hub ticks for the same rain. */
   private rainJoinLastAttempt = new Map<string, number>();
   private caseTimer: NodeJS.Timeout | null = null;
   private discordTimer: NodeJS.Timeout | null = null;
@@ -32,8 +37,17 @@ export class AutomationEngine {
   async start(): Promise<void> {
     if (this.running) return;
     this.running = true;
+    reloadEnv();
     appendLog({ category: "system", message: "Automation engine started" });
-    await this.ensureSharedRainListener();
+    try {
+      await this.ensureSharedRainListener();
+    } catch (err) {
+      appendLog({
+        category: "rain",
+        message: "Shared rain listener failed (cases/discord still run)",
+        detail: err instanceof Error ? err.message : String(err),
+      });
+    }
     await refreshAllCaseSchedules();
     this.scheduleCaseLoop();
     this.discordTimer = setInterval(() => {
@@ -50,10 +64,8 @@ export class AutomationEngine {
     if (this.discordTimer) clearInterval(this.discordTimer);
     if (this.statusTimer) clearInterval(this.statusTimer);
     await this.sharedRainHub?.disconnect();
-    for (const hub of this.accountHubs.values()) {
-      await hub.disconnect();
-    }
-    this.accountHubs.clear();
+    this.sharedRainHub = null;
+    await this.accountHubs.disconnectAll();
     appendLog({ category: "system", message: "Automation engine stopped" });
   }
 
@@ -74,7 +86,7 @@ export class AutomationEngine {
       if (!this.running) return;
       const settings = getSettings();
       if (!settings.global_pause) {
-        await this.safeRun(openDueCases(this.accountHubs).then(() => undefined));
+        await this.safeRun(openDueCases(this.accountHubs.asMap()).then(() => undefined));
       }
       const delay = msUntilNextCaseUnlock();
       this.caseTimer = setTimeout(tick, delay);
@@ -82,18 +94,32 @@ export class AutomationEngine {
     void tick();
   }
 
+  private async pickRainListenerAccount(): Promise<number | null> {
+    const candidates = listAccounts().filter((a) => a.session_jwt_enc || a.password_enc);
+    for (const a of candidates) {
+      try {
+        await ensureAuthenticated(a.id);
+        return a.id;
+      } catch {
+        continue;
+      }
+    }
+    return null;
+  }
+
   private async ensureSharedRainListener(): Promise<void> {
-    const listener = listAccounts().find((a) => a.session_jwt_enc || a.password_enc);
-    if (!listener) {
+    const listenerId = await this.pickRainListenerAccount();
+    if (listenerId == null) {
       appendLog({ category: "rain", message: "No account available for shared rain listener" });
       return;
     }
 
-    const { creds } = await ensureAuthenticated(listener.id);
+    const listener = listAccounts().find((a) => a.id === listenerId)!;
+    const { creds } = await ensureAuthenticated(listenerId);
     const proxy = loadConfig().RORUSH_PROXY_URL ?? listener.proxy_url;
     this.sharedRainHub = new RoRushHub(creds, {}, proxy);
     await this.sharedRainHub.connect();
-    await this.sharedRainHub.subscribeRain();
+    await this.sharedRainHub.ensureRainSubscribed();
     appendLog({
       category: "rain",
       message: "Shared rain listener connected",
@@ -109,7 +135,6 @@ export class AutomationEngine {
           message: "Rain created",
           detail: `${rain.rainId} · pool ${rain.amount ?? "?"} coins`,
         });
-        void this.onRainMaybeJoin(rain, "created");
       }
     });
     this.sharedRainHub.on(SIGNALR.rain.receiveJoinStageStart, (payload) => {
@@ -157,6 +182,14 @@ export class AutomationEngine {
         this.scheduleRainJoinAttempt(this.activeRain, "amount_updated");
       }
     });
+
+    this.sharedRainHub.on(SIGNALR.rain.receiveFinished, (payload) => {
+      const p = payload as { rainId?: string };
+      if (p.rainId && this.activeRain?.rainId === p.rainId) {
+        this.activeRain = null;
+        appendLog({ category: "rain", message: "Rain finished", detail: p.rainId });
+      }
+    });
   }
 
   private mergeRainState(incoming: RainState): RainState {
@@ -174,15 +207,24 @@ export class AutomationEngine {
 
   private scheduleRainJoinAttempt(rain: RainState, trigger: string): void {
     const last = this.rainJoinLastAttempt.get(rain.rainId) ?? 0;
-    if (Date.now() - last < 12_000) return;
+    if (Date.now() - last < 8_000) return;
     this.rainJoinLastAttempt.set(rain.rainId, Date.now());
     void this.onRainMaybeJoin(rain, trigger);
   }
 
   private async onRainMaybeJoin(rain: RainState, trigger: string): Promise<void> {
+    reloadEnv();
     const settings = getSettings();
     if (settings.global_pause) {
       appendLog({ category: "rain", message: "Rain join skipped (global pause)", detail: rain.rainId });
+      return;
+    }
+    if (!loadConfig().CAPMONSTER_API_KEY) {
+      appendLog({
+        category: "rain",
+        message: "Rain join skipped (CAPMONSTER_API_KEY missing in .env)",
+        detail: "Add key to .env in project root (not only nano.env) and restart npm run dev",
+      });
       return;
     }
     if (!rainJoinWindowOpen(rain)) {
@@ -210,28 +252,28 @@ export class AutomationEngine {
       detail: `${rain.rainId} · ${accounts.length} account(s) · ${trigger}`,
     });
 
-    await Promise.all(
-      accounts.map(async (account) => {
-        try {
-          const { creds } = await ensureAuthenticated(account.id);
-          let hub = this.accountHubs.get(account.id);
-          if (!hub) {
-            hub = new RoRushHub(creds, {}, account.proxy_url);
-            await hub.connect();
-            await hub.subscribeRain();
-            this.accountHubs.set(account.id, hub);
-          }
-          await joinRainForAccount({ accountId: account.id, rain, hub });
-        } catch (err) {
-          appendLog({
-            accountId: account.id,
-            category: "rain",
-            message: "Rain join pipeline error",
-            detail: err instanceof Error ? err.message : String(err),
-          });
+    for (const account of accounts) {
+      try {
+        const hub = await this.accountHubs.ensure(account.id, { rain: true, cases: true });
+        const result = await joinRainForAccount({ accountId: account.id, rain, hub });
+        const retryable =
+          !result.success &&
+          rainJoinWindowOpen(rain) &&
+          (isWagerRejection(result.reason) ||
+            /captcha|timed out/i.test(result.reason));
+        if (retryable) {
+          this.rainJoinLastAttempt.delete(rain.rainId);
+          this.scheduleRainJoinAttempt(rain, "retry_after_fail");
         }
-      }),
-    );
+      } catch (err) {
+        appendLog({
+          accountId: account.id,
+          category: "rain",
+          message: "Rain join pipeline error",
+          detail: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
   }
 
   private async refreshAccountStats(): Promise<void> {
@@ -258,15 +300,20 @@ export class AutomationEngine {
     }
   }
 
-  /** Reconnect rain hub + case schedules — use when accounts are added/removed or auth changes. */
   async reloadAccounts(): Promise<void> {
+    await this.accountHubs.disconnectAll();
     await refreshAllCaseSchedules();
     await this.sharedRainHub?.disconnect();
     this.sharedRainHub = null;
+    this.activeRain = null;
+    this.rainJoinLastAttempt.clear();
     await this.ensureSharedRainListener();
   }
 
-  /** Lightweight refresh when only per-account toggles change (no SignalR reconnect). */
+  async disconnectAccountHub(accountId: number): Promise<void> {
+    await this.accountHubs.disconnect(accountId);
+  }
+
   async refreshCaseSchedulesOnly(): Promise<void> {
     await refreshAllCaseSchedules();
   }

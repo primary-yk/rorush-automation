@@ -97,7 +97,7 @@ export async function joinRainForAccount(input: {
       });
       await placeLimboWagerBet(accountId, client, hub, account, rainAmount, account.nickname, rain.rainId);
       const retryReq = uuid();
-      let retryOutcome = await joinOnce(hub, retryReq, rain.rainId, captchaToken);
+      let retryOutcome = await joinOnce(hub, retryReq, rain.rainId);
       outcome = retryOutcome;
       // Some rains need more than one rain-sized wager before join succeeds.
       let extraWagers = 0;
@@ -116,7 +116,7 @@ export async function joinRainForAccount(input: {
         });
         await placeLimboWagerBet(accountId, client, hub, account, rainAmount, account.nickname, rain.rainId);
         const againReq = uuid();
-        retryOutcome = await joinOnce(hub, againReq, rain.rainId, captchaToken);
+        retryOutcome = await joinOnce(hub, againReq, rain.rainId);
         outcome = retryOutcome;
       }
     } else if (!outcome.ok && isWagerRejection(outcome.message)) {
@@ -175,9 +175,15 @@ async function joinOnce(
   hub: RoRushHub,
   reqId: string,
   rainId: string,
-  captchaToken: string | null,
 ): Promise<{ ok: boolean; message: string }> {
-  return new Promise((resolve) => {
+  const captchaToken = await solveCaptcha("hcaptcha");
+  if (!captchaToken) {
+    return {
+      ok: false,
+      message: "Captcha token missing — set CAPMONSTER_API_KEY (and check CapMonster balance)",
+    };
+  }
+  const outcomePromise = new Promise<{ ok: boolean; message: string }>((resolve) => {
     const timeout = setTimeout(() => resolve({ ok: false, message: "Retry timed out" }), 30_000);
     const finish = (result: { ok: boolean; message: string }) => {
       clearTimeout(timeout);
@@ -201,6 +207,7 @@ async function joinOnce(
       });
     });
   });
+  return outcomePromise;
 }
 
 function parseLimboResult(payload: unknown): { hit: boolean; crashMultiplier: number | null } {
@@ -261,6 +268,8 @@ async function placeLimboWagerBet(
   await new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error("Limbo bet timed out")), 20_000);
     const offOk = hub.on(SIGNALR.limbo.receiveResult, (raw) => {
+      const p = raw as { reqId?: string };
+      if (p.reqId && p.reqId !== reqId) return;
       clearTimeout(timeout);
       offOk();
       offFail();
@@ -298,7 +307,7 @@ export function matchesJoinReqId(payload: unknown, reqId: string): boolean {
   if (typeof payload === "string") return payload === reqId;
   if (payload && typeof payload === "object") {
     const id = (payload as { reqId?: string }).reqId;
-    return !id || id === reqId;
+    return typeof id === "string" && id === reqId;
   }
   return false;
 }
@@ -350,15 +359,18 @@ export function parseRain(payload: unknown): RainState | null {
   };
 }
 
+const DEFAULT_JOIN_STAGE_MS = 90_000;
+
 export function rainJoinWindowOpen(rain: RainState, now = Date.now()): boolean {
-  if (rain.joinStageStartTimestamp && rain.joinStageDuration) {
-    const end = rain.joinStageStartTimestamp + rain.joinStageDuration;
-    return now >= rain.joinStageStartTimestamp && now <= end;
+  const joinDur = rain.joinStageDuration ?? DEFAULT_JOIN_STAGE_MS;
+  let joinStart = rain.joinStageStartTimestamp ?? null;
+  if (joinStart == null && rain.createdTimestamp != null && rain.tipStageDuration != null) {
+    joinStart = rain.createdTimestamp + rain.tipStageDuration;
   }
-  if (rain.createdTimestamp && rain.tipStageDuration) {
-    return now >= rain.createdTimestamp + rain.tipStageDuration;
+  if (joinStart != null) {
+    const end = joinStart + joinDur;
+    return now >= joinStart && now <= end;
   }
-  // Not enough timing info (e.g. only rainId from amount ticks) — do not join blindly.
   return false;
 }
 

@@ -195,7 +195,10 @@ export function createApiServer() {
     }
 
     const authChanged =
-      body.sessionToken !== undefined || body.password !== undefined || body.apiKey !== undefined;
+      body.sessionToken !== undefined ||
+      body.password !== undefined ||
+      body.apiKey !== undefined ||
+      body.proxyUrl !== undefined;
     const caseToggleChanged = body.autoOpenCases !== undefined;
 
     res.json(publicAccount(updated));

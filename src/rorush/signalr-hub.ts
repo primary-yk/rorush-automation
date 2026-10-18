@@ -24,6 +24,8 @@ export class RoRushHub {
   private readonly listeners = new Map<string, Set<(payload: unknown) => void>>();
   /** SignalR .on() registrations — includes events added only via hub.on() after connect. */
   private readonly boundEvents = new Set<string>();
+  private rainSubscribed = false;
+  private caseSubscribed = false;
 
   constructor(
     private readonly creds: RoRushCredentials,
@@ -51,7 +53,11 @@ export class RoRushHub {
       .configureLogging(LogLevel.Warning);
 
     this.connection = builder.build();
+    this.boundEvents.clear();
     this.wireEvents();
+    for (const event of this.listeners.keys()) {
+      this.bindEvent(event);
+    }
     await this.connection.start();
   }
 
@@ -66,6 +72,21 @@ export class RoRushHub {
     }
     await this.connection.stop();
     this.connection = null;
+    this.boundEvents.clear();
+    this.rainSubscribed = false;
+    this.caseSubscribed = false;
+  }
+
+  async ensureRainSubscribed(): Promise<void> {
+    if (this.rainSubscribed) return;
+    await this.subscribeRain();
+    this.rainSubscribed = true;
+  }
+
+  async ensureCaseSubscribed(): Promise<void> {
+    if (this.caseSubscribed) return;
+    await this.subscribeCaseUnboxing();
+    this.caseSubscribed = true;
   }
 
   private wireEvents(): void {
