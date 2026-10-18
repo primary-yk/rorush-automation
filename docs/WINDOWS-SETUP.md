@@ -6,7 +6,43 @@ You already have the project from Cursor. This guide gets it running on **your P
 
 ## Part A — Get the project on your computer
 
-**Don’t see “Create repo”?** That’s normal. Your code is on Cursor’s cloud, not GitHub yet. Use **Option 1** or **Option 2** below.
+Your project lives on Cursor as **rush-pilot** (private by default):
+
+**https://cursor.com/codebase/goshennoshen/rush-pilot**
+
+You can change visibility in **Settings** on that page.
+
+On **Windows**, the **Origin CLI** does not run in PowerShell — use **WSL** (Windows Subsystem for Linux). See **Option 0** below.
+
+**Don’t see “Create repo”?** That’s normal. Use **Option 0** (recommended on Windows), **Option 1**, or **Option 2**.
+
+### Option 0 — Clone with Origin CLI in WSL (recommended on Windows)
+
+1. Install **WSL** if you don’t have it: in PowerShell **as Administrator** run `wsl --install`, restart, then open **Ubuntu** from the Start menu.
+2. In the **Ubuntu (WSL)** terminal, run:
+
+```bash
+# Run in WSL (Origin CLI is not available in PowerShell)
+# Install the Origin CLI
+curl -fsSL https://downloads.cursor.com/origin/install.sh | sh
+
+# Sign in (also sets up git credentials)
+origin auth login
+
+# Clone the repository
+origin repo clone goshennoshen/rush-pilot
+```
+
+3. If `origin` is not found after install:
+
+```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+4. Continue setup **inside WSL** in the cloned folder (`~/rush-pilot` or similar): install Node in WSL (`curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt install -y nodejs`), then follow Part C–D below using Linux paths.
+
+Origin CLI docs: https://cursor.com/docs/origin/cli
 
 ### Option 1 — Open this agent in Cursor on your PC (easiest if you use Cursor desktop)
 
