@@ -1,0 +1,105 @@
+"use client";
+
+import clsx from "clsx";
+import { useMemo, useState } from "react";
+import { FormattedDateTime } from "./FormattedDateTime";
+import type { ActivityLog } from "@/lib/api";
+
+const CATEGORY_STYLE: Record<string, { dot: string; label: string }> = {
+  rain: { dot: "bg-sky-400", label: "Rain" },
+  case: { dot: "bg-amber-400", label: "Cases" },
+  limbo: { dot: "bg-fuchsia-400", label: "Limbo" },
+  discord: { dot: "bg-indigo-400", label: "Discord" },
+  system: { dot: "bg-slate-400", label: "System" },
+};
+
+function categoryMeta(category: string) {
+  return CATEGORY_STYLE[category] ?? { dot: "bg-violet-400", label: category };
+}
+
+export function ActivityFeed({
+  logs,
+  accountsById,
+  compact,
+  maxHeight,
+}: {
+  logs: ActivityLog[];
+  accountsById?: Map<number, string>;
+  compact?: boolean;
+  maxHeight?: string;
+}) {
+  const [filter, setFilter] = useState<string>("all");
+
+  const categories = useMemo(() => {
+    const set = new Set(logs.map((l) => l.category));
+    return ["all", ...Array.from(set).sort()];
+  }, [logs]);
+
+  const filtered = filter === "all" ? logs : logs.filter((l) => l.category === filter);
+
+  return (
+    <div>
+      {!compact && categories.length > 2 && (
+        <div className="mb-4 flex flex-wrap gap-2">
+          {categories.map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setFilter(c)}
+              className={clsx(
+                "rounded-full px-3 py-1 text-xs font-medium capitalize transition",
+                filter === c
+                  ? "bg-white/12 text-white"
+                  : "bg-white/[0.03] text-slate-500 hover:text-slate-300",
+              )}
+            >
+              {c === "all" ? "All" : c}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <ul
+        className={clsx("space-y-0", maxHeight && "overflow-y-auto pr-1 scrollbar-thin")}
+        style={maxHeight ? { maxHeight } : undefined}
+      >
+        {filtered.length === 0 && (
+          <li className="rounded-2xl border border-dashed border-white/10 py-12 text-center text-sm text-slate-500">
+            No activity yet — when rain or cases run, entries show up here.
+          </li>
+        )}
+        {filtered.map((log, i) => {
+          const meta = categoryMeta(log.category);
+          const accountName =
+            log.account_id != null ? accountsById?.get(log.account_id) : undefined;
+          return (
+            <li key={log.id} className="relative flex gap-4 pb-6 last:pb-0">
+              {i < filtered.length - 1 && (
+                <span
+                  className="absolute left-[11px] top-6 h-[calc(100%-12px)] w-px bg-gradient-to-b from-white/10 to-transparent"
+                  aria-hidden
+                />
+              )}
+              <span
+                className={clsx("relative z-10 mt-1.5 h-[22px] w-[22px] shrink-0 rounded-full ring-4 ring-[#07080f]", meta.dot)}
+              />
+              <div className="min-w-0 flex-1 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 transition hover:border-white/10 hover:bg-white/[0.04]">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+                  <FormattedDateTime iso={log.created_at} />
+                  <span className="rounded-md bg-white/5 px-1.5 py-0.5 font-medium uppercase tracking-wide text-slate-400">
+                    {meta.label}
+                  </span>
+                  {accountName && <span className="text-violet-300/80">{accountName}</span>}
+                </div>
+                <p className={clsx("mt-1.5 text-slate-100", compact ? "text-sm" : "text-[15px]")}>{log.message}</p>
+                {log.detail && (
+                  <p className="mt-1 font-mono text-xs leading-relaxed text-slate-500">{log.detail}</p>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}

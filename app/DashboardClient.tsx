@@ -1,11 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { FormattedDateTime } from "@/components/FormattedDateTime";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { AccountCard } from "@/components/AccountCard";
+import { ActivityFeed } from "@/components/ActivityFeed";
+import { AppShell, type DashboardTab } from "@/components/AppShell";
 import { SetupGuide } from "@/components/SetupGuide";
 import { Toggle } from "@/components/Toggle";
-import { Button, Card, Input, SectionTitle, StatusPill } from "@/components/ui";
+import { Button, Card, Input, MetricCard, SectionTitle } from "@/components/ui";
 import { useToast } from "@/components/Toast";
+import { IconBolt, IconBox, IconRain } from "@/components/icons";
 import { dashboardApi, type Account, type ActivityLog, type Settings } from "@/lib/api";
 
 export type DashboardBootstrap = {
@@ -17,6 +20,7 @@ export type DashboardBootstrap = {
 
 export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
   const toast = useToast();
+  const [tab, setTab] = useState<DashboardTab>("overview");
   const [settings, setSettings] = useState<Settings | null>(initial.settings);
   const [accounts, setAccounts] = useState<Account[]>(initial.accounts);
   const [logs, setLogs] = useState<ActivityLog[]>(initial.logs);
@@ -31,7 +35,13 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
   const [discordToken, setDiscordToken] = useState("");
   const [savingAccount, setSavingAccount] = useState(false);
 
+  const apiOk = !error && settings != null;
+
   const totalEarnings = accounts.reduce((n, a) => n + a.lifetimeEarnings.total, 0);
+  const rainEnabled = accounts.filter((a) => a.joinRain).length;
+  const casesEnabled = accounts.filter((a) => a.autoOpenCases).length;
+
+  const accountsById = useMemo(() => new Map(accounts.map((a) => [a.id, a.nickname])), [accounts]);
 
   const refresh = useCallback(async () => {
     try {
@@ -85,6 +95,7 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
       setNewPass("");
       setNewSession("");
       toast.push("Account saved.", "success");
+      setTab("accounts");
       await refresh();
     } catch (e) {
       toast.push(e instanceof Error ? e.message : "Could not save account", "error");
@@ -93,121 +104,208 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
     }
   }
 
-  const apiOk = !error && settings != null;
+  const pauseToggle =
+    settings != null ? (
+      <Toggle
+        label="Global pause"
+        description={settings.globalPause ? "All automation stopped" : "Automation running"}
+        checked={settings.globalPause}
+        onChange={async (v) => {
+          const s = await dashboardApi.patchSettings({ globalPause: v });
+          setSettings(s);
+          toast.push(v ? "Automation paused" : "Automation resumed", "info");
+        }}
+      />
+    ) : null;
 
   if (loading) {
     return (
-      <main className="flex min-h-screen max-w-lg flex-col items-center justify-center gap-4 px-6 text-center">
-        <p className="animate-pulse-soft text-slate-400">Connecting to automation engine…</p>
-        <p className="text-sm text-slate-500">Loading your dashboard — this should only take a few seconds.</p>
+      <main className="flex min-h-screen flex-col items-center justify-center gap-6 px-6 text-center">
+        <div className="relative h-16 w-16">
+          <div className="absolute inset-0 rounded-2xl border border-violet-500/30 bg-violet-500/10" />
+          <div className="absolute inset-0 animate-spin-slow rounded-2xl border-2 border-transparent border-t-violet-400" />
+        </div>
+        <div>
+          <p className="text-lg font-medium text-white">Connecting to engine</p>
+          <p className="mt-2 max-w-sm text-sm text-slate-500">
+            Starting Rush Pilot — if this hangs, run <code className="text-violet-300">npm run dev</code> in your project
+            folder.
+          </p>
+        </div>
       </main>
     );
   }
 
   return (
-    <main className="mx-auto min-h-screen max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
-      <header className="mb-10 flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
-        <div className="max-w-2xl">
-          <div className="mb-4 flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
-              <span
-                className={`h-2 w-2 rounded-full ${apiOk ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" : "bg-rose-400"}`}
-              />
-              Engine {apiOk ? "online" : "offline"}
-            </span>
-            <span className="rounded-full border border-violet-500/20 bg-violet-500/10 px-3 py-1 text-xs text-violet-200">
-              {accounts.length} account{accounts.length === 1 ? "" : "s"}
-            </span>
-            <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-200">
-              {totalEarnings.toFixed(2)} lifetime
-            </span>
-          </div>
-          <h1 className="font-display text-4xl font-bold tracking-tight text-white sm:text-5xl lg:text-6xl">
-            Rush{" "}
-            <span className="bg-gradient-to-r from-violet-200 via-fuchsia-300 to-emerald-300 bg-clip-text text-transparent">
-              Pilot
-            </span>
-          </h1>
-          <p className="mt-4 text-base leading-relaxed text-slate-400 sm:text-lg">
-            Rain, reward cases, and Discord codes — self-hosted on your PC. Secrets stay encrypted locally.
+    <AppShell tab={tab} onTab={setTab} engineOnline={apiOk} headerExtra={pauseToggle}>
+      {error && (
+        <Card className="mb-8 border-rose-500/30 bg-rose-500/[0.06]" glow="none">
+          <p className="text-sm font-semibold text-rose-100">Can’t reach the automation engine</p>
+          <p className="mt-2 text-sm leading-relaxed text-slate-400">
+            In Ubuntu (WSL), open your project folder and run{" "}
+            <code className="rounded-lg bg-black/40 px-2 py-0.5 font-mono text-xs text-rose-100">npm run dev</code>.
+            Keep that terminal open, then refresh this page.
           </p>
-        </div>
-        {settings && (
-          <Toggle
-            label="Global pause"
-            description={settings.globalPause ? "Automation stopped" : "Automation active"}
-            checked={settings.globalPause}
-            onChange={async (v) => {
-              const s = await dashboardApi.patchSettings({ globalPause: v });
-              setSettings(s);
-            }}
-          />
-        )}
-      </header>
+          <p className="mt-3 font-mono text-xs text-slate-600">{error}</p>
+        </Card>
+      )}
 
-      <div className="space-y-8">
-        <SetupGuide apiOk={apiOk} hasAccounts={accounts.length > 0} />
-
-        {error && (
-          <Card className="border-rose-500/30 bg-rose-500/5">
-            <p className="text-sm font-medium text-rose-200">Can’t reach the automation engine</p>
-            <p className="mt-2 text-sm text-slate-400">
-              Open a terminal in your project folder and run{" "}
-              <code className="font-mono rounded bg-black/40 px-1.5 py-0.5 text-rose-100">npm run dev</code>. Keep
-              that window open, then refresh this page.
+      {tab === "overview" && (
+        <div className="space-y-8">
+          <div>
+            <h1 className="font-display text-3xl font-bold tracking-tight text-white sm:text-4xl">
+              Good to go{accounts.length ? `, ${accounts.length} pilot${accounts.length === 1 ? "" : "s"} active` : ""}
+            </h1>
+            <p className="mt-2 max-w-xl text-slate-400">
+              Rain, reward cases, and Discord codes — running locally with encrypted credentials.
             </p>
-            <p className="mt-2 font-mono text-xs text-slate-500">{error}</p>
-          </Card>
-        )}
+          </div>
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          <Card glow="mint">
-            <SectionTitle
-              eyebrow="Step 4"
-              title="RoRush account"
-              description="Pick a nickname you’ll recognize. Use the same email and password as on rorush.com, or paste a session token if you use 2FA."
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <MetricCard
+              label="Lifetime earnings"
+              value={totalEarnings.toFixed(2)}
+              sub="Rain + cases + codes"
+              trend="up"
+              icon={<IconBolt className="h-5 w-5" />}
             />
-            <div className="grid gap-3">
-              <Input placeholder="Nickname — e.g. Main" value={newNick} onChange={(e) => setNewNick(e.target.value)} />
-              <Input
-                placeholder="RoRush login email"
-                value={newUser}
-                onChange={(e) => setNewUser(e.target.value)}
-                autoComplete="off"
-              />
-              <Input
-                type="password"
-                placeholder="RoRush password"
-                value={newPass}
-                onChange={(e) => setNewPass(e.target.value)}
-                autoComplete="new-password"
-              />
-              <details className="text-sm text-slate-500">
-                <summary className="cursor-pointer text-violet-300/90">Advanced: session JWT instead of password</summary>
-                <Input
-                  className="mt-2"
-                  placeholder="Paste JWT from browser DevTools (after login)"
-                  value={newSession}
-                  onChange={(e) => setNewSession(e.target.value)}
-                />
-              </details>
-              <Button disabled={savingAccount} onClick={() => void createAccount()}>
-                {savingAccount ? "Saving…" : "Save account"}
+            <MetricCard label="Accounts" value={String(accounts.length)} sub="RoRush logins" icon={<IconRain className="h-5 w-5" />} />
+            <MetricCard
+              label="Rain join"
+              value={String(rainEnabled)}
+              sub={`of ${accounts.length} enabled`}
+              icon={<IconRain className="h-5 w-5" />}
+            />
+            <MetricCard
+              label="Auto cases"
+              value={String(casesEnabled)}
+              sub="Daily / weekly / monthly"
+              icon={<IconBox className="h-5 w-5" />}
+            />
+          </div>
+
+          {!apiOk && <SetupGuide apiOk={apiOk} hasAccounts={accounts.length > 0} />}
+
+          {accounts.length === 0 && apiOk && (
+            <Card glow="violet" className="border-violet-500/20 text-center">
+              <p className="text-lg font-medium text-white">Add your first RoRush account</p>
+              <p className="mx-auto mt-2 max-w-md text-sm text-slate-400">
+                Head to Accounts to save a login, then turn on Join rain and disable Global pause when you’re ready.
+              </p>
+              <Button className="mt-6" onClick={() => setTab("accounts")}>
+                Go to Accounts
               </Button>
-            </div>
-          </Card>
+            </Card>
+          )}
 
           <Card>
             <SectionTitle
-              eyebrow="Optional"
-              title="Discord code watcher"
-              description="Watches one channel for promo codes and redeems on accounts that have “Redeem codes” enabled. Token is stored encrypted."
+              eyebrow="Live feed"
+              title="Recent activity"
+              description="Latest events from the automation engine."
+              action={
+                logs.length > 5 ? (
+                  <Button variant="ghost" size="sm" onClick={() => setTab("activity")}>
+                    View all
+                  </Button>
+                ) : undefined
+              }
             />
-            <div className="grid gap-3">
+            <ActivityFeed logs={logs.slice(0, 8)} accountsById={accountsById} compact maxHeight="420px" />
+          </Card>
+        </div>
+      )}
+
+      {tab === "accounts" && (
+        <div className="space-y-8">
+          <SectionTitle
+            eyebrow="RoRush"
+            title="Accounts"
+            description="Each card is one login. Toggle rain, cases, and codes independently."
+          />
+
+          <div className="grid gap-6 lg:grid-cols-5">
+            <Card glow="mint" className="lg:col-span-2 lg:sticky lg:top-28 lg:self-start">
+              <SectionTitle
+                title="Add account"
+                description="Nickname plus rorush.com email & password, or a session JWT if you use 2FA."
+              />
+              <div className="grid gap-3">
+                <Input placeholder="Nickname — e.g. Main" value={newNick} onChange={(e) => setNewNick(e.target.value)} />
+                <Input
+                  placeholder="RoRush login email"
+                  value={newUser}
+                  onChange={(e) => setNewUser(e.target.value)}
+                  autoComplete="off"
+                />
+                <Input
+                  type="password"
+                  placeholder="RoRush password"
+                  value={newPass}
+                  onChange={(e) => setNewPass(e.target.value)}
+                  autoComplete="new-password"
+                />
+                <details className="rounded-xl border border-white/[0.06] bg-black/20 px-3 py-2 text-sm text-slate-500">
+                  <summary className="cursor-pointer text-violet-300/90">Session JWT (advanced)</summary>
+                  <Input
+                    className="mt-2"
+                    placeholder="Paste JWT from browser DevTools"
+                    value={newSession}
+                    onChange={(e) => setNewSession(e.target.value)}
+                  />
+                </details>
+                <Button size="lg" disabled={savingAccount} onClick={() => void createAccount()}>
+                  {savingAccount ? "Saving…" : "Save account"}
+                </Button>
+              </div>
+            </Card>
+
+            <div className="space-y-4 lg:col-span-3">
+              {accounts.length === 0 ? (
+                <Card className="border-dashed border-white/10 py-16 text-center">
+                  <p className="text-slate-400">No accounts yet — add one on the left.</p>
+                </Card>
+              ) : (
+                accounts.map((a) => <AccountCard key={a.id} account={a} onChange={refresh} />)
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === "activity" && (
+        <div className="space-y-6">
+          <SectionTitle
+            eyebrow="Live"
+            title="Activity log"
+            description="Rain attempts, case opens, limbo wagers, and system messages. Secrets never appear here."
+          />
+          <Card padding="lg">
+            <ActivityFeed logs={logs} accountsById={accountsById} />
+          </Card>
+        </div>
+      )}
+
+      {tab === "settings" && (
+        <div className="space-y-8">
+          <SectionTitle
+            eyebrow="Configuration"
+            title="Settings"
+            description="Discord watcher and setup help. Engine secrets live in your .env file."
+          />
+
+          <SetupGuide apiOk={apiOk} hasAccounts={accounts.length > 0} />
+
+          <Card glow="cyan">
+            <SectionTitle
+              title="Discord code watcher"
+              description="Monitors one channel for promo codes and redeems on accounts with “Redeem codes” enabled."
+            />
+            <div className="grid max-w-lg gap-4">
               {settings && (
                 <Toggle
                   label="Watch channel"
-                  description="Poll for new codes"
+                  description="Poll for new codes every ~45s"
                   checked={settings.discordEnabled}
                   onChange={async (v) => {
                     const s = await dashboardApi.patchSettings({ discordEnabled: v });
@@ -227,7 +325,7 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
                 onChange={(e) => setDiscordToken(e.target.value)}
               />
               <Button
-                variant="ghost"
+                variant="soft"
                 onClick={async () => {
                   const s = await dashboardApi.patchSettings({
                     discordChannelId: discordChannel || null,
@@ -235,6 +333,7 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
                   });
                   setSettings(s);
                   setDiscordToken("");
+                  toast.push("Discord settings saved", "success");
                 }}
               >
                 Save Discord settings
@@ -242,218 +341,7 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
             </div>
           </Card>
         </div>
-
-        <section>
-          <SectionTitle
-            eyebrow="Accounts"
-            title="Who’s running"
-            description="Each card is one RoRush login. Toggles control rain, cases, and code redeems independently."
-          />
-          {accounts.length === 0 ? (
-            <Card className="mt-4 border-dashed border-white/10 text-center text-slate-500">
-              No accounts yet — add one above to start.
-            </Card>
-          ) : (
-            <div className="mt-4 grid gap-4">
-              {accounts.map((a) => (
-                <AccountCard key={a.id} account={a} onChange={refresh} />
-              ))}
-            </div>
-          )}
-        </section>
-
-        <Card>
-          <SectionTitle
-            eyebrow="Live"
-            title="Activity log"
-            description="Rain attempts, case opens, and errors. Passwords and tokens never appear here."
-          />
-          <ul className="mt-2 max-h-72 space-y-3 overflow-y-auto text-sm">
-            {logs.length === 0 && <li className="text-slate-500">No activity yet.</li>}
-            {logs.map((log) => (
-              <li key={log.id} className="rounded-lg border border-white/5 bg-black/20 px-3 py-2">
-                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                  <FormattedDateTime iso={log.created_at} />
-                  <span className="rounded bg-white/5 px-1.5 py-0.5 uppercase tracking-wide">{log.category}</span>
-                </div>
-                <p className="mt-1 text-slate-200">{log.message}</p>
-                {log.detail && <p className="mt-0.5 text-slate-500">{log.detail}</p>}
-              </li>
-            ))}
-          </ul>
-        </Card>
-      </div>
-
-      <footer className="mt-12 border-t border-white/5 pt-6 text-center text-xs text-slate-600">
-        Self-hosted · Unaffiliated with RoRush · Use at your own risk
-      </footer>
-    </main>
-  );
-}
-
-function AccountCard({ account, onChange }: { account: Account; onChange: () => Promise<void> }) {
-  const toast = useToast();
-  const [removing, setRemoving] = useState(false);
-  const ok = account.status !== "error";
-
-  async function removeAccount() {
-    if (!window.confirm(`Remove "${account.nickname}" from Rush Pilot?\n\nThis does not delete your RoRush site account.`)) {
-      return;
-    }
-    setRemoving(true);
-    try {
-      await dashboardApi.deleteAccount(account.id);
-      toast.push(`Removed ${account.nickname}`, "success");
-      await onChange();
-    } catch (e) {
-      toast.push(e instanceof Error ? e.message : "Could not remove account", "error");
-    } finally {
-      setRemoving(false);
-    }
-  }
-
-  return (
-    <Card className="border-white/[0.06]">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="text-xl font-semibold text-white">{account.nickname}</h3>
-          <p className="mt-1 text-sm text-slate-400">
-            {account.username ?? "Session login"} · Level {account.level ?? "—"} · Balance{" "}
-            {account.balance != null ? account.balance.toFixed(2) : "—"}
-          </p>
-          <p className="mt-2 text-xs text-slate-500">
-            Lifetime free earnings (rain + cases + codes):{" "}
-            <span className="font-medium text-emerald-300/90">{account.lifetimeEarnings.total.toFixed(2)}</span>
-          </p>
-        </div>
-        <StatusPill ok={ok} label={account.status} />
-      </div>
-      {account.lastError && (
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-rose-500/10 px-3 py-2">
-          <p className="text-sm text-rose-200">{account.lastError}</p>
-          <Button
-            variant="ghost"
-            className="shrink-0 py-1.5 text-xs"
-            onClick={async () => {
-              await dashboardApi.patchAccount(account.id, { clearError: true });
-              toast.push("Alert cleared", "success");
-              await onChange();
-            }}
-          >
-            Dismiss
-          </Button>
-        </div>
       )}
-      <div className="mt-5 grid gap-2 sm:grid-cols-3">
-        <Toggle
-          label="Join rain"
-          description="Auto-join chat rains"
-          checked={account.joinRain}
-          onChange={async (v) => {
-            await dashboardApi.patchAccount(account.id, { joinRain: v });
-            await onChange();
-          }}
-        />
-        <Toggle
-          label="Auto-open cases"
-          description="Daily, weekly & monthly only"
-          checked={account.autoOpenCases}
-          onChange={async (v) => {
-            await dashboardApi.patchAccount(account.id, { autoOpenCases: v });
-            await onChange();
-          }}
-        />
-        <Toggle
-          label="Redeem codes"
-          description="Discord promos"
-          checked={account.autoRedeemCodes}
-          onChange={async (v) => {
-            await dashboardApi.patchAccount(account.id, { autoRedeemCodes: v });
-            await onChange();
-          }}
-        />
-      </div>
-      <div className="mt-5 rounded-xl border border-amber-500/15 bg-amber-500/[0.04] p-4">
-        <p className="text-sm font-medium text-amber-100/90">Limbo wager (rain fix)</p>
-        <p className="mt-1 text-xs leading-relaxed text-slate-500">
-          If rain rejects for wager, Pilot limbos for the same amount as that rain pool (not a fixed bet), then
-          retries join — up to 3 tries per rain.
-        </p>
-        <div className="mt-3">
-          <Toggle
-            label="Auto limbo wager"
-            description="On when rain rejects for wager"
-            checked={account.limboWagerEnabled}
-            onChange={async (v) => {
-              await dashboardApi.patchAccount(account.id, { limboWagerEnabled: v });
-              await onChange();
-            }}
-          />
-        </div>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <label className="text-sm text-slate-400">
-            Multiplier (min 1.1×)
-            <Input
-              type="number"
-              step="0.01"
-              min={1.1}
-              className="mt-1"
-              defaultValue={account.limboMultiplier}
-              onBlur={async (e) => {
-                const v = Math.max(1.1, Number(e.target.value) || 1.1);
-                await dashboardApi.patchAccount(account.id, { limboMultiplier: v });
-                await onChange();
-              }}
-            />
-          </label>
-          <label className="text-sm text-slate-400">
-            Fallback bet (coins)
-            <Input
-              type="number"
-              step="0.01"
-              min={0.01}
-              className="mt-1"
-              defaultValue={account.limboBetCoins}
-              onBlur={async (e) => {
-                const v = Math.max(0.01, Number(e.target.value) || 1);
-                await dashboardApi.patchAccount(account.id, { limboBetCoins: v });
-                await onChange();
-              }}
-            />
-            <span className="mt-1 block text-xs text-slate-600">Only used if rain amount is unknown</span>
-          </label>
-        </div>
-      </div>
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <label className="text-sm text-slate-400">
-          Min rain amount (coins)
-          <Input
-            type="number"
-            step="0.01"
-            className="mt-1"
-            defaultValue={account.minRainAmount}
-            onBlur={async (e) => {
-              await dashboardApi.patchAccount(account.id, { minRainAmount: Number(e.target.value) });
-              await onChange();
-            }}
-          />
-        </label>
-        <label className="text-sm text-slate-400">
-          Min level for codes
-          <Input
-            type="number"
-            className="mt-1"
-            defaultValue={account.minCodeLevel}
-            onBlur={async (e) => {
-              await dashboardApi.patchAccount(account.id, { minCodeLevel: Number(e.target.value) });
-              await onChange();
-            }}
-          />
-        </label>
-      </div>
-      <Button variant="danger" className="mt-4 text-sm" disabled={removing} onClick={() => void removeAccount()}>
-        {removing ? "Removing…" : "Remove from Pilot"}
-      </Button>
-    </Card>
+    </AppShell>
   );
 }
