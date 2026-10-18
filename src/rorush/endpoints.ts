@@ -62,3 +62,10 @@ export const CASE_KIND = {
 } as const;
 
 export type CaseKind = (typeof CASE_KIND)[keyof typeof CASE_KIND];
+
+/** Reward cases Rush Pilot auto-opens (not energy / rank / season). */
+export const AUTO_OPEN_CASE_KINDS: readonly CaseKind[] = [
+  CASE_KIND.daily,
+  CASE_KIND.wseason,
+  CASE_KIND.mseason,
+];

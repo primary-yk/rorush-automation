@@ -307,6 +307,16 @@ export function removeCaseSchedule(accountId: number, caseId: string): void {
     .run(accountId, caseId);
 }
 
+export function purgeDisallowedCaseSchedules(accountId: number, allowedKinds: readonly string[]): void {
+  if (allowedKinds.length === 0) return;
+  const placeholders = allowedKinds.map(() => "?").join(", ");
+  getDb()
+    .prepare(
+      `DELETE FROM account_case_schedule WHERE account_id = ? AND case_kind NOT IN (${placeholders})`,
+    )
+    .run(accountId, ...allowedKinds);
+}
+
 export function nextCaseUnlockMs(): number | null {
   const row = getDb()
     .prepare("SELECT MIN(unlock_at_ms) AS t FROM account_case_schedule")

@@ -52,7 +52,7 @@ Optional env for captcha site keys (copy from DevTools when hCaptcha / Turnstile
 |--------|----------|
 | Rain joiner | One shared SignalR rain subscription; joins on all opted-in accounts |
 | Wager retry | On wager-related failure, one small limbo bet (≥1.1×) then one retry |
-| Cases | Reads unlock times, schedules opens, sleeps until next due case |
+| Cases | Auto-opens daily, weekly, and monthly reward cases (not energy) |
 | Discord | Optional read-only channel poll; redeems new codes on opted-in accounts |
 | Safety | Per-request rate limit, exponential backoff, stop after 3 failures |
 

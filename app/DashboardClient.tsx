@@ -343,7 +343,7 @@ function AccountCard({ account, onChange }: { account: Account; onChange: () => 
         />
         <Toggle
           label="Auto-open cases"
-          description="Daily / rank / energy"
+          description="Daily, weekly & monthly only"
           checked={account.autoOpenCases}
           onChange={async (v) => {
             await dashboardApi.patchAccount(account.id, { autoOpenCases: v });

@@ -5,12 +5,13 @@ import {
   listAccounts,
   listDueCases,
   nextCaseUnlockMs,
+  purgeDisallowedCaseSchedules,
   recordCaseOpen,
   removeCaseSchedule,
   upsertCaseSchedule,
   updateAccount,
 } from "../db/repositories.js";
-import { CASE_KIND } from "../rorush/endpoints.js";
+import { AUTO_OPEN_CASE_KINDS, CASE_KIND } from "../rorush/endpoints.js";
 import { RoRushHub } from "../rorush/signalr-hub.js";
 import { ensureAuthenticated } from "../accounts/session-manager.js";
 
@@ -23,19 +24,22 @@ function parseUnlockMs(value: unknown): number | null {
   return null;
 }
 
+function isAutoOpenKind(kind: string): boolean {
+  return (AUTO_OPEN_CASE_KINDS as readonly string[]).includes(kind);
+}
+
 export async function refreshCaseSchedulesForAccount(accountId: number): Promise<void> {
   const { account, client } = await ensureAuthenticated(accountId);
   if (!account.auto_open_cases) return;
 
-  const [dailyInfo, energyInfo, seasonInfo] = await Promise.all([
-    client.getDailyCasesInfo().catch(() => null),
-    client.getEnergyCasesInfo().catch(() => null),
-    client.getSeasonCasesCurrent().catch(() => null),
-  ]);
+  purgeDisallowedCaseSchedules(accountId, AUTO_OPEN_CASE_KINDS);
+
+  const dailyInfo = await client.getDailyCasesInfo().catch(() => null);
 
   const now = Date.now();
 
   const scheduleCase = (caseId: string, kind: string, unlockAtMs: number, meta?: unknown) => {
+    if (!isAutoOpenKind(kind)) return;
     if (unlockAtMs <= now) {
       upsertCaseSchedule({ accountId, caseId, caseKind: kind, unlockAtMs: now, meta });
     } else {
@@ -60,36 +64,6 @@ export async function refreshCaseSchedulesForAccount(accountId: number): Promise
         scheduleCase(caseId, kind, now, entry);
       }
     }
-    const rankCases = d.rankCases as Array<Record<string, unknown>> | undefined;
-    for (const rc of rankCases ?? []) {
-      const caseId = rc.caseId as string | undefined;
-      if (!caseId) continue;
-      const unlock = parseUnlockMs(rc.unlockAt) ?? now;
-      scheduleCase(caseId, CASE_KIND.season, unlock, rc);
-    }
-  }
-
-  const energyCases = (energyInfo as { cases?: Array<Record<string, unknown>> })?.cases ?? [];
-  for (const row of energyCases) {
-    const caseId = (row.case as { caseId?: string })?.caseId;
-    if (!caseId) continue;
-    if (row.isOpened) continue;
-    const unlock = parseUnlockMs(row.unlockAt) ?? now;
-    if (row.isAvailable) {
-      scheduleCase(caseId, CASE_KIND.energy, now, row);
-    } else {
-      scheduleCase(caseId, CASE_KIND.energy, unlock, row);
-    }
-  }
-
-  if (seasonInfo && typeof seasonInfo === "object") {
-    const cases = (seasonInfo as { cases?: Array<Record<string, unknown>> }).cases ?? [];
-    for (const row of cases) {
-      const caseId = (row.case as { caseId?: string })?.caseId ?? (row.caseId as string | undefined);
-      if (!caseId) continue;
-      const unlock = parseUnlockMs(row.unlockAt) ?? now;
-      scheduleCase(caseId, CASE_KIND.season, unlock, row);
-    }
   }
 }
 
@@ -101,6 +75,11 @@ export async function openDueCases(accountHubs: Map<number, RoRushHub>): Promise
   let opened = 0;
 
   for (const row of due) {
+    if (!isAutoOpenKind(row.case_kind)) {
+      removeCaseSchedule(row.account_id, row.case_id);
+      continue;
+    }
+
     const account = listAccounts().find((a) => a.id === row.account_id);
     if (!account?.auto_open_cases) {
       removeCaseSchedule(row.account_id, row.case_id);
