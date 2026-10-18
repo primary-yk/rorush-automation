@@ -78,10 +78,30 @@ export async function joinRainForAccount(input: {
         message: "Wager requirement detected; placing limbo bet",
         detail: outcome.message,
       });
-      await placeMinLimboBet(accountId, client, hub, account);
+      await placeLimboWagerBet(accountId, client, hub, account, rainAmount);
       const retryReq = uuid();
-      const retryOutcome = await joinOnce(hub, retryReq, rain.rainId, captchaToken);
+      let retryOutcome = await joinOnce(hub, retryReq, rain.rainId, captchaToken);
       outcome = retryOutcome;
+      // Some rains need more than one rain-sized wager before join succeeds.
+      let extraWagers = 0;
+      while (
+        !outcome.ok &&
+        isWagerRejection(outcome.message) &&
+        account.limbo_wager_enabled &&
+        extraWagers < 2
+      ) {
+        extraWagers++;
+        appendLog({
+          accountId,
+          category: "rain",
+          message: "Still need wager; repeating limbo at rain pool size",
+          detail: `${rainAmount} coins · attempt ${extraWagers + 1}`,
+        });
+        await placeLimboWagerBet(accountId, client, hub, account, rainAmount);
+        const againReq = uuid();
+        retryOutcome = await joinOnce(hub, againReq, rain.rainId, captchaToken);
+        outcome = retryOutcome;
+      }
     } else if (!outcome.ok && isWagerRejection(outcome.message)) {
       appendLog({
         accountId,
@@ -154,20 +174,34 @@ async function joinOnce(
   });
 }
 
-async function placeMinLimboBet(
+async function placeLimboWagerBet(
   accountId: number,
   client: import("../rorush/http-client.js").RoRushHttpClient,
   hub: RoRushHub,
   account: { limbo_multiplier: number; limbo_bet_coins: number },
+  rainAmountCoins: number,
 ): Promise<void> {
   const { creds } = await ensureAuthenticated(accountId);
   const reqId = uuid();
   const envBetCents = Number(process.env.LIMBO_MIN_BET_CENTS ?? NaN);
   const envMultCents = Number(process.env.LIMBO_MIN_MULTIPLIER_CENTS ?? NaN);
-  const betCoins = Number.isFinite(envBetCents) ? envBetCents / 100 : account.limbo_bet_coins;
   const mult = Number.isFinite(envMultCents) ? envMultCents / 100 : account.limbo_multiplier;
+  // Wager exactly the rain pool share (coins), not a fixed amount — fallback if unknown.
+  const betCoins =
+    rainAmountCoins > 0
+      ? rainAmountCoins
+      : Number.isFinite(envBetCents)
+        ? envBetCents / 100
+        : account.limbo_bet_coins;
   const amountCents = Math.max(1, Math.round(betCoins * 100));
   const multiplierCents = Math.max(110, Math.round(mult * 100));
+
+  appendLog({
+    accountId,
+    category: "limbo",
+    message: "Limbo wager for rain requirement",
+    detail: `${(amountCents / 100).toFixed(2)} coins @ ${(multiplierCents / 100).toFixed(2)}x`,
+  });
 
   await hub.playLimbo({
     reqId,

@@ -363,7 +363,8 @@ function AccountCard({ account, onChange }: { account: Account; onChange: () => 
       <div className="mt-5 rounded-xl border border-amber-500/15 bg-amber-500/[0.04] p-4">
         <p className="text-sm font-medium text-amber-100/90">Limbo wager (rain fix)</p>
         <p className="mt-1 text-xs leading-relaxed text-slate-500">
-          If rain says you need more wager, Pilot places one small limbo bet then retries join once.
+          If rain rejects for wager, Pilot limbos for the same amount as that rain pool (not a fixed bet), then
+          retries join — up to 3 tries per rain.
         </p>
         <div className="mt-3">
           <Toggle
@@ -393,7 +394,7 @@ function AccountCard({ account, onChange }: { account: Account; onChange: () => 
             />
           </label>
           <label className="text-sm text-slate-400">
-            Bet size (coins)
+            Fallback bet (coins)
             <Input
               type="number"
               step="0.01"
@@ -406,6 +407,7 @@ function AccountCard({ account, onChange }: { account: Account; onChange: () => 
                 await onChange();
               }}
             />
+            <span className="mt-1 block text-xs text-slate-600">Only used if rain amount is unknown</span>
           </label>
         </div>
       </div>
