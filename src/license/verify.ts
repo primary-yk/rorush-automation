@@ -43,6 +43,20 @@ export function parseLicenseKey(key: string): { payload: LicensePayload; raw: st
   return { payload, raw: trimmed };
 }
 
+function envFlag(name: string): boolean {
+  const v = process.env[name];
+  if (v == null || v === "") return false;
+  const s = v.trim().toLowerCase();
+  return s === "1" || s === "true" || s === "yes" || s === "on";
+}
+
 export function licenseDevSkip(): boolean {
-  return !!loadConfig().LICENSE_DEV_SKIP;
+  if (loadConfig().LICENSE_DEV_SKIP) return true;
+  // Common .env typos / aliases (owner dev machines only)
+  return (
+    envFlag("LICENSE_DEV_SKIP") ||
+    envFlag("_LICENSE_DEV_SKIP") ||
+    envFlag("RUSH_PILOT_DEV") ||
+    envFlag("DEV_SKIP_LICENSE")
+  );
 }
