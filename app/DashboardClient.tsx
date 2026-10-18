@@ -5,6 +5,7 @@ import { FormattedDateTime } from "@/components/FormattedDateTime";
 import { SetupGuide } from "@/components/SetupGuide";
 import { Toggle } from "@/components/Toggle";
 import { Button, Card, Input, SectionTitle, StatusPill } from "@/components/ui";
+import { useToast } from "@/components/Toast";
 import { dashboardApi, type Account, type ActivityLog, type Settings } from "@/lib/api";
 
 export type DashboardBootstrap = {
@@ -15,6 +16,7 @@ export type DashboardBootstrap = {
 };
 
 export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
+  const toast = useToast();
   const [settings, setSettings] = useState<Settings | null>(initial.settings);
   const [accounts, setAccounts] = useState<Account[]>(initial.accounts);
   const [logs, setLogs] = useState<ActivityLog[]>(initial.logs);
@@ -27,6 +29,9 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
   const [newSession, setNewSession] = useState("");
   const [discordChannel, setDiscordChannel] = useState(initial.settings?.discordChannelId ?? "");
   const [discordToken, setDiscordToken] = useState("");
+  const [savingAccount, setSavingAccount] = useState(false);
+
+  const totalEarnings = accounts.reduce((n, a) => n + a.lifetimeEarnings.total, 0);
 
   const refresh = useCallback(async () => {
     try {
@@ -59,18 +64,33 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
   }, [refresh]);
 
   async function createAccount() {
-    if (!newNick.trim()) return;
-    await dashboardApi.createAccount({
-      nickname: newNick.trim(),
-      username: newUser || undefined,
-      password: newPass || undefined,
-      sessionToken: newSession || undefined,
-    });
-    setNewNick("");
-    setNewUser("");
-    setNewPass("");
-    setNewSession("");
-    await refresh();
+    if (!newNick.trim()) {
+      toast.push("Pick a nickname first.", "error");
+      return;
+    }
+    if (!newSession.trim() && (!newUser.trim() || !newPass)) {
+      toast.push("Add email + password, or paste a session token.", "error");
+      return;
+    }
+    setSavingAccount(true);
+    try {
+      await dashboardApi.createAccount({
+        nickname: newNick.trim(),
+        username: newUser || undefined,
+        password: newPass || undefined,
+        sessionToken: newSession || undefined,
+      });
+      setNewNick("");
+      setNewUser("");
+      setNewPass("");
+      setNewSession("");
+      toast.push("Account saved.", "success");
+      await refresh();
+    } catch (e) {
+      toast.push(e instanceof Error ? e.message : "Could not save account", "error");
+    } finally {
+      setSavingAccount(false);
+    }
   }
 
   const apiOk = !error && settings != null;
@@ -85,20 +105,31 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
   }
 
   return (
-    <main className="mx-auto min-h-screen max-w-5xl px-4 py-10 sm:px-6">
-      <header className="mb-10 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
-            <span
-              className={`h-2 w-2 rounded-full ${apiOk ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" : "bg-rose-400"}`}
-            />
-            Engine {apiOk ? "online" : "offline"}
+    <main className="mx-auto min-h-screen max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
+      <header className="mb-10 flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
+        <div className="max-w-2xl">
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
+              <span
+                className={`h-2 w-2 rounded-full ${apiOk ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" : "bg-rose-400"}`}
+              />
+              Engine {apiOk ? "online" : "offline"}
+            </span>
+            <span className="rounded-full border border-violet-500/20 bg-violet-500/10 px-3 py-1 text-xs text-violet-200">
+              {accounts.length} account{accounts.length === 1 ? "" : "s"}
+            </span>
+            <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-200">
+              {totalEarnings.toFixed(2)} lifetime
+            </span>
           </div>
-          <h1 className="font-display text-4xl font-bold tracking-tight text-white sm:text-5xl">
-            Rush <span className="bg-gradient-to-r from-violet-300 to-fuchsia-400 bg-clip-text text-transparent">Pilot</span>
+          <h1 className="font-display text-4xl font-bold tracking-tight text-white sm:text-5xl lg:text-6xl">
+            Rush{" "}
+            <span className="bg-gradient-to-r from-violet-200 via-fuchsia-300 to-emerald-300 bg-clip-text text-transparent">
+              Pilot
+            </span>
           </h1>
-          <p className="mt-3 max-w-xl text-base leading-relaxed text-slate-400">
-            Self-hosted RoRush automation — rain, cases, and optional Discord codes. Everything runs on your machine.
+          <p className="mt-4 text-base leading-relaxed text-slate-400 sm:text-lg">
+            Rain, reward cases, and Discord codes — self-hosted on your PC. Secrets stay encrypted locally.
           </p>
         </div>
         {settings && (
@@ -115,7 +146,7 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
       </header>
 
       <div className="space-y-8">
-        <SetupGuide apiOk={apiOk} />
+        <SetupGuide apiOk={apiOk} hasAccounts={accounts.length > 0} />
 
         {error && (
           <Card className="border-rose-500/30 bg-rose-500/5">
@@ -160,7 +191,9 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
                   onChange={(e) => setNewSession(e.target.value)}
                 />
               </details>
-              <Button onClick={() => void createAccount()}>Save account</Button>
+              <Button disabled={savingAccount} onClick={() => void createAccount()}>
+                {savingAccount ? "Saving…" : "Save account"}
+              </Button>
             </div>
           </Card>
 
@@ -259,7 +292,26 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
 }
 
 function AccountCard({ account, onChange }: { account: Account; onChange: () => Promise<void> }) {
+  const toast = useToast();
+  const [removing, setRemoving] = useState(false);
   const ok = account.status !== "error";
+
+  async function removeAccount() {
+    if (!window.confirm(`Remove "${account.nickname}" from Rush Pilot?\n\nThis does not delete your RoRush site account.`)) {
+      return;
+    }
+    setRemoving(true);
+    try {
+      await dashboardApi.deleteAccount(account.id);
+      toast.push(`Removed ${account.nickname}`, "success");
+      await onChange();
+    } catch (e) {
+      toast.push(e instanceof Error ? e.message : "Could not remove account", "error");
+    } finally {
+      setRemoving(false);
+    }
+  }
+
   return (
     <Card className="border-white/[0.06]">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -335,16 +387,8 @@ function AccountCard({ account, onChange }: { account: Account; onChange: () => 
           />
         </label>
       </div>
-      <Button
-        variant="danger"
-        className="mt-4 text-sm"
-        onClick={async () => {
-          if (!confirm(`Remove ${account.nickname}?`)) return;
-          await dashboardApi.deleteAccount(account.id);
-          await onChange();
-        }}
-      >
-        Remove account
+      <Button variant="danger" className="mt-4 text-sm" disabled={removing} onClick={() => void removeAccount()}>
+        {removing ? "Removing…" : "Remove from Pilot"}
       </Button>
     </Card>
   );

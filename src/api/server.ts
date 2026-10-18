@@ -4,6 +4,7 @@ import {
   deleteAccount,
   getSettings,
   insertAccount,
+  getAccount,
   listAccounts,
   listLogs,
   listRecentCaseOpens,
@@ -139,9 +140,22 @@ export function createApiServer() {
   });
 
   app.delete("/api/rush-accounts/:id", async (req, res) => {
-    deleteAccount(Number(req.params.id));
-    await engine.reloadAccounts();
-    res.status(204).end();
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id < 1) {
+      res.status(400).json({ error: "Invalid account id" });
+      return;
+    }
+    if (!getAccount(id)) {
+      res.status(404).json({ error: "Account not found" });
+      return;
+    }
+    deleteAccount(id);
+    res.json({ ok: true, id });
+    try {
+      await engine.reloadAccounts();
+    } catch (err) {
+      console.error("[delete account]", err instanceof Error ? err.message : String(err));
+    }
   });
 
   app.get("/api/rush-accounts/:id/history", (req, res) => {

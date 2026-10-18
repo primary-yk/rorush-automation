@@ -46,8 +46,8 @@ const STEPS = [
   },
 ];
 
-export function SetupGuide({ apiOk }: { apiOk: boolean }) {
-  const [open, setOpen] = useState(!apiOk);
+export function SetupGuide({ apiOk, hasAccounts }: { apiOk: boolean; hasAccounts?: boolean }) {
+  const [open, setOpen] = useState(!apiOk && !hasAccounts);
 
   return (
     <Card glow="violet" className="border-violet-500/20">

@@ -13,7 +13,7 @@ export function Card({
   return (
     <div
       className={clsx(
-        "relative overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.03] p-6 backdrop-blur-md",
+        "relative overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-b from-white/[0.06] to-white/[0.02] p-6 shadow-xl shadow-black/20 backdrop-blur-md",
         glow === "mint" && "shadow-[0_0_60px_-20px_rgba(110,231,183,0.25)]",
         glow === "violet" && "shadow-[0_0_60px_-20px_rgba(167,139,250,0.2)]",
         className,
@@ -58,11 +58,13 @@ export function Button({
     <button
       type="button"
       className={clsx(
-        "inline-flex items-center justify-center rounded-xl px-4 py-2.5 text-sm font-medium transition",
+        "inline-flex items-center justify-center rounded-xl px-4 py-2.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50",
         variant === "primary" &&
-          "bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white shadow-lg shadow-violet-500/20 hover:brightness-110",
-        variant === "ghost" && "border border-white/10 bg-white/5 text-slate-200 hover:bg-white/10",
-        variant === "danger" && "text-rose-400 hover:text-rose-300",
+          "bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white shadow-lg shadow-violet-500/25 hover:brightness-110 active:scale-[0.98]",
+        variant === "ghost" &&
+          "border border-white/10 bg-white/5 text-slate-200 hover:border-white/20 hover:bg-white/10",
+        variant === "danger" &&
+          "border border-rose-500/20 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20 active:scale-[0.98]",
         className,
       )}
       {...props}
