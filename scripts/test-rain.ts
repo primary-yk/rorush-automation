@@ -55,9 +55,16 @@ async function main() {
   listenerHub.on(SIGNALR.rain.receiveAmountUpdated, (p) => logEvent("ReceiveRainAmountUpdated", p));
   listenerHub.on(SIGNALR.rain.receiveFinished, (p) => logEvent("ReceiveRainFinished", p));
 
+  listenerHub.on(SIGNALR.rain.receiveCurrent, (p) => logEvent("ReceiveCurrentRains", p));
+
   listenerHub.on(SIGNALR.rain.receiveJoinStageStart, (payload) => {
     const rain = parseRain(payload);
     if (!rain || joinedThisRain || !attemptJoin) return;
+    console.log("Join stage fields:", {
+      joinStart: rain.joinStageStartTimestamp,
+      joinDur: rain.joinStageDuration,
+      windowOpen: rainJoinWindowOpen(rain),
+    });
     if (!rainJoinWindowOpen(rain)) {
       console.log("Join stage event but window not open yet — waiting.");
       return;

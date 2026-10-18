@@ -23,6 +23,8 @@ export class AutomationEngine {
   private sharedRainHub: RoRushHub | null = null;
   private accountHubs = new Map<number, RoRushHub>();
   private activeRain: RainState | null = null;
+  /** Avoid spamming JoinRain on repeated hub ticks for the same rain. */
+  private rainJoinLastAttempt = new Map<string, number>();
   private caseTimer: NodeJS.Timeout | null = null;
   private discordTimer: NodeJS.Timeout | null = null;
   private statusTimer: NodeJS.Timeout | null = null;
@@ -119,17 +121,61 @@ export class AutomationEngine {
           message: "Rain join stage started",
           detail: rain.rainId,
         });
-        void this.onRainMaybeJoin(rain, "join_stage");
+        this.scheduleRainJoinAttempt(rain, "join_stage");
       }
     });
     this.sharedRainHub.on(SIGNALR.rain.receiveCurrent, (payload) => {
-      if (Array.isArray(payload)) {
-        for (const item of payload) {
-          const rain = parseRain(item);
-          if (rain) this.activeRain = rain;
+      if (!Array.isArray(payload)) return;
+      for (const item of payload) {
+        const rain = parseRain(item);
+        if (!rain) continue;
+        this.activeRain = this.mergeRainState(rain);
+        if (rainJoinWindowOpen(this.activeRain)) {
+          this.scheduleRainJoinAttempt(this.activeRain, "current_rains");
         }
       }
     });
+
+    this.sharedRainHub.on(SIGNALR.rain.receiveAmountUpdated, (payload) => {
+      const partial = parseRain(payload);
+      if (!partial) return;
+      if (this.activeRain?.rainId === partial.rainId) {
+        this.activeRain = {
+          ...this.activeRain,
+          amount: partial.amount ?? this.activeRain.amount,
+          joinStageStartTimestamp:
+            partial.joinStageStartTimestamp ?? this.activeRain.joinStageStartTimestamp,
+          joinStageDuration: partial.joinStageDuration ?? this.activeRain.joinStageDuration,
+          createdTimestamp: partial.createdTimestamp ?? this.activeRain.createdTimestamp,
+          tipStageDuration: partial.tipStageDuration ?? this.activeRain.tipStageDuration,
+        };
+      } else {
+        this.activeRain = partial;
+      }
+      if (this.activeRain && rainJoinWindowOpen(this.activeRain)) {
+        this.scheduleRainJoinAttempt(this.activeRain, "amount_updated");
+      }
+    });
+  }
+
+  private mergeRainState(incoming: RainState): RainState {
+    if (!this.activeRain || this.activeRain.rainId !== incoming.rainId) {
+      return incoming;
+    }
+    return {
+      ...this.activeRain,
+      ...incoming,
+      joinStageStartTimestamp:
+        incoming.joinStageStartTimestamp ?? this.activeRain.joinStageStartTimestamp,
+      joinStageDuration: incoming.joinStageDuration ?? this.activeRain.joinStageDuration,
+    };
+  }
+
+  private scheduleRainJoinAttempt(rain: RainState, trigger: string): void {
+    const last = this.rainJoinLastAttempt.get(rain.rainId) ?? 0;
+    if (Date.now() - last < 12_000) return;
+    this.rainJoinLastAttempt.set(rain.rainId, Date.now());
+    void this.onRainMaybeJoin(rain, trigger);
   }
 
   private async onRainMaybeJoin(rain: RainState, trigger: string): Promise<void> {

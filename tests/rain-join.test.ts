@@ -21,6 +21,10 @@ describe("rainJoinWindowOpen", () => {
     expect(rainJoinWindowOpen(rain, 1_400)).toBe(false);
   });
 
+  it("stays closed when timing fields are missing", () => {
+    expect(rainJoinWindowOpen({ rainId: "x" })).toBe(false);
+  });
+
   it("respects explicit join stage window", () => {
     const rain: RainState = {
       rainId: "2",

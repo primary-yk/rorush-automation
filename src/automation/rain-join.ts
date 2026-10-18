@@ -300,9 +300,15 @@ export function parseRain(payload: unknown): RainState | null {
   const p = payload as Record<string, unknown>;
   const rainId = String(p.rainId ?? p.id ?? "");
   if (!rainId) return null;
+  const amountRaw =
+    typeof p.amount === "number"
+      ? p.amount
+      : typeof p.totalAmount === "number"
+        ? p.totalAmount
+        : undefined;
   return {
     rainId,
-    amount: typeof p.amount === "number" ? p.amount / 100 : undefined,
+    amount: amountRaw != null ? amountRaw / 100 : undefined,
     createdTimestamp: typeof p.createdTimestamp === "number" ? p.createdTimestamp : undefined,
     tipStageDuration: typeof p.tipStageDuration === "number" ? p.tipStageDuration : undefined,
     joinStageStartTimestamp:
@@ -319,7 +325,8 @@ export function rainJoinWindowOpen(rain: RainState, now = Date.now()): boolean {
   if (rain.createdTimestamp && rain.tipStageDuration) {
     return now >= rain.createdTimestamp + rain.tipStageDuration;
   }
-  return true;
+  // Not enough timing info (e.g. only rainId from amount ticks) — do not join blindly.
+  return false;
 }
 
 export function maxFailures(): number {
