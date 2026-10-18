@@ -65,6 +65,12 @@ export async function joinRainForAccount(input: {
     });
 
   try {
+    appendLog({
+      accountId,
+      category: "rain",
+      message: "Sending rain join",
+      detail: `${rain.rainId} · pool ${rainAmount} coins`,
+    });
     if (!captchaToken) {
       captchaToken = await solveCaptcha("hcaptcha");
     }

@@ -14,6 +14,7 @@ import {
 import { pollDiscordChannel } from "../discord/watcher.js";
 import { isIgnorableCaseError } from "../automation/case-errors.js";
 import { ensureAuthenticated } from "../accounts/session-manager.js";
+import { SIGNALR } from "../rorush/endpoints.js";
 import { RoRushHub } from "../rorush/signalr-hub.js";
 import type { RainState } from "../rorush/types.js";
 
@@ -91,22 +92,37 @@ export class AutomationEngine {
     this.sharedRainHub = new RoRushHub(creds, {}, proxy);
     await this.sharedRainHub.connect();
     await this.sharedRainHub.subscribeRain();
+    appendLog({
+      category: "rain",
+      message: "Shared rain listener connected",
+      detail: listener.username ?? `account #${listener.id}`,
+    });
 
-    this.sharedRainHub.on("ReceiveRainCreated", (payload) => {
+    this.sharedRainHub.on(SIGNALR.rain.receiveCreated, (payload) => {
       const rain = parseRain(payload);
       if (rain) {
         this.activeRain = rain;
-        void this.onRainMaybeJoin(rain);
+        appendLog({
+          category: "rain",
+          message: "Rain created",
+          detail: `${rain.rainId} · pool ${rain.amount ?? "?"} coins`,
+        });
+        void this.onRainMaybeJoin(rain, "created");
       }
     });
-    this.sharedRainHub.on("ReceiveRainJoinStageStart", (payload) => {
+    this.sharedRainHub.on(SIGNALR.rain.receiveJoinStageStart, (payload) => {
       const rain = parseRain(payload) ?? this.activeRain;
       if (rain) {
         this.activeRain = rain;
-        void this.onRainMaybeJoin(rain);
+        appendLog({
+          category: "rain",
+          message: "Rain join stage started",
+          detail: rain.rainId,
+        });
+        void this.onRainMaybeJoin(rain, "join_stage");
       }
     });
-    this.sharedRainHub.on("ReceiveCurrentRains", (payload) => {
+    this.sharedRainHub.on(SIGNALR.rain.receiveCurrent, (payload) => {
       if (Array.isArray(payload)) {
         for (const item of payload) {
           const rain = parseRain(item);
@@ -116,12 +132,37 @@ export class AutomationEngine {
     });
   }
 
-  private async onRainMaybeJoin(rain: RainState): Promise<void> {
+  private async onRainMaybeJoin(rain: RainState, trigger: string): Promise<void> {
     const settings = getSettings();
-    if (settings.global_pause) return;
-    if (!rainJoinWindowOpen(rain)) return;
+    if (settings.global_pause) {
+      appendLog({ category: "rain", message: "Rain join skipped (global pause)", detail: rain.rainId });
+      return;
+    }
+    if (!rainJoinWindowOpen(rain)) {
+      appendLog({
+        category: "rain",
+        message: "Rain join window not open yet",
+        detail: `${rain.rainId} · trigger ${trigger}`,
+      });
+      return;
+    }
 
     const accounts = listAccounts().filter((a) => a.join_rain);
+    if (accounts.length === 0) {
+      appendLog({
+        category: "rain",
+        message: "Rain join skipped (no accounts with Join rain enabled)",
+        detail: rain.rainId,
+      });
+      return;
+    }
+
+    appendLog({
+      category: "rain",
+      message: "Attempting rain join",
+      detail: `${rain.rainId} · ${accounts.length} account(s) · ${trigger}`,
+    });
+
     await Promise.all(
       accounts.map(async (account) => {
         try {
@@ -130,6 +171,7 @@ export class AutomationEngine {
           if (!hub) {
             hub = new RoRushHub(creds, {}, account.proxy_url);
             await hub.connect();
+            await hub.subscribeRain();
             this.accountHubs.set(account.id, hub);
           }
           await joinRainForAccount({ accountId: account.id, rain, hub });

@@ -22,6 +22,8 @@ export type HubHandlers = {
 export class RoRushHub {
   private connection: HubConnection | null = null;
   private readonly listeners = new Map<string, Set<(payload: unknown) => void>>();
+  /** SignalR .on() registrations — includes events added only via hub.on() after connect. */
+  private readonly boundEvents = new Set<string>();
 
   constructor(
     private readonly creds: RoRushCredentials,
@@ -68,38 +70,44 @@ export class RoRushHub {
 
   private wireEvents(): void {
     if (!this.connection) return;
-    const c = this.connection;
 
-    const bind = (event: string, handler?: (payload: unknown) => void) => {
-      c.on(event, (payload: unknown) => {
-        handler?.(payload);
-        for (const fn of this.listeners.get(event) ?? []) {
-          fn(payload);
-        }
-      });
-    };
-
-    bind(SIGNALR.rain.receiveCreated, this.handlers.onRainCreated);
-    bind(SIGNALR.rain.receiveFailure, (p) =>
+    this.bindEvent(SIGNALR.rain.receiveCreated, this.handlers.onRainCreated);
+    this.bindEvent(SIGNALR.rain.receiveFailure, (p) =>
       this.handlers.onRainFailure?.(p as { message?: string; reqId?: string }),
     );
-    bind(SIGNALR.rain.receiveJoinSuccess, (p) =>
+    this.bindEvent(SIGNALR.rain.receiveJoinSuccess, (p) =>
       this.handlers.onRainJoinSuccess?.(p as { reqId?: string }),
     );
-    bind(SIGNALR.rain.receiveCurrent, this.handlers.onCurrentRains);
-    bind(SIGNALR.limbo.receiveResult, this.handlers.onLimboResult);
-    bind(SIGNALR.limbo.receiveFailure, (p) =>
+    this.bindEvent(SIGNALR.rain.receiveCurrent, this.handlers.onCurrentRains);
+    this.bindEvent(SIGNALR.rain.receiveJoinStageStart);
+    this.bindEvent(SIGNALR.rain.receiveAmountUpdated);
+    this.bindEvent(SIGNALR.rain.receiveFinished);
+    this.bindEvent(SIGNALR.limbo.receiveResult, this.handlers.onLimboResult);
+    this.bindEvent(SIGNALR.limbo.receiveFailure, (p) =>
       this.handlers.onLimboFailure?.(p as { message?: string }),
     );
-    bind(SIGNALR.caseUnboxing.receiveResult, this.handlers.onCaseResult);
-    bind(SIGNALR.caseUnboxing.receiveFailure, (p) =>
+    this.bindEvent(SIGNALR.caseUnboxing.receiveResult, this.handlers.onCaseResult);
+    this.bindEvent(SIGNALR.caseUnboxing.receiveFailure, (p) =>
       this.handlers.onCaseFailure?.(p as { message?: string }),
     );
+  }
+
+  /** Register a server push event once; fan out to optional handler + hub.on() listeners. */
+  private bindEvent(event: string, handler?: (payload: unknown) => void): void {
+    if (this.boundEvents.has(event) || !this.connection) return;
+    this.boundEvents.add(event);
+    this.connection.on(event, (payload: unknown) => {
+      handler?.(payload);
+      for (const fn of this.listeners.get(event) ?? []) {
+        fn(payload);
+      }
+    });
   }
 
   on(event: string, fn: (payload: unknown) => void): () => void {
     if (!this.listeners.has(event)) this.listeners.set(event, new Set());
     this.listeners.get(event)!.add(fn);
+    this.bindEvent(event);
     return () => this.listeners.get(event)?.delete(fn);
   }
 
