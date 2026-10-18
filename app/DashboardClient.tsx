@@ -21,6 +21,7 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
   const [accounts, setAccounts] = useState<Account[]>(initial.accounts);
   const [logs, setLogs] = useState<ActivityLog[]>(initial.logs);
   const [error, setError] = useState<string | null>(initial.error);
+  const [licenseReady, setLicenseReady] = useState(false);
   const [loading, setLoading] = useState(
     !!initial.license?.active && initial.settings == null && initial.error == null,
   );
@@ -53,7 +54,14 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
   }, []);
 
   useEffect(() => {
-    if (!license?.active) return;
+    void dashboardApi
+      .getLicenseStatus()
+      .then((s) => setLicense(s))
+      .finally(() => setLicenseReady(true));
+  }, []);
+
+  useEffect(() => {
+    if (!licenseReady || !license?.active) return;
     const force = window.setTimeout(() => setLoading(false), 5000);
     void refresh();
     const t = setInterval(() => void refresh(), 15_000);
@@ -61,7 +69,15 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
       window.clearTimeout(force);
       clearInterval(t);
     };
-  }, [refresh, license?.active]);
+  }, [refresh, license?.active, licenseReady]);
+
+  if (!licenseReady) {
+    return (
+      <main className="flex min-h-screen items-center justify-center px-4">
+        <p className="animate-pulse-soft text-slate-400">Checking license…</p>
+      </main>
+    );
+  }
 
   if (license && !license.active) {
     return (

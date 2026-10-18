@@ -2,6 +2,8 @@ import { DashboardClient, type DashboardBootstrap } from "./DashboardClient";
 import { fetchAutomation } from "@/lib/server-api";
 import type { Account, ActivityLog, LicenseStatus, Settings } from "@/lib/api";
 
+export const dynamic = "force-dynamic";
+
 export default async function DashboardPage() {
   const initial: DashboardBootstrap = {
     license: null,
