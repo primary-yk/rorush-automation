@@ -59,12 +59,18 @@ npm test
 
 Covers rain join window / wager detection and Discord code parsing.
 
-## Production
+## Production / VPS
+
+On a server, build once and use PM2 so it survives disconnects and reboots:
 
 ```bash
 npm run build
-npm start
+npm install -g pm2
+pm2 start ecosystem.config.cjs
+pm2 save && pm2 startup
 ```
+
+Beginner VPS walkthrough (SSH, `.env`, CapMonster, SSH tunnel to the dashboard): **[docs/VPS-SETUP.md](docs/VPS-SETUP.md)**.
 
 SQLite database defaults to `./data/rorush-automation.db`.
 
