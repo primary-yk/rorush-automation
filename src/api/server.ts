@@ -14,14 +14,7 @@ import {
 } from "../db/repositories.js";
 import { encryptField, setSessionToken } from "../accounts/session-manager.js";
 import { engine } from "../worker/engine.js";
-import { activateLicense, getLicenseStatus, isLicenseActive, revalidateStoredLicense } from "../license/service.js";
-
-function licenseOpenPath(path: string): boolean {
-  return path === "/health" || path.startsWith("/api/license");
-}
-
 export function createApiServer() {
-  revalidateStoredLicense();
   const app = express();
   app.use((_req, res, next) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -34,36 +27,8 @@ export function createApiServer() {
   });
   app.use(express.json({ limit: "256kb" }));
 
-  app.use((req, res, next) => {
-    if (licenseOpenPath(req.path)) return next();
-    if (!isLicenseActive()) {
-      res.status(403).json({ error: "Valid license required. Activate your key on the dashboard." });
-      return;
-    }
-    next();
-  });
-
   app.get("/health", (_req, res) => {
-    res.json({ ok: true, licensed: isLicenseActive() });
-  });
-
-  app.get("/api/license/status", (_req, res) => {
-    res.json(getLicenseStatus());
-  });
-
-  app.post("/api/license/activate", (req, res) => {
-    try {
-      const body = req.body as { key?: string };
-      if (!body.key?.trim()) {
-        res.status(400).json({ error: "License key is required." });
-        return;
-      }
-      const status = activateLicense(body.key.trim());
-      void engine.start();
-      res.json(status);
-    } catch (err) {
-      res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
-    }
+    res.json({ ok: true });
   });
 
   app.get("/api/settings", (_req, res) => {

@@ -4,12 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import { SetupGuide } from "@/components/SetupGuide";
 import { Toggle } from "@/components/Toggle";
 import { Button, Card, Input, SectionTitle, StatusPill } from "@/components/ui";
-import { LicenseGate } from "@/components/LicenseGate";
-import { dashboardApi, type Account, type ActivityLog, type LicenseStatus, type Settings } from "@/lib/api";
-import { DEV_LICENSE, licenseUnlocked, ownerDevSkipEnabled } from "@/lib/license-unlocked";
+import { dashboardApi, type Account, type ActivityLog, type Settings } from "@/lib/api";
 
 export type DashboardBootstrap = {
-  license: LicenseStatus | null;
   settings: Settings | null;
   accounts: Account[];
   logs: ActivityLog[];
@@ -17,17 +14,11 @@ export type DashboardBootstrap = {
 };
 
 export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
-  const [license, setLicense] = useState<LicenseStatus | null>(
-    initial.license ?? (ownerDevSkipEnabled() ? DEV_LICENSE : null),
-  );
   const [settings, setSettings] = useState<Settings | null>(initial.settings);
   const [accounts, setAccounts] = useState<Account[]>(initial.accounts);
   const [logs, setLogs] = useState<ActivityLog[]>(initial.logs);
   const [error, setError] = useState<string | null>(initial.error);
-  const [licenseReady, setLicenseReady] = useState(ownerDevSkipEnabled());
-  const [loading, setLoading] = useState(
-    licenseUnlocked(initial.license) && initial.settings == null && initial.error == null,
-  );
+  const [loading, setLoading] = useState(initial.settings == null && initial.error == null);
 
   const [newNick, setNewNick] = useState("");
   const [newUser, setNewUser] = useState("");
@@ -57,18 +48,6 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
   }, []);
 
   useEffect(() => {
-    if (ownerDevSkipEnabled()) {
-      setLicense(DEV_LICENSE);
-      return;
-    }
-    void dashboardApi
-      .getLicenseStatus()
-      .then((s) => setLicense(s))
-      .finally(() => setLicenseReady(true));
-  }, []);
-
-  useEffect(() => {
-    if (!licenseReady || !licenseUnlocked(license)) return;
     const force = window.setTimeout(() => setLoading(false), 5000);
     void refresh();
     const t = setInterval(() => void refresh(), 15_000);
@@ -76,28 +55,7 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
       window.clearTimeout(force);
       clearInterval(t);
     };
-  }, [refresh, license, licenseReady]);
-
-  if (!licenseReady && !ownerDevSkipEnabled()) {
-    return (
-      <main className="flex min-h-screen items-center justify-center px-4">
-        <p className="animate-pulse-soft text-slate-400">Checking license…</p>
-      </main>
-    );
-  }
-
-  if (!ownerDevSkipEnabled() && license && !licenseUnlocked(license)) {
-    return (
-      <LicenseGate
-        initial={license}
-        onActivated={(status) => {
-          setLicense(status);
-          setLoading(true);
-          void refresh();
-        }}
-      />
-    );
-  }
+  }, [refresh]);
 
   async function createAccount() {
     if (!newNick.trim()) return;
@@ -114,7 +72,7 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
     await refresh();
   }
 
-  const apiOk = !error && settings != null && licenseUnlocked(license);
+  const apiOk = !error && settings != null;
 
   if (loading) {
     return (
@@ -141,12 +99,6 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
           <p className="mt-3 max-w-xl text-base leading-relaxed text-slate-400">
             Self-hosted RoRush automation — rain, cases, and optional Discord codes. Everything runs on your machine.
           </p>
-          {license?.active && license.plan && (
-            <p className="mt-2 text-xs text-slate-500">
-              License · {license.plan}
-              {license.expiresAt ? ` · renews ${new Date(license.expiresAt).toLocaleDateString()}` : ""}
-            </p>
-          )}
         </div>
         {settings && (
           <Toggle

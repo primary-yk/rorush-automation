@@ -26,13 +26,12 @@ const STEPS = [
     ),
   },
   {
-    title: "Activate & run",
+    title: "Start the app",
     body: (
       <>
         Run <code className="rounded bg-black/40 px-1">npm install</code> once, then{" "}
         <code className="rounded bg-black/40 px-1">npm run dev</code> and leave the terminal open. Open{" "}
-        <code className="rounded bg-black/40 px-1">http://127.0.0.1:43123</code>, paste your license key, then add
-        RoRush accounts below.
+        <code className="rounded bg-black/40 px-1">http://127.0.0.1:43123</code> and add RoRush accounts below.
       </>
     ),
   },
