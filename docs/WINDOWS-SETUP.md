@@ -6,26 +6,43 @@ You already have the project from Cursor. This guide gets it running on **your P
 
 ## Part A — Get the project on your computer
 
-### If Cursor shows a **Create repo** button
+**Don’t see “Create repo”?** That’s normal. Your code is on Cursor’s cloud, not GitHub yet. Use **Option 1** or **Option 2** below.
 
-1. Click **Create repo** in the agent chat (creates a GitHub repo with this code).
-2. On GitHub, click the green **Code** button → **Download ZIP**.
-3. Extract the ZIP to a simple folder, e.g. `C:\rorush-automation`
-4. Remember that path — you will use it in the terminal.
+### Option 1 — Open this agent in Cursor on your PC (easiest if you use Cursor desktop)
 
-### If the repo already exists on GitHub
+1. On your Windows PC, install **Cursor** from [https://cursor.com](https://cursor.com) and sign in with the **same account** you used for this chat.
+2. Open this agent run in the browser (bookmark it):  
+   **https://cursor.com/agents/bc-c72b4704-2d2e-4a5c-a4c5-63d6887859df**
+3. On that page, look for one of these (wording varies by Cursor version):
+   - **Open in Cursor**
+   - **Checkout branch** / **Open branch**
+   - **⋯** menu → open or sync code locally
+4. When Cursor opens the project folder on your PC, note the path (often shown in the title bar or File → Open Recent). Use that path in PowerShell instead of `C:\rorush-automation` below.
+
+### Option 2 — Clone with Git (works if Option 1 doesn’t)
 
 1. Install [Git for Windows](https://git-scm.com/download/win) (defaults are fine).
-2. Open **PowerShell** (Start menu → type `PowerShell` → Enter).
+2. Open **PowerShell**.
 3. Run:
 
 ```powershell
 cd C:\
-git clone https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git rorush-automation
+git clone https://origin.cursor.com/git/goshennoshen/tmp-5eb3c198dbe5b3a5.git rorush-automation
 cd rorush-automation
 ```
 
-Replace the URL with your repo’s URL from GitHub.
+4. If Git asks you to sign in, use your **Cursor** / browser login when the window opens.
+
+### Option 3 — Put it on GitHub yourself (optional)
+
+1. Go to [https://github.com/new](https://github.com/new) → name the repo `rorush-automation` → **Create repository** (empty, no README).
+2. In a **new Cursor agent chat** on that empty repo, paste: “Pull in the code from my Rorush automation agent” and link the agent URL above — or ask the agent to push this project to your new GitHub remote.
+3. Then on GitHub: **Code** → **Download ZIP** → extract to `C:\rorush-automation`.
+
+### If Cursor shows a **Create repo** pill in chat
+
+1. Click it (creates GitHub repo automatically).
+2. On GitHub: **Code** → **Download ZIP** → extract to `C:\rorush-automation`.
 
 ---
 
