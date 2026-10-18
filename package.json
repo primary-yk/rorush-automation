@@ -9,6 +9,8 @@
     "accounts": "tsx scripts/list-accounts.ts",
     "doctor": "tsx scripts/doctor.ts",
     "add-account": "tsx scripts/add-account-cli.ts",
+    "update-account": "tsx scripts/update-account-cli.ts",
+    "test-login": "tsx scripts/test-login.ts",
     "build": "next build && tsc -p tsconfig.server.json",
     "start": "NODE_ENV=production concurrently -k \"node dist/main.js\" \"next start -p 43123 -H 127.0.0.1\"",
     "test": "vitest run",

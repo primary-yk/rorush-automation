@@ -52,6 +52,8 @@ async function main() {
   if (accounts.length === 0) {
     console.log("• Add account at http://127.0.0.1:43123 (from Ubuntu, with npm run dev running)");
     console.log("• Or: npm run add-account -- --nick Main --email you@mail.com --password 'secret'");
+  } else {
+    console.log("• Login problems: npm run test-login  then  npm run update-account -- --id 1 --email … --password '…'");
   }
   console.log("• Find stray databases: find ~ -name 'rorush-automation.db' 2>/dev/null");
 }
