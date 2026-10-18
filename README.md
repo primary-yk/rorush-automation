@@ -37,9 +37,17 @@ npm run dev
 - Dashboard: http://127.0.0.1:43123
 - Automation API: http://127.0.0.1:43124
 
-3. Activate your **license key** on the dashboard (included with purchase). Vendors: see [docs/LICENSE-VENDOR.md](docs/LICENSE-VENDOR.md).
+3. Put secrets in **`.env`** in this folder (not `nano.env` — that name is only a fallback). Set `CAPMONSTER_API_KEY` for rain join.
 
-4. Add accounts with nickname + email/password **or** paste a session JWT from DevTools (Application → localStorage / network `Authorization` header after login).
+4. Sanity check:
+
+```bash
+npm run preflight          # doctor + tests
+npm run test-login         # RoRush email/password or session JWT
+npm run test-captcha       # CapMonster key (optional, uses balance)
+```
+
+5. Add accounts with nickname + email/password **or** paste a session JWT from DevTools (Application → localStorage / network `Authorization` header after login).
 
 Optional env for captcha site keys (copy from DevTools when hCaptcha / Turnstile loads on rorush.com):
 
