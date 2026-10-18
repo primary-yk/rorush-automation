@@ -33,6 +33,8 @@ export type LicensePayload = {
   id: string;
   plan: string;
   exp: number;
+  /** Optional Discord user snowflake — for vendor support threads */
+  discordUserId?: string;
 };
 
 const PREFIX = "RP1";

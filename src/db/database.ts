@@ -47,6 +47,8 @@ function migrateSettings(db: Database.Database): void {
     ["license_id", "TEXT"],
     ["license_plan", "TEXT"],
     ["license_exp", "INTEGER"],
+    ["discord_report_enabled", "INTEGER NOT NULL DEFAULT 0"],
+    ["discord_report_webhook_enc", "TEXT"],
   ];
   for (const [name, type] of add) {
     if (!cols.has(name)) {

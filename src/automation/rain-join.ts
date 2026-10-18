@@ -6,6 +6,7 @@ import { SIGNALR } from "../rorush/endpoints.js";
 import { RoRushHub } from "../rorush/signalr-hub.js";
 import type { RainState } from "../rorush/types.js";
 import { ensureAuthenticated } from "../accounts/session-manager.js";
+import { reportLimboOutcome, reportRainOutcome } from "../discord/reporter.js";
 
 const WAGER_HINT =
   /wager|play.?through|recent|activity|requirement|bet/i;
@@ -95,7 +96,7 @@ export async function joinRainForAccount(input: {
         message: "Wager requirement detected; placing limbo bet",
         detail: outcome.message,
       });
-      await placeLimboWagerBet(accountId, client, hub, account, rainAmount);
+      await placeLimboWagerBet(accountId, client, hub, account, rainAmount, account.nickname, rain.rainId);
       const retryReq = uuid();
       let retryOutcome = await joinOnce(hub, retryReq, rain.rainId, captchaToken);
       outcome = retryOutcome;
@@ -114,7 +115,7 @@ export async function joinRainForAccount(input: {
           message: "Still need wager; repeating limbo at rain pool size",
           detail: `${rainAmount} coins · attempt ${extraWagers + 1}`,
         });
-        await placeLimboWagerBet(accountId, client, hub, account, rainAmount);
+        await placeLimboWagerBet(accountId, client, hub, account, rainAmount, account.nickname, rain.rainId);
         const againReq = uuid();
         retryOutcome = await joinOnce(hub, againReq, rain.rainId, captchaToken);
         outcome = retryOutcome;
@@ -152,6 +153,14 @@ export async function joinRainForAccount(input: {
         detail: outcome.message,
       });
     }
+
+    void reportRainOutcome({
+      nickname: account.nickname,
+      success: outcome.ok,
+      message: outcome.message,
+      rainId: rain.rainId,
+      poolCoins: rainAmount,
+    });
 
     return { success: outcome.ok, reason: outcome.message };
   } catch (err) {
@@ -196,12 +205,28 @@ async function joinOnce(
   });
 }
 
+function parseLimboResult(payload: unknown): { hit: boolean; crashMultiplier: number | null } {
+  if (!payload || typeof payload !== "object") return { hit: false, crashMultiplier: null };
+  const p = payload as Record<string, unknown>;
+  const hit = p.isWin === true || p.isWin === 1;
+  let crashMultiplier: number | null = null;
+  if (typeof p.multiplier === "number") {
+    crashMultiplier = p.multiplier > 100 ? p.multiplier / 100 : p.multiplier;
+  } else if (typeof p.crashMultiplier === "number") {
+    crashMultiplier =
+      p.crashMultiplier > 100 ? p.crashMultiplier / 100 : p.crashMultiplier;
+  }
+  return { hit, crashMultiplier };
+}
+
 async function placeLimboWagerBet(
   accountId: number,
   client: import("../rorush/http-client.js").RoRushHttpClient,
   hub: RoRushHub,
-  account: { limbo_multiplier: number; limbo_bet_coins: number },
+  account: { limbo_multiplier: number; limbo_bet_coins: number; nickname: string },
   rainAmountCoins: number,
+  nickname: string,
+  rainId: string,
 ): Promise<void> {
   const { creds } = await ensureAuthenticated(accountId);
   const reqId = uuid();
@@ -232,15 +257,33 @@ async function placeLimboWagerBet(
     multiplier: multiplierCents,
   });
 
+  const targetMult = multiplierCents / 100;
+  const betDisplay = amountCents / 100;
+
   await new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error("Limbo bet timed out")), 20_000);
-    const offOk = hub.on("ReceivePrivateLimboResult", () => {
+    const offOk = hub.on(SIGNALR.limbo.receiveResult, (raw) => {
       clearTimeout(timeout);
       offOk();
       offFail();
+      const parsed = parseLimboResult(raw);
+      appendLog({
+        accountId,
+        category: "limbo",
+        message: parsed.hit ? "Limbo hit" : "Limbo miss",
+        detail: `${betDisplay.toFixed(2)} @ ${targetMult.toFixed(2)}× → ${parsed.crashMultiplier != null ? `${parsed.crashMultiplier.toFixed(2)}×` : "?"}`,
+      });
+      void reportLimboOutcome({
+        nickname,
+        hit: parsed.hit,
+        betCoins: betDisplay,
+        targetMultiplier: targetMult,
+        crashMultiplier: parsed.crashMultiplier,
+        rainId,
+      });
       resolve();
     });
-    const offFail = hub.on("ReceiveLimboFailure", (p) => {
+    const offFail = hub.on(SIGNALR.limbo.receiveFailure, (p) => {
       clearTimeout(timeout);
       offOk();
       offFail();

@@ -7,10 +7,12 @@ const args = process.argv.slice(2);
 const daysIdx = args.indexOf("--days");
 const idIdx = args.indexOf("--id");
 const planIdx = args.indexOf("--plan");
+const discordIdx = args.indexOf("--discord-user");
 
 const days = daysIdx >= 0 ? Number(args[daysIdx + 1]) : 365;
 const id = idIdx >= 0 ? String(args[idIdx + 1]) : `cust-${Date.now()}`;
 const plan = planIdx >= 0 ? String(args[planIdx + 1]) : "standard";
+const discordUserId = discordIdx >= 0 ? String(args[discordIdx + 1]) : undefined;
 
 const privPem = process.env.LICENSE_PRIVATE_KEY?.trim();
 if (!privPem) {
@@ -19,7 +21,13 @@ if (!privPem) {
 }
 
 const exp = Math.floor(Date.now() / 1000) + days * 86400;
-const payload = { v: 1 as const, id, plan, exp };
+const payload = {
+  v: 1 as const,
+  id,
+  plan,
+  exp,
+  ...(discordUserId ? { discordUserId } : {}),
+};
 const payloadB64 = Buffer.from(JSON.stringify(payload)).toString("base64url");
 const data = Buffer.from(`RP1.${payloadB64}`);
 const sig = crypto.sign(null, data, crypto.createPrivateKey(privPem)).toString("base64url");

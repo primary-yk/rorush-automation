@@ -5,6 +5,8 @@ CREATE TABLE IF NOT EXISTS settings (
   discord_enabled INTEGER NOT NULL DEFAULT 0,
   discord_channel_id TEXT,
   discord_token_enc TEXT,
+  discord_report_enabled INTEGER NOT NULL DEFAULT 0,
+  discord_report_webhook_enc TEXT,
   license_key_enc TEXT,
   license_payload_json TEXT,
   license_id TEXT,

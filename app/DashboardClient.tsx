@@ -33,6 +33,7 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
   const [newSession, setNewSession] = useState("");
   const [discordChannel, setDiscordChannel] = useState(initial.settings?.discordChannelId ?? "");
   const [discordToken, setDiscordToken] = useState("");
+  const [discordReportWebhook, setDiscordReportWebhook] = useState("");
   const [savingAccount, setSavingAccount] = useState(false);
 
   const apiOk = !error && settings != null;
@@ -324,6 +325,64 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
           />
 
           <SetupGuide apiOk={apiOk} hasAccounts={accounts.length > 0} />
+
+          <Card glow="violet">
+            <SectionTitle
+              title="Private thread reports"
+              description="Post limbo hits/misses, rain results, and your account list to a Discord thread via webhook. Create a webhook inside the private thread (Integrations → Webhooks)."
+            />
+            <div className="grid max-w-lg gap-4">
+              {settings && (
+                <Toggle
+                  label="Send reports to thread"
+                  description="Limbo, rain, account changes"
+                  checked={settings.discordReportEnabled ?? false}
+                  onChange={async (v) => {
+                    const s = await dashboardApi.patchSettings({ discordReportEnabled: v });
+                    setSettings(s);
+                  }}
+                />
+              )}
+              <Input
+                type="password"
+                placeholder={
+                  settings?.hasDiscordReportWebhook
+                    ? "New webhook URL (leave blank to keep)"
+                    : "https://discord.com/api/webhooks/…"
+                }
+                value={discordReportWebhook}
+                onChange={(e) => setDiscordReportWebhook(e.target.value)}
+              />
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="soft"
+                  onClick={async () => {
+                    const s = await dashboardApi.patchSettings({
+                      discordReportWebhook: discordReportWebhook || null,
+                    });
+                    setSettings(s);
+                    setDiscordReportWebhook("");
+                    toast.push("Report webhook saved", "success");
+                  }}
+                >
+                  Save webhook
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={async () => {
+                    try {
+                      await dashboardApi.testDiscordReport();
+                      toast.push("Test message sent to your thread", "success");
+                    } catch (e) {
+                      toast.push(e instanceof Error ? e.message : "Test failed", "error");
+                    }
+                  }}
+                >
+                  Send test
+                </Button>
+              </div>
+            </div>
+          </Card>
 
           <Card glow="cyan">
             <SectionTitle

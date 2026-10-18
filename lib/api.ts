@@ -34,6 +34,8 @@ export type Settings = {
   discordEnabled: boolean;
   discordChannelId: string | null;
   hasDiscordToken: boolean;
+  discordReportEnabled: boolean;
+  hasDiscordReportWebhook: boolean;
 };
 
 export type ActivityLog = {
@@ -73,8 +75,12 @@ export const dashboardApi = {
   activateLicense: (key: string) =>
     api<LicenseStatus>("/api/license/activate", { method: "POST", body: JSON.stringify({ key }) }),
   getSettings: () => api<Settings>("/api/settings"),
-  patchSettings: (body: Partial<Settings & { discordToken?: string | null }>) =>
-    api<Settings>("/api/settings", { method: "PATCH", body: JSON.stringify(body) }),
+  patchSettings: (
+    body: Partial<
+      Settings & { discordToken?: string | null; discordReportWebhook?: string | null }
+    >,
+  ) => api<Settings>("/api/settings", { method: "PATCH", body: JSON.stringify(body) }),
+  testDiscordReport: () => api<{ ok: true }>("/api/discord/test-report", { method: "POST" }),
   listAccounts: () => api<Account[]>("/api/rush-accounts"),
   createAccount: (body: Record<string, unknown>) =>
     api<Account>("/api/rush-accounts", { method: "POST", body: JSON.stringify(body) }),

@@ -15,6 +15,7 @@ import {
 } from "../db/repositories.js";
 import { encryptField, setSessionToken } from "../accounts/session-manager.js";
 import { isIgnorableCaseError } from "../automation/case-errors.js";
+import { reportAccountSnapshot, sendTestReport } from "../discord/reporter.js";
 import { engine } from "../worker/engine.js";
 export function createApiServer() {
   const app = express();
@@ -40,6 +41,8 @@ export function createApiServer() {
       discordEnabled: !!s.discord_enabled,
       discordChannelId: s.discord_channel_id,
       hasDiscordToken: !!s.discord_token_enc,
+      discordReportEnabled: !!s.discord_report_enabled,
+      hasDiscordReportWebhook: !!s.discord_report_webhook_enc,
     });
   });
 
@@ -49,6 +52,8 @@ export function createApiServer() {
       discordEnabled?: boolean;
       discordChannelId?: string | null;
       discordToken?: string | null;
+      discordReportEnabled?: boolean;
+      discordReportWebhook?: string | null;
     };
     const patch: Record<string, unknown> = {};
     if (typeof body.globalPause === "boolean") patch.global_pause = body.globalPause ? 1 : 0;
@@ -57,13 +62,32 @@ export function createApiServer() {
     if (body.discordToken !== undefined) {
       patch.discord_token_enc = body.discordToken ? encryptField(body.discordToken) : null;
     }
+    if (typeof body.discordReportEnabled === "boolean") {
+      patch.discord_report_enabled = body.discordReportEnabled ? 1 : 0;
+    }
+    if (body.discordReportWebhook !== undefined) {
+      patch.discord_report_webhook_enc = body.discordReportWebhook
+        ? encryptField(body.discordReportWebhook)
+        : null;
+    }
     const next = updateSettings(patch as Parameters<typeof updateSettings>[0]);
     res.json({
       globalPause: !!next.global_pause,
       discordEnabled: !!next.discord_enabled,
       discordChannelId: next.discord_channel_id,
       hasDiscordToken: !!next.discord_token_enc,
+      discordReportEnabled: !!next.discord_report_enabled,
+      hasDiscordReportWebhook: !!next.discord_report_webhook_enc,
     });
+  });
+
+  app.post("/api/discord/test-report", async (_req, res) => {
+    const result = await sendTestReport();
+    if (!result.ok) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+    res.json({ ok: true });
   });
 
   app.get("/api/rush-accounts", (_req, res) => {
@@ -98,6 +122,7 @@ export function createApiServer() {
         proxy_url: body.proxyUrl ?? null,
       });
       await engine.reloadAccounts();
+      void reportAccountSnapshot("account added");
       res.status(201).json(publicAccount(account));
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
@@ -181,6 +206,7 @@ export function createApiServer() {
     }
     deleteAccount(id);
     res.json({ ok: true, id });
+    void reportAccountSnapshot("account removed");
     try {
       await engine.reloadAccounts();
     } catch (err) {
