@@ -22,20 +22,21 @@ export default function DashboardPage() {
 
   const refresh = useCallback(async () => {
     try {
-      const [s, a, l] = await Promise.all([
-        dashboardApi.getSettings(),
-        dashboardApi.listAccounts(),
-        dashboardApi.listLogs(),
-      ]);
+      const s = await dashboardApi.getSettings();
       setSettings(s);
-      setAccounts(a);
-      setLogs(l);
       setDiscordChannel(s.discordChannelId ?? "");
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
+    }
+    try {
+      const [a, l] = await Promise.all([dashboardApi.listAccounts(), dashboardApi.listLogs()]);
+      setAccounts(a);
+      setLogs(l);
+    } catch (e) {
+      setError((prev) => prev ?? (e instanceof Error ? e.message : String(e)));
     }
   }, []);
 

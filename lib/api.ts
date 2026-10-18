@@ -52,11 +52,11 @@ export const dashboardApi = {
   getSettings: () => api<Settings>("/api/settings"),
   patchSettings: (body: Partial<Settings & { discordToken?: string | null }>) =>
     api<Settings>("/api/settings", { method: "PATCH", body: JSON.stringify(body) }),
-  listAccounts: () => api<Account[]>("/api/accounts"),
+  listAccounts: () => api<Account[]>("/api/rush-accounts"),
   createAccount: (body: Record<string, unknown>) =>
-    api<Account>("/api/accounts", { method: "POST", body: JSON.stringify(body) }),
+    api<Account>("/api/rush-accounts", { method: "POST", body: JSON.stringify(body) }),
   patchAccount: (id: number, body: Record<string, unknown>) =>
-    api<Account>(`/api/accounts/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
-  deleteAccount: (id: number) => api<void>(`/api/accounts/${id}`, { method: "DELETE" }),
+    api<Account>(`/api/rush-accounts/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteAccount: (id: number) => api<void>(`/api/rush-accounts/${id}`, { method: "DELETE" }),
   listLogs: () => api<ActivityLog[]>("/api/logs"),
 };

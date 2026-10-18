@@ -56,13 +56,13 @@ export function createApiServer() {
     });
   });
 
-  app.get("/api/accounts", (_req, res) => {
+  app.get("/api/rush-accounts", (_req, res) => {
     res.json(
       listAccounts().map(publicAccount),
     );
   });
 
-  app.post("/api/accounts", async (req, res) => {
+  app.post("/api/rush-accounts", async (req, res) => {
     try {
       const body = req.body as {
         nickname: string;
@@ -91,7 +91,7 @@ export function createApiServer() {
     }
   });
 
-  app.patch("/api/accounts/:id", async (req, res) => {
+  app.patch("/api/rush-accounts/:id", async (req, res) => {
     const id = Number(req.params.id);
     const body = req.body as Partial<{
       nickname: string;
@@ -130,13 +130,13 @@ export function createApiServer() {
     res.json(publicAccount(updated));
   });
 
-  app.delete("/api/accounts/:id", async (req, res) => {
+  app.delete("/api/rush-accounts/:id", async (req, res) => {
     deleteAccount(Number(req.params.id));
     await engine.reloadAccounts();
     res.status(204).end();
   });
 
-  app.get("/api/accounts/:id/history", (req, res) => {
+  app.get("/api/rush-accounts/:id/history", (req, res) => {
     const id = Number(req.params.id);
     res.json({
       rainJoins: listRecentRainJoins(id),
