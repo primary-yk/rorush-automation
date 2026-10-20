@@ -9,9 +9,15 @@ import {
   rainCaptchaPrewarmWindow,
   rainJoinWindowOpen,
 } from "../src/automation/rain-join.js";
+import { shouldInvalidateRainCaptcha } from "../src/automation/rain-captcha.js";
 import type { RainState } from "../src/rorush/types.js";
 
 describe("isRetryableRainFailure", () => {
+  it("treats captcha again as retryable and invalidating", () => {
+    expect(isRetryableRainFailure("Please complete the CAPTCHA again and retry.")).toBe(true);
+    expect(shouldInvalidateRainCaptcha("Please complete the CAPTCHA again and retry.")).toBe(true);
+  });
+
   it("treats network and timeout as retryable", () => {
     expect(isRetryableRainFailure("fetch failed")).toBe(true);
     expect(isRetryableRainFailure("Rain join timed out")).toBe(true);

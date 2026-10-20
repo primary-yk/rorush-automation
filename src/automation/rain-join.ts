@@ -154,7 +154,9 @@ export function isWagerRejection(message: string): boolean {
 export function isRetryableRainFailure(message: string): boolean {
   if (isWagerRejection(message)) return true;
   if (isTransientNetworkError(message)) return true;
-  return /timed out|captcha token missing|fetch failed|join timed out|too late/i.test(message);
+  return /timed out|captcha token missing|fetch failed|join timed out|too late|captcha again|complete the captcha/i.test(
+    message,
+  );
 }
 
 function accountStatusForRainFailure(message: string): { status: "idle" | "error"; last_error: string } {

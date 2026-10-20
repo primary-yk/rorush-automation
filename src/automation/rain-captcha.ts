@@ -153,7 +153,12 @@ export function rainCaptchaInflight(rainId: string): boolean {
 
 /** RoRush rejected the token — safe to request a fresh solve. */
 export function shouldInvalidateRainCaptcha(reason: string): boolean {
-  return /captcha.*invalid|invalid.*captcha|token.*expired|reject.*captcha|wrong.*captcha|hcaptcha/i.test(
+  return /captcha.*invalid|invalid.*captcha|complete the captcha|captcha again|token.*expired|reject.*captcha|wrong.*captcha|hcaptcha/i.test(
     reason,
   );
+}
+
+/** RoRush tokens are single-use per join — drop cache so the next account gets a fresh solve. */
+export function consumeRainCaptchaToken(rainId: string): void {
+  cache.delete(cacheKey(rainId));
 }

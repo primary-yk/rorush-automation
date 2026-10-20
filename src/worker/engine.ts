@@ -8,6 +8,7 @@ import {
 } from "../db/repositories.js";
 import {
   clearRainCaptcha,
+  consumeRainCaptchaToken,
   isRainCaptchaFinished,
   markRainCaptchaFinished,
   prewarmRainCaptcha,
@@ -411,51 +412,57 @@ export class AutomationEngine {
           prewarmRainCaptcha(live.rainId);
         }
 
-        let sharedCaptcha: string | null = null;
-        try {
-          if (!loggedCaptchaWait) {
-            loggedCaptchaWait = true;
-            const secLeft = Math.round(rainJoinWindowRemainingMs(live) / 1000);
-            appendLog({
-              category: "rain",
-              message: "Waiting for rain captcha (one solve per rain batch)",
-              detail: `${live.rainId} · ~${secLeft}s left in join window`,
-            });
-          }
-          sharedCaptcha = await takeRainCaptchaToken(live.rainId, { forRainJoin: true });
-        } catch {
-          sharedCaptcha = null;
-        }
-
-        if (!sharedCaptcha) {
-          if (!rainJoinWindowOpen(live)) break;
-          await new Promise((r) => setTimeout(r, 5_000));
-          continue;
+        if (!loggedCaptchaWait) {
+          loggedCaptchaWait = true;
+          const secLeft = Math.round(rainJoinWindowRemainingMs(live) / 1000);
+          appendLog({
+            category: "rain",
+            message: "Waiting for rain captcha",
+            detail: `${live.rainId} · ~${secLeft}s left · one fresh solve per account`,
+          });
         }
 
         if (!rainJoinWindowOpen(live)) break;
 
         let anyRetryableFail = false;
-        for (const account of pending) {
+        for (let pi = 0; pi < pending.length; pi++) {
+          const account = pending[pi]!;
+          if (!rainJoinWindowOpen(live)) break;
+
+          let accountCaptcha: string | null = null;
+          try {
+            consumeRainCaptchaToken(live.rainId);
+            accountCaptcha = await takeRainCaptchaToken(live.rainId, { forRainJoin: true });
+          } catch {
+            accountCaptcha = null;
+          }
+          if (!accountCaptcha) {
+            anyRetryableFail = true;
+            rainTelemetryAccountFailed(live.rainId, account.nickname, "Captcha token missing");
+            continue;
+          }
+
+          if (pi + 1 < pending.length && rainCaptchaPrewarmWindow(live)) {
+            prewarmRainCaptcha(live.rainId);
+          }
+
           try {
             const hub = await this.accountHubs.ensure(account.id, { rain: true, cases: true });
             const result = await joinRainForAccount({
               accountId: account.id,
               rain: live,
               hub,
-              captchaToken: sharedCaptcha,
+              captchaToken: accountCaptcha,
             });
             if (result.success) {
               rainTelemetryAccountJoined(live.rainId, account.nickname);
-              sharedCaptcha = null;
+              consumeRainCaptchaToken(live.rainId);
               continue;
             }
             rainTelemetryAccountFailed(live.rainId, account.nickname, result.reason);
             if (shouldInvalidateRainCaptcha(result.reason)) {
               clearRainCaptcha(live.rainId);
-              sharedCaptcha = null;
               prewarmRainCaptcha(live.rainId);
-              break;
             }
             if (isRetryableRainFailure(result.reason)) {
               anyRetryableFail = true;
@@ -476,7 +483,7 @@ export class AutomationEngine {
         );
         if (stillPending.length === 0) break;
         if (!rainJoinWindowOpen(live)) break;
-        if (!anyRetryableFail && sharedCaptcha == null) break;
+        if (!anyRetryableFail) break;
 
         const wait = Math.min(retryMs, rainJoinWindowRemainingMs(live));
         if (wait < 2_000) break;
