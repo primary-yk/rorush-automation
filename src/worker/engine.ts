@@ -12,8 +12,10 @@ import {
   isRainCaptchaFinished,
   markRainCaptchaFinished,
   prewarmRainCaptcha,
+  prewarmRainCaptchasParallel,
   shouldInvalidateRainCaptcha,
   takeRainCaptchaToken,
+  waitForRainCaptchasParallel,
 } from "../automation/rain-captcha.js";
 import { clearRainJoinStateForRain, isRainJoined } from "../automation/rain-join-state.js";
 import {
@@ -241,7 +243,10 @@ export class AutomationEngine {
             detail: `${rain.rainId} · window ${rainJoinWindowOpen(rain) ? "open" : "closed"}`,
           }),
         );
-        prewarmRainCaptcha(rain.rainId);
+        const joinIds = listAccounts()
+          .filter((a) => Number(a.join_rain) !== 0)
+          .map((a) => a.id);
+        prewarmRainCaptchasParallel(rain.rainId, joinIds);
         this.scheduleRainJoinAttempt(rain, "join_stage");
       }
     });
@@ -408,8 +413,9 @@ export class AutomationEngine {
           live.rainId,
           pending.map((a) => a.nickname),
         );
-        if (rainCaptchaPrewarmWindow(live) && !isRainCaptchaFinished(live.rainId)) {
-          prewarmRainCaptcha(live.rainId);
+        const pendingIds = pending.map((a) => a.id);
+        if (!isRainCaptchaFinished(live.rainId)) {
+          prewarmRainCaptchasParallel(live.rainId, pendingIds);
         }
 
         if (!loggedCaptchaWait) {
@@ -418,32 +424,36 @@ export class AutomationEngine {
           appendLog({
             category: "rain",
             message: "Waiting for rain captcha",
-            detail: `${live.rainId} · ~${secLeft}s left · one fresh solve per account`,
+            detail: `${live.rainId} · ~${secLeft}s left · ${pendingIds.length} parallel solve(s)`,
           });
         }
+
+        const waitMs = Math.min(
+          rainJoinWindowRemainingMs(live),
+          Math.max(45_000, Number(process.env.RAIN_CAPTCHA_PARALLEL_WAIT_MS ?? 150_000) || 150_000),
+        );
+        await waitForRainCaptchasParallel(live.rainId, pendingIds, waitMs);
 
         if (!rainJoinWindowOpen(live)) break;
 
         let anyRetryableFail = false;
-        for (let pi = 0; pi < pending.length; pi++) {
-          const account = pending[pi]!;
+        for (const account of pending) {
           if (!rainJoinWindowOpen(live)) break;
 
           let accountCaptcha: string | null = null;
           try {
-            consumeRainCaptchaToken(live.rainId);
-            accountCaptcha = await takeRainCaptchaToken(live.rainId, { forRainJoin: true });
+            accountCaptcha = await takeRainCaptchaToken(live.rainId, {
+              accountId: account.id,
+              forRainJoin: true,
+            });
           } catch {
             accountCaptcha = null;
           }
           if (!accountCaptcha) {
             anyRetryableFail = true;
             rainTelemetryAccountFailed(live.rainId, account.nickname, "Captcha token missing");
+            prewarmRainCaptchasParallel(live.rainId, [account.id]);
             continue;
-          }
-
-          if (pi + 1 < pending.length && rainCaptchaPrewarmWindow(live)) {
-            prewarmRainCaptcha(live.rainId);
           }
 
           try {
@@ -456,13 +466,13 @@ export class AutomationEngine {
             });
             if (result.success) {
               rainTelemetryAccountJoined(live.rainId, account.nickname);
-              consumeRainCaptchaToken(live.rainId);
+              consumeRainCaptchaToken(live.rainId, account.id);
               continue;
             }
             rainTelemetryAccountFailed(live.rainId, account.nickname, result.reason);
             if (shouldInvalidateRainCaptcha(result.reason)) {
-              clearRainCaptcha(live.rainId);
-              prewarmRainCaptcha(live.rainId);
+              consumeRainCaptchaToken(live.rainId, account.id);
+              prewarmRainCaptchasParallel(live.rainId, [account.id]);
             }
             if (isRetryableRainFailure(result.reason)) {
               anyRetryableFail = true;

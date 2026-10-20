@@ -26,7 +26,7 @@ const RAIN_OK = /^joined rain$|^rain join summary$/i;
 const RAIN_WAGER =
   /wager requirement|placing limbo|still need wager|limbo wager|limbo hit|limbo miss|limbo skipped after rain/i;
 
-const RAIN_CAPTCHA = /rain captcha ready|solving rain captcha|sending rain join/i;
+const RAIN_CAPTCHA = /rain captchas ready|rain captcha ready|solving rain captcha|sending rain join/i;
 
 /** Default webhook feed: nickname + limbo + rain failures/joins/wagers only (no emails, no noise). */
 export function shouldPostPublicDiscordAlert(log: ActivityLogRow, fullActivityFeed: boolean): boolean {

@@ -14,9 +14,7 @@ function tokenMaxAgeForJoinMs(): number {
 
 const cache = new Map<string, { token: string; at: number }>();
 const inflight = new Map<string, Promise<string | null>>();
-/** After 2Captcha "could not solve", avoid burning credits on repeated prewarms. */
 const prewarmBlockedUntil = new Map<string, number>();
-/** Rain finished — never spend captcha credits for this id again. */
 const finishedRainIds = new Set<string>();
 
 export function markRainCaptchaFinished(rainId: string): void {
@@ -39,33 +37,36 @@ function prewarmFailureCooldownMs(): number {
   return Math.max(60_000, Number(process.env.RAIN_CAPTCHA_FAIL_COOLDOWN_MS ?? 300_000) || 300_000);
 }
 
-function cacheKey(rainId: string): string {
-  return rainId;
+function slotKey(rainId: string, accountId?: number | null): string {
+  if (accountId != null && Number.isFinite(accountId)) return `${rainId}:acct:${accountId}`;
+  return `${rainId}:shared`;
 }
 
-function readCached(rainId: string): string | null {
-  const row = cache.get(cacheKey(rainId));
+function rainKeyPrefix(rainId: string): string {
+  return `${rainId}:`;
+}
+
+function readCachedKey(key: string): string | null {
+  const row = cache.get(key);
   if (!row) return null;
   if (Date.now() - row.at > tokenTtlMs()) {
-    cache.delete(cacheKey(rainId));
+    cache.delete(key);
     return null;
   }
   return row.token;
 }
 
-function logSolveDone(rainId: string, started: number, token: string | null): void {
+function logSolveDone(
+  rainId: string,
+  started: number,
+  token: string | null,
+  accountId?: number | null,
+): void {
   const sec = ((Date.now() - started) / 1000).toFixed(1);
-  console.log(
-    `[rain-captcha] ${rainId.slice(0, 8)}… ${token ? "ready" : "failed"} in ${sec}s`,
-  );
-  if (token) {
-    const solveSec = parseFloat(sec);
-    rainTelemetryCaptchaReady(rainId, solveSec);
-    appendLog({
-      category: "rain",
-      message: "Rain captcha ready",
-      detail: `${rainId} · ${sec}s`,
-    });
+  const who = accountId != null ? ` acct ${accountId}` : "";
+  console.log(`[rain-captcha] ${rainId.slice(0, 8)}…${who} ${token ? "ready" : "failed"} in ${sec}s`);
+  if (token && accountId == null) {
+    rainTelemetryCaptchaReady(rainId, parseFloat(sec));
   }
 }
 
@@ -79,86 +80,140 @@ async function solveHcaptchaWithRetry(): Promise<string | null> {
   }
 }
 
-/** Start solving before join window so the token is ready when join opens. */
-export function prewarmRainCaptcha(rainId: string): void {
-  if (!rainId || isRainCaptchaFinished(rainId) || readCached(rainId)) return;
-  if (inflight.has(cacheKey(rainId))) return;
-  const blocked = prewarmBlockedUntil.get(rainId);
+function startSolveForSlot(rainId: string, accountId?: number | null): void {
+  const key = slotKey(rainId, accountId);
+  if (isRainCaptchaFinished(rainId)) return;
+  if (readCachedKey(key)) return;
+  if (inflight.has(key)) return;
+
+  const blockKey = accountId != null ? `${rainId}:${accountId}` : rainId;
+  const blocked = prewarmBlockedUntil.get(blockKey);
   if (blocked != null && Date.now() < blocked) return;
+
   const started = Date.now();
-  console.log(`[rain-captcha] prewarm ${rainId.slice(0, 8)}…`);
+  console.log(
+    `[rain-captcha] solve start ${rainId.slice(0, 8)}…${accountId != null ? ` acct ${accountId}` : " shared"}`,
+  );
   const p = solveHcaptchaWithRetry()
     .then((token) => {
-      logSolveDone(rainId, started, token);
+      logSolveDone(rainId, started, token, accountId);
       if (token) {
-        cache.set(cacheKey(rainId), { token, at: Date.now() });
-        prewarmBlockedUntil.delete(rainId);
+        cache.set(key, { token, at: Date.now() });
+        prewarmBlockedUntil.delete(blockKey);
       }
       return token;
     })
     .catch((err) => {
       const msg = err instanceof Error ? err.message : String(err);
-      console.warn(`[rain-captcha] prewarm failed ${rainId.slice(0, 8)}…: ${msg}`);
-      prewarmBlockedUntil.set(rainId, Date.now() + prewarmFailureCooldownMs());
+      console.warn(`[rain-captcha] solve failed ${rainId.slice(0, 8)}…: ${msg}`);
+      prewarmBlockedUntil.set(blockKey, Date.now() + prewarmFailureCooldownMs());
       return null;
     })
     .finally(() => {
-      inflight.delete(cacheKey(rainId));
+      inflight.delete(key);
     });
-  inflight.set(cacheKey(rainId), p);
+  inflight.set(key, p);
 }
 
-/** Use cached token from prewarm when possible; otherwise solve now. */
+/** Legacy single-slot prewarm (shared key). Prefer prewarmRainCaptchasParallel. */
+export function prewarmRainCaptcha(rainId: string): void {
+  if (!rainId) return;
+  startSolveForSlot(rainId, null);
+}
+
+/** Start one 2Captcha task per account in parallel — fits ~2 min join windows for multi-account. */
+export function prewarmRainCaptchasParallel(rainId: string, accountIds: number[]): void {
+  if (!rainId || isRainCaptchaFinished(rainId)) return;
+  const unique = [...new Set(accountIds.filter((id) => Number.isFinite(id)))];
+  if (unique.length === 0) {
+    prewarmRainCaptcha(rainId);
+    return;
+  }
+  for (const id of unique) startSolveForSlot(rainId, id);
+}
+
+export async function waitForRainCaptchasParallel(
+  rainId: string,
+  accountIds: number[],
+  timeoutMs?: number,
+): Promise<{ ready: number; total: number }> {
+  const unique = [...new Set(accountIds.filter((id) => Number.isFinite(id)))];
+  const total = unique.length;
+  if (total === 0) return { ready: 0, total: 0 };
+  prewarmRainCaptchasParallel(rainId, unique);
+  const ms =
+    timeoutMs ??
+    Math.max(30_000, Number(process.env.RAIN_CAPTCHA_PARALLEL_WAIT_MS ?? 150_000) || 150_000);
+  const deadline = Date.now() + ms;
+  let ready = 0;
+  while (Date.now() < deadline) {
+    const tokens = await Promise.all(
+      unique.map((id) => takeRainCaptchaToken(rainId, { accountId: id, forRainJoin: true })),
+    );
+    ready = tokens.filter(Boolean).length;
+    if (ready >= total) break;
+    await new Promise((r) => setTimeout(r, 1_000));
+  }
+  if (ready > 0 && ready === total) {
+    appendLog({
+      category: "rain",
+      message: "Rain captchas ready",
+      detail: `${rainId.slice(0, 8)}… · ${ready}/${total} account(s) · parallel`,
+    });
+  }
+  return { ready, total };
+}
+
 export async function takeRainCaptchaToken(
   rainId: string,
-  opts?: { forRainJoin?: boolean },
+  opts?: { forRainJoin?: boolean; accountId?: number | null },
 ): Promise<string | null> {
   if (isRainCaptchaFinished(rainId)) return null;
-  const row = cache.get(cacheKey(rainId));
+  const key = slotKey(rainId, opts?.accountId);
+
+  const row = cache.get(key);
   if (row && opts?.forRainJoin) {
     const age = Date.now() - row.at;
     if (age > tokenMaxAgeForJoinMs()) {
-      console.log(
-        `[rain-captcha] cached token too old for join (${(age / 1000).toFixed(0)}s) — refreshing`,
-      );
-      cache.delete(cacheKey(rainId));
+      cache.delete(key);
     }
   }
-  const cached = readCached(rainId);
+  const cached = readCachedKey(key);
   if (cached) return cached;
 
-  let p = inflight.get(cacheKey(rainId));
+  let p = inflight.get(key);
   if (!p) {
-    const started = Date.now();
-    console.log(`[rain-captcha] solve now ${rainId.slice(0, 8)}… (no cache)`);
-    p = solveHcaptchaWithRetry().then((token) => {
-      logSolveDone(rainId, started, token);
-      if (token) cache.set(cacheKey(rainId), { token, at: Date.now() });
-      return token;
-    });
-    inflight.set(cacheKey(rainId), p);
-    void p.finally(() => inflight.delete(cacheKey(rainId)));
+    startSolveForSlot(rainId, opts?.accountId ?? null);
+    p = inflight.get(key);
   }
+  if (!p) return null;
   return p;
 }
 
 export function clearRainCaptcha(rainId: string): void {
-  cache.delete(cacheKey(rainId));
-  inflight.delete(cacheKey(rainId));
+  const prefix = rainKeyPrefix(rainId);
+  for (const k of [...cache.keys()]) {
+    if (k === `${rainId}:shared` || k.startsWith(prefix)) cache.delete(k);
+  }
+  for (const k of [...inflight.keys()]) {
+    if (k === `${rainId}:shared` || k.startsWith(prefix)) inflight.delete(k);
+  }
 }
 
 export function rainCaptchaInflight(rainId: string): boolean {
-  return inflight.has(cacheKey(rainId));
+  const prefix = rainKeyPrefix(rainId);
+  for (const k of inflight.keys()) {
+    if (k.startsWith(prefix) || k === `${rainId}:shared`) return true;
+  }
+  return false;
 }
 
-/** RoRush rejected the token — safe to request a fresh solve. */
 export function shouldInvalidateRainCaptcha(reason: string): boolean {
   return /captcha.*invalid|invalid.*captcha|complete the captcha|captcha again|token.*expired|reject.*captcha|wrong.*captcha|hcaptcha/i.test(
     reason,
   );
 }
 
-/** RoRush tokens are single-use per join — drop cache so the next account gets a fresh solve. */
-export function consumeRainCaptchaToken(rainId: string): void {
-  cache.delete(cacheKey(rainId));
+export function consumeRainCaptchaToken(rainId: string, accountId?: number | null): void {
+  cache.delete(slotKey(rainId, accountId));
 }
