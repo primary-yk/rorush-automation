@@ -2,6 +2,7 @@
 
 import clsx from "clsx";
 import type { ReactNode } from "react";
+import { PrivacyEmailToggle } from "./PrivacyBlur";
 import { IconActivity, IconGrid, IconLogo, IconSettings, IconUsers } from "./icons";
 
 export type DashboardTab = "overview" | "accounts" | "activity" | "settings";
@@ -28,7 +29,7 @@ export function AppShell({
 }) {
   return (
     <div className="relative min-h-screen lg:flex">
-      <aside className="glass-panel fixed inset-y-0 left-0 z-40 hidden w-[17.5rem] flex-col border-r border-white/[0.08] bg-gradient-to-b from-white/[0.04] to-transparent lg:flex">
+      <aside className="glass-panel fixed inset-y-0 left-0 z-40 hidden w-[17.5rem] flex-col border-r border-violet-500/15 bg-gradient-to-b from-black via-[#07050f] to-[#030305] lg:flex">
         <div className="flex items-center gap-3 border-b border-white/[0.06] px-5 py-5">
           <IconLogo />
           <div>
@@ -45,8 +46,8 @@ export function AppShell({
               className={clsx(
                 "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition",
                 tab === id
-                  ? "bg-white/10 text-white shadow-inner shadow-white/5"
-                  : "text-slate-400 hover:bg-white/[0.04] hover:text-slate-200",
+                  ? "bg-violet-500/20 text-white shadow-inner shadow-violet-500/10 ring-1 ring-violet-400/25"
+                  : "text-slate-400 hover:bg-violet-500/10 hover:text-violet-100",
               )}
             >
               <Icon className={tab === id ? "text-violet-300" : undefined} />
@@ -70,7 +71,7 @@ export function AppShell({
       </aside>
 
       <div className="flex min-h-screen flex-1 flex-col lg:pl-64">
-        <header className="glass-panel sticky top-0 z-30 border-b border-white/[0.06] px-4 py-4 sm:px-6">
+        <header className="glass-panel sticky top-0 z-30 border-b border-violet-500/10 bg-black/60 px-4 py-4 sm:px-6">
           <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-3 lg:hidden">
               <IconLogo className="h-7 w-7" />
@@ -82,7 +83,10 @@ export function AppShell({
                 )}
               />
             </div>
-            {headerExtra}
+            <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+              <PrivacyEmailToggle compact />
+              {headerExtra}
+            </div>
           </div>
           <nav className="mx-auto mt-4 flex max-w-6xl gap-1 overflow-x-auto pb-0.5 lg:hidden">
             {NAV.map(({ id, label, Icon }) => (
@@ -92,7 +96,7 @@ export function AppShell({
                 onClick={() => onTab(id)}
                 className={clsx(
                   "flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition",
-                  tab === id ? "bg-violet-500/25 text-violet-100" : "text-slate-500 hover:text-slate-300",
+                  tab === id ? "bg-violet-600/30 text-violet-50 ring-1 ring-violet-400/30" : "text-slate-500 hover:text-violet-200",
                 )}
               >
                 <Icon className="h-4 w-4" />

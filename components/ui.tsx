@@ -17,7 +17,7 @@ export function Card({
   return (
     <div
       className={clsx(
-        "relative overflow-hidden rounded-2xl border border-white/[0.07] bg-gradient-to-b from-white/[0.07] to-white/[0.02] shadow-xl shadow-black/30 backdrop-blur-xl",
+        "relative overflow-hidden rounded-2xl border border-violet-500/10 bg-gradient-to-b from-violet-500/[0.07] to-black/40 shadow-xl shadow-black/50 backdrop-blur-xl",
         padding === "default" && "p-6",
         padding === "lg" && "p-8",
         padding === "none" && "p-0",
@@ -28,7 +28,7 @@ export function Card({
         className,
       )}
     >
-      <div className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.04),transparent_55%)]" />
+      <div className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(ellipse_at_top_right,rgba(139,92,246,0.08),transparent_55%)]" />
       <div className="relative z-10">{children}</div>
     </div>
   );

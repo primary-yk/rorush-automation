@@ -6,8 +6,9 @@ import { ActivityFeed } from "@/components/ActivityFeed";
 import { AppShell, type DashboardTab } from "@/components/AppShell";
 import { LiveRainStrip } from "@/components/LiveRainStrip";
 import { PilotStatsGrid } from "@/components/PilotStatsGrid";
-import { SetupGuide } from "@/components/SetupGuide";
+import { PrivacyEmailToggle, usePrivacyBlur } from "@/components/PrivacyBlur";
 import { Toggle } from "@/components/Toggle";
+import { SetupGuide } from "@/components/SetupGuide";
 import { Button, Card, Input, MetricCard, SectionTitle } from "@/components/ui";
 import { useToast } from "@/components/Toast";
 import { IconBolt, IconBox, IconRain } from "@/components/icons";
@@ -49,6 +50,7 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
   const [liveRain, setLiveRain] = useState<RainLiveStatus | null>(null);
   const [pilotStats, setPilotStats] = useState<PilotStats | null>(null);
   const [activitySearch, setActivitySearch] = useState("");
+  const { blurEmails, setBlurEmails } = usePrivacyBlur();
 
   const apiOk = !error && settings != null;
 
@@ -423,6 +425,22 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
           />
 
           <SetupGuide apiOk={apiOk} hasAccounts={accounts.length > 0} />
+
+          <Card glow="violet">
+            <SectionTitle
+              title="Privacy on this dashboard"
+              description="Blur RoRush login emails on account cards and activity. Stream-safe when friends look at your screen."
+            />
+            <div className="flex flex-wrap items-center gap-4">
+              <Toggle
+                label="Blur emails on screen"
+                description={blurEmails ? "Hover an email to peek · or use Show emails in header" : "Emails visible on account cards"}
+                checked={blurEmails}
+                onChange={(v) => setBlurEmails(v)}
+              />
+              <PrivacyEmailToggle />
+            </div>
+          </Card>
 
           <Card glow="violet">
             <SectionTitle

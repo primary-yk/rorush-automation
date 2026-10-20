@@ -37,15 +37,15 @@ export function LiveRainStrip({ status }: { status: RainLiveStatus }) {
         className={clsx(
           "relative overflow-hidden rounded-2xl border px-4 py-4 sm:px-5",
           status.joinWindowOpen
-            ? "border-sky-500/40 bg-gradient-to-r from-sky-500/15 via-violet-500/10 to-transparent"
+            ? "border-violet-400/45 bg-gradient-to-r from-violet-600/20 via-fuchsia-600/10 to-transparent"
             : status.active
-              ? "border-violet-500/30 bg-gradient-to-r from-violet-500/10 to-transparent"
-              : "border-white/10 bg-white/[0.03]",
+              ? "border-violet-500/35 bg-gradient-to-r from-violet-500/15 to-black/40"
+              : "border-violet-500/10 bg-black/40",
         )}
       >
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-sky-300/90">
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-violet-300/90">
               Live rain
             </p>
             <p className="mt-1 font-display text-xl font-bold text-white sm:text-2xl">

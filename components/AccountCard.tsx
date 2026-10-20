@@ -6,6 +6,7 @@ import { Button, Card, Input, StatusPill } from "./ui";
 import { useToast } from "./Toast";
 import { dashboardApi, type Account } from "@/lib/api";
 import clsx from "clsx";
+import { SensitiveText } from "./PrivacyBlur";
 
 function avatarGradient(nickname: string): string {
   let h = 0;
@@ -103,7 +104,11 @@ export function AccountCard({
             <div>
               <h3 className="text-xl font-semibold tracking-tight text-white">{local.nickname}</h3>
               <p className="mt-0.5 text-sm text-slate-400">
-                {local.username ?? "Session login"}
+                {local.username ? (
+                  <SensitiveText text={local.username} />
+                ) : (
+                  "Session login"
+                )}
                 {local.ownerDiscordId ? (
                   <span className="text-slate-500"> · Discord friend</span>
                 ) : (

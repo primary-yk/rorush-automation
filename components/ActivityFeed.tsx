@@ -2,6 +2,7 @@
 
 import clsx from "clsx";
 import { useMemo, useState } from "react";
+import { redactEmailsInText, usePrivacyBlur } from "./PrivacyBlur";
 import { FormattedDateTime } from "./FormattedDateTime";
 import type { ActivityLog } from "@/lib/api";
 
@@ -37,6 +38,7 @@ export function ActivityFeed({
   search?: string;
 }) {
   const [filter, setFilter] = useState<string>("all");
+  const { blurEmails } = usePrivacyBlur();
 
   const categories = useMemo(() => {
     const set = new Set(logs.map((l) => l.category));
@@ -119,7 +121,9 @@ export function ActivityFeed({
                 </div>
                 <p className={clsx("mt-1.5 text-slate-100", compact ? "text-sm" : "text-[15px]")}>{log.message}</p>
                 {log.detail && (
-                  <p className="mt-1 font-mono text-xs leading-relaxed text-slate-500">{log.detail}</p>
+                  <p className="mt-1 font-mono text-xs leading-relaxed text-slate-500">
+                    {redactEmailsInText(log.detail, blurEmails)}
+                  </p>
                 )}
               </div>
             </li>
