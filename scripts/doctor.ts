@@ -23,15 +23,11 @@ async function main() {
     const alt = path.join(root, name);
     if (!fs.existsSync(alt)) continue;
     const text = fs.readFileSync(alt, "utf8");
-    const hasCap = /^\s*CAPMONSTER_API_KEY\s*=/m.test(text);
-    console.log(
-      `${name} exists:`,
-      hasCap ? "yes (fallback — we load this if .env is missing the key)" : "yes",
-    );
-    if (hasCap && !cfg.CAPMONSTER_API_KEY) {
-      console.log(
-        `  ⚠ CAPMONSTER line is in ${name} but still not loaded — check for typos (CAPMONSTER_API_KEY=...)`,
-      );
+    const hasLegacyCap = /^\s*CAPMONSTER_API_KEY\s*=/m.test(text);
+    if (hasLegacyCap) {
+      console.log(`${name} exists: yes (has CAPMONSTER_API_KEY — ignored; use CAPTCHA_API_KEY instead)`);
+    } else {
+      console.log(`${name} exists: yes`);
     }
     if (name === "nano.env" && hasCap) {
       console.log("  Tip: rename to .env when you can:  mv nano.env .env");
@@ -45,14 +41,10 @@ async function main() {
   );
   const capKey = captchaApiKey(cfg);
   console.log(
-    "Captcha API key (CAPTCHA_API_KEY or CAPMONSTER_API_KEY):",
+    "Captcha API key (CAPTCHA_API_KEY):",
     capKey ? `set (${capKey.length} chars)` : "MISSING — rain join will fail",
   );
-  if (capKey && (cfg.CAPTCHA_PROVIDER === "auto" || cfg.CAPTCHA_PROVIDER === "capmonster")) {
-    console.log(
-      "  Note: RoRush rain = hCaptcha. CapMonster Cloud removed hCaptcha API — use 2Captcha + CAPTCHA_PROVIDER=2captcha",
-    );
-  }
+  console.log("Captcha provider:", cfg.CAPTCHA_PROVIDER ?? "2captcha");
 
   getDb();
   const accounts = listAccounts();

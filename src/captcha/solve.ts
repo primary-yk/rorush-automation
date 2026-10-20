@@ -1,13 +1,8 @@
 import { fetch } from "undici";
 import { captchaApiKey, loadConfig, reloadEnv } from "../config.js";
 
-const CAPMONSTER_NO_HCAPTCHA =
-  "CapMonster Cloud no longer supports hCaptcha via API (RoRush rain still uses hCaptcha). " +
-  "Your CapMonster balance is fine for other captcha types, but for rain you need a 2Captcha or CapSolver key: " +
-  "sign up at 2captcha.com, top up ~$3, put that API key in .env as CAPTCHA_API_KEY=..., set CAPTCHA_PROVIDER=2captcha, restart npm run dev.";
-
 export type CaptchaKind = "hcaptcha" | "turnstile";
-export type CaptchaProvider = "capmonster" | "2captcha" | "capsolver";
+export type CaptchaProvider = "2captcha" | "capsolver";
 
 const DEFAULT_HCAPTCHA_SITEKEY = "d5eed048-d092-4296-8496-a040aaccc710";
 const PAGE_URL = process.env.RORUSH_SITE_URL ?? "https://rorush.com/";
@@ -30,10 +25,9 @@ function siteKey(kind: CaptchaKind): string {
 }
 
 function providerFromEnv(): CaptchaProvider | "auto" {
-  const raw = (loadConfig().CAPTCHA_PROVIDER ?? "auto").trim().toLowerCase();
+  const raw = (loadConfig().CAPTCHA_PROVIDER ?? "2captcha").trim().toLowerCase();
   if (raw === "2captcha" || raw === "twocaptcha") return "2captcha";
   if (raw === "capsolver") return "capsolver";
-  if (raw === "capmonster") return "capmonster";
   return "auto";
 }
 
@@ -48,7 +42,7 @@ async function postJson(url: string, body: unknown): Promise<unknown> {
 
 export async function detectCaptchaProvider(clientKey: string): Promise<CaptchaProvider | null> {
   const probes: Array<{ provider: CaptchaProvider; url: string }> = [
-    { provider: "capmonster", url: "https://api.capmonster.cloud/getBalance" },
+    // CapMonster disabled — no RoRush rain hCaptcha support.
     { provider: "2captcha", url: "https://api.2captcha.com/getBalance" },
     { provider: "capsolver", url: "https://api.capsolver.com/getBalance" },
   ];
@@ -90,36 +84,21 @@ function buildTask(provider: CaptchaProvider, kind: CaptchaKind, websiteKey: str
 }
 
 function createUrl(provider: CaptchaProvider): string {
-  switch (provider) {
-    case "2captcha":
-      return "https://api.2captcha.com/createTask";
-    case "capsolver":
-      return "https://api.capsolver.com/createTask";
-    default:
-      return "https://api.capmonster.cloud/createTask";
-  }
+  return provider === "capsolver"
+    ? "https://api.capsolver.com/createTask"
+    : "https://api.2captcha.com/createTask";
 }
 
 function resultUrl(provider: CaptchaProvider): string {
-  switch (provider) {
-    case "2captcha":
-      return "https://api.2captcha.com/getTaskResult";
-    case "capsolver":
-      return "https://api.capsolver.com/getTaskResult";
-    default:
-      return "https://api.capmonster.cloud/getTaskResult";
-  }
+  return provider === "capsolver"
+    ? "https://api.capsolver.com/getTaskResult"
+    : "https://api.2captcha.com/getTaskResult";
 }
 
 function providerHint(provider: CaptchaProvider): string {
-  switch (provider) {
-    case "2captcha":
-      return "2captcha.com API key → CAPTCHA_PROVIDER=2captcha in .env";
-    case "capsolver":
-      return "capsolver.com API key → CAPTCHA_PROVIDER=capsolver in .env";
-    default:
-      return "capmonster.cloud API key → CAPTCHA_PROVIDER=capmonster (default)";
-  }
+  return provider === "capsolver"
+    ? "capsolver.com API key → CAPTCHA_PROVIDER=capsolver in .env"
+    : "2captcha.com API key → CAPTCHA_PROVIDER=2captcha in .env";
 }
 
 async function createAndPoll(
@@ -132,17 +111,8 @@ async function createAndPoll(
   const createJson = (await postJson(createUrl(provider), { clientKey, task })) as CreateResult;
 
   if (!createJson.taskId) {
-    const code = createJson.errorCode ?? "";
     const desc = createJson.errorDescription ?? "createTask failed";
-    if (code === "ERROR_TASK_NOT_SUPPORTED" || /task type/i.test(desc)) {
-      if (provider === "capmonster" && kind === "hcaptcha") {
-        throw new Error(`${desc}\n\n${CAPMONSTER_NO_HCAPTCHA}`);
-      }
-      throw new Error(
-        `${desc}\n\nYour key is for ${providerHint(provider)} If you use 2Captcha or CapSolver, set CAPTCHA_PROVIDER in .env.`,
-      );
-    }
-    throw new Error(desc);
+    throw new Error(`${desc}\n\nUse ${providerHint(provider)}`);
   }
 
   for (let i = 0; i < 60; i++) {
@@ -167,27 +137,18 @@ let cachedProvider: CaptchaProvider | null = null;
 
 export async function resolveCaptchaProvider(
   clientKey: string,
-  kind: CaptchaKind = "hcaptcha",
+  _kind: CaptchaKind = "hcaptcha",
 ): Promise<CaptchaProvider> {
   const forced = providerFromEnv();
   if (forced !== "auto") return forced;
-  if (cachedProvider && !(kind === "hcaptcha" && cachedProvider === "capmonster")) {
-    return cachedProvider;
-  }
+  if (cachedProvider) return cachedProvider;
   const detected = await detectCaptchaProvider(clientKey);
-  if (detected && !(kind === "hcaptcha" && detected === "capmonster")) {
-    cachedProvider = detected;
-    return detected;
-  }
-  if (kind === "hcaptcha") {
-    cachedProvider = "2captcha";
-    return "2captcha";
-  }
   if (detected) {
     cachedProvider = detected;
     return detected;
   }
-  return "capmonster";
+  cachedProvider = "2captcha";
+  return "2captcha";
 }
 
 export async function solveCaptcha(kind: CaptchaKind): Promise<string | null> {
@@ -201,9 +162,9 @@ export async function solveCaptcha(kind: CaptchaKind): Promise<string | null> {
   } catch (firstErr) {
     const forced = providerFromEnv();
     if (forced !== "auto") throw firstErr;
-    const others: CaptchaProvider[] = (
-      kind === "hcaptcha" ? ["2captcha", "capsolver"] : ["capmonster", "2captcha", "capsolver"]
-    ).filter((p) => p !== provider) as CaptchaProvider[];
+    const others: CaptchaProvider[] = (["2captcha", "capsolver"] as const).filter(
+      (p) => p !== provider,
+    );
     for (const alt of others) {
       try {
         cachedProvider = alt;

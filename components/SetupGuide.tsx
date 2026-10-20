@@ -21,7 +21,8 @@ const STEPS = [
         Copy <code className="rounded-md bg-black/50 px-1.5 py-0.5 font-mono text-xs">.env.example</code> to{" "}
         <code className="rounded-md bg-black/50 px-1.5 py-0.5 font-mono text-xs">.env</code>. Set{" "}
         <code className="font-mono text-xs text-emerald-300/90">ENCRYPTION_KEY</code> and{" "}
-        <code className="font-mono text-xs text-emerald-300/90">CAPMONSTER_API_KEY</code> for rain captchas.
+        <code className="font-mono text-xs text-emerald-300/90">CAPTCHA_API_KEY</code> and{" "}
+        <code className="font-mono text-xs text-emerald-300/90">CAPTCHA_PROVIDER=2captcha</code> for rain.
       </>
     ),
   },

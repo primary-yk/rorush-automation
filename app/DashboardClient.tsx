@@ -43,7 +43,7 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
   const totalEarnings = accounts.reduce((n, a) => n + a.lifetimeEarnings.total, 0);
   const rainEnabled = accounts.filter((a) => a.joinRain).length;
   const casesEnabled = accounts.filter((a) => a.autoOpenCases).length;
-  const capmonsterMissing = apiOk && rainEnabled > 0 && settings?.capmonsterConfigured === false;
+  const captchaMissing = apiOk && rainEnabled > 0 && settings?.capmonsterConfigured === false;
 
   const accountsById = useMemo(() => new Map(accounts.map((a) => [a.id, a.nickname])), [accounts]);
 
@@ -171,13 +171,12 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
 
   return (
     <AppShell tab={tab} onTab={setTab} engineOnline={apiOk} headerExtra={pauseToggle}>
-      {capmonsterMissing && (
+      {captchaMissing && (
         <Card className="mb-8 border-amber-500/35 bg-amber-500/[0.08]" glow="none">
           <p className="text-sm font-semibold text-amber-100">Captcha API key missing — rain join will fail</p>
           <p className="mt-2 text-sm leading-relaxed text-slate-400">
             RoRush rain uses <strong className="text-slate-300">hCaptcha</strong>. Use{" "}
-            <strong className="text-slate-300">2Captcha</strong> or CapSolver (CapMonster no longer supports hCaptcha
-            API). In{" "}
+            <strong className="text-slate-300">2Captcha</strong> or CapSolver. In{" "}
             <code className="rounded-lg bg-black/40 px-2 py-0.5 font-mono text-xs">~/rush-pilot/.env</code> add:
           </p>
           <pre className="mt-3 overflow-x-auto rounded-lg bg-black/50 p-3 font-mono text-xs text-amber-100/90">

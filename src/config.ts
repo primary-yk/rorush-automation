@@ -24,20 +24,16 @@ const envSchema = z.object({
   RORUSH_SEC_RUSH: z.string().default("836457212"),
   RORUSH_PROXY_URL: z.string().optional(),
   CAPTCHA_PROVIDER: z
-    .enum(["auto", "capmonster", "2captcha", "capsolver", "twocaptcha"])
+    .enum(["auto", "2captcha", "capsolver", "twocaptcha"])
     .optional()
-    .default("auto"),
-  /** Preferred name for any provider key (2Captcha/CapSolver for RoRush rain hCaptcha). */
+    .default("2captcha"), // auto = detect 2Captcha vs CapSolver only (CapMonster disabled)
+  /** 2Captcha or CapSolver key (RoRush rain hCaptcha). */
   CAPTCHA_API_KEY: z.preprocess((v) => {
     if (v === undefined || v === null || v === "") return undefined;
     const t = String(v).trim();
     return t.length ? t : undefined;
   }, z.string().optional()),
-  CAPMONSTER_API_KEY: z.preprocess((v) => {
-    if (v === undefined || v === null || v === "") return undefined;
-    const t = String(v).trim();
-    return t.length ? t : undefined;
-  }, z.string().optional()),
+  // CAPMONSTER_API_KEY — not used (CapMonster Cloud dropped hCaptcha; RoRush rain needs 2Captcha/CapSolver).
   AUTOMATION_API_HOST: z.string().default("127.0.0.1"),
   AUTOMATION_API_PORT: z.coerce.number().int().positive().default(43124),
   REQUEST_MIN_INTERVAL_MS: z.coerce.number().int().positive().default(350),
@@ -61,7 +57,7 @@ export function reloadEnv(): void {
 }
 
 export function captchaApiKey(cfg: AppConfig = loadConfig()): string | undefined {
-  return cfg.CAPTCHA_API_KEY ?? cfg.CAPMONSTER_API_KEY;
+  return cfg.CAPTCHA_API_KEY;
 }
 
 export function loadConfig(): AppConfig {
