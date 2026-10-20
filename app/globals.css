@@ -4,10 +4,11 @@
 
 :root {
   color-scheme: dark;
-  --bg-base: #000000;
-  --panel: rgba(8, 6, 14, 0.88);
-  --accent-glow: rgba(124, 58, 237, 0.55);
-  --accent-line: rgba(139, 92, 246, 0.12);
+  --bg-base: #020203;
+  --panel: rgba(6, 4, 12, 0.92);
+  --accent-glow: rgba(124, 58, 237, 0.62);
+  --accent-line: rgba(139, 92, 246, 0.14);
+  --vibe-border: rgba(167, 139, 250, 0.18);
 }
 
 body {
@@ -39,6 +40,22 @@ body::before {
   z-index: 0;
 }
 
+body::after {
+  content: "";
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  opacity: 0.04;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(255, 255, 255, 0.03) 2px,
+    rgba(255, 255, 255, 0.03) 3px
+  );
+  z-index: 0;
+}
+
 body > * {
   position: relative;
   z-index: 1;
@@ -59,6 +76,22 @@ body {
 @layer components {
   .glass-panel {
     @apply bg-[var(--panel)] backdrop-blur-xl;
+  }
+
+  .vibe-panel {
+    @apply bg-gradient-to-b from-violet-500/[0.06] to-black/50 shadow-lg shadow-black/40 backdrop-blur-md;
+  }
+
+  .vibe-stat-tile {
+    @apply rounded-2xl border border-violet-500/15 bg-gradient-to-br from-violet-600/10 via-black/40 to-black/60 px-4 py-3.5;
+  }
+
+  .vibe-summary-card {
+    @apply backdrop-blur-sm;
+  }
+
+  .vibe-day-section {
+    @apply shadow-[inset_0_1px_0_rgba(167,139,250,0.08)];
   }
 }
 

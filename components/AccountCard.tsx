@@ -91,7 +91,7 @@ export function AccountCard({
   const busy = pending != null;
 
   return (
-    <Card className="overflow-visible">
+    <Card hover className="overflow-visible border-violet-500/15">
       <div className="flex flex-wrap items-start gap-4">
         <div
           className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl text-lg font-bold text-white shadow-lg"

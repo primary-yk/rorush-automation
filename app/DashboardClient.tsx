@@ -403,20 +403,25 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
       )}
 
       {tab === "activity" && (
-        <div className="space-y-6">
-          <SectionTitle
-            eyebrow="Live"
-            title="Timeline"
-            description="Joins, payouts, limbo, and errors — routine captcha noise stays in All events."
-          />
-          <Card padding="lg">
-            <div className="mb-4">
+        <div className="space-y-8">
+          <div className="relative overflow-hidden rounded-3xl border border-violet-500/20 bg-gradient-to-br from-violet-600/20 via-black/60 to-fuchsia-900/20 px-6 py-8 sm:px-8">
+            <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-fuchsia-500/20 blur-3xl" />
+            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-violet-200/80">Event stream</p>
+            <h1 className="mt-2 font-display text-3xl font-bold tracking-tight text-white sm:text-4xl">Timeline</h1>
+            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-400">
+              Everything the engine does — grouped by day, filtered by type, with rain summaries up front. Routine captcha
+              chatter stays under <span className="text-violet-200">All events</span>.
+            </p>
+            <div className="relative mt-6 max-w-xl">
               <Input
-                placeholder="Search timeline — rain, limbo, account name…"
+                placeholder="Search — account, rain, limbo, error…"
                 value={activitySearch}
                 onChange={(e) => setActivitySearch(e.target.value)}
+                className="border-violet-500/25 bg-black/50 py-3 pl-4"
               />
             </div>
+          </div>
+          <Card padding="lg" glow="violet" className="border-violet-500/20">
             <ActivityFeed logs={logs} accountsById={accountsById} search={activitySearch} showViewToggle />
           </Card>
         </div>

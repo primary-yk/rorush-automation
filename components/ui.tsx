@@ -17,7 +17,7 @@ export function Card({
   return (
     <div
       className={clsx(
-        "relative overflow-hidden rounded-2xl border border-violet-500/10 bg-gradient-to-b from-violet-500/[0.07] to-black/40 shadow-xl shadow-black/50 backdrop-blur-xl",
+        "relative overflow-hidden rounded-2xl border border-violet-500/15 bg-gradient-to-b from-violet-500/[0.09] via-black/50 to-black/70 shadow-xl shadow-black/60 backdrop-blur-xl shadow-vibe-inner",
         padding === "default" && "p-6",
         padding === "lg" && "p-8",
         padding === "none" && "p-0",
