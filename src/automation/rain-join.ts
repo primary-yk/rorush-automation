@@ -471,13 +471,13 @@ async function placeLimboWagerBet(
         : account.limbo_multiplier;
   mult = Math.max(LIMBO_MIN_MULTIPLIER, mult);
 
-  const balanceCoins = await readBalanceCoins(client);
+  const balanceBeforeBet = await readBalanceCoins(client);
   let betCoins: number;
 
   if (opts.betCoinsOverride != null && Number.isFinite(opts.betCoinsOverride)) {
     betCoins = opts.betCoinsOverride;
     if (opts.balanceBeforeRain != null) {
-      const rainOnlyCap = Math.max(0, balanceCoins - opts.balanceBeforeRain);
+      const rainOnlyCap = Math.max(0, balanceBeforeBet - opts.balanceBeforeRain);
       betCoins = Math.min(betCoins, rainOnlyCap);
     }
   } else {
@@ -488,15 +488,15 @@ async function placeLimboWagerBet(
           ? envBetCents / 100
           : account.limbo_bet_coins;
     if (Number.isFinite(envMaxBet)) targetBet = Math.min(targetBet, envMaxBet);
-    betCoins = Math.min(targetBet, balanceCoins * 0.98);
+    betCoins = Math.min(targetBet, balanceBeforeBet * 0.98);
   }
 
   if (Number.isFinite(envMaxBet)) betCoins = Math.min(betCoins, envMaxBet);
-  betCoins = Math.min(betCoins, balanceCoins * 0.98);
+  betCoins = Math.min(betCoins, balanceBeforeBet * 0.98);
 
   if (betCoins < 0.01) {
     throw new Error(
-      `Limbo skipped — balance ${balanceCoins.toFixed(2)} coins, need at least 0.01 to wager`,
+      `Limbo skipped — balance ${balanceBeforeBet.toFixed(2)} coins, need at least 0.01 to wager`,
     );
   }
 
@@ -506,11 +506,14 @@ async function placeLimboWagerBet(
   const amountCents = Math.max(1, Math.round(betCoins * 100));
   const multiplierCents = Math.max(Math.round(LIMBO_MIN_MULTIPLIER * 100), Math.round(mult * 100));
 
+  const balanceDetail = (before: number, after: number | null) =>
+    `balance ${before.toFixed(2)} → ${after != null ? after.toFixed(2) : "…"} coins`;
+
   appendLog({
     accountId,
     category: "limbo",
     message: reasonLabel,
-    detail: `${(amountCents / 100).toFixed(2)} coins @ ${(multiplierCents / 100).toFixed(2)}x`,
+    detail: `${(amountCents / 100).toFixed(2)} coins @ ${(multiplierCents / 100).toFixed(2)}x · ${balanceDetail(balanceBeforeBet, null)}`,
   });
 
   const resultEvents = [SIGNALR.limbo.receiveResult, SIGNALR.limbo.receiveResultAlt];
@@ -545,21 +548,31 @@ async function placeLimboWagerBet(
       const limboMessage = parsed.hit
         ? `Limbo hit at ${crash} (target ${targetMult.toFixed(2)}×)`
         : `Limbo miss — crashed at ${crash} (target ${targetMult.toFixed(2)}×)`;
-      appendLog({
-        accountId,
-        category: "limbo",
-        message: limboMessage,
-        detail: `${betDisplay.toFixed(2)} coins @ ${targetMult.toFixed(2)}×`,
-      });
-      void reportLimboOutcome({
-        nickname,
-        hit: parsed.hit,
-        betCoins: betDisplay,
-        targetMultiplier: targetMult,
-        crashMultiplier: parsed.crashMultiplier,
-        rainId: rainIdForReport,
-      });
-      resolve();
+      void (async () => {
+        let balanceAfterBet: number | null = null;
+        try {
+          balanceAfterBet = await readBalanceCoins(client);
+        } catch {
+          balanceAfterBet = null;
+        }
+        appendLog({
+          accountId,
+          category: "limbo",
+          message: limboMessage,
+          detail: `${betDisplay.toFixed(2)} coins @ ${targetMult.toFixed(2)}× · ${balanceDetail(balanceBeforeBet, balanceAfterBet)}`,
+        });
+        void reportLimboOutcome({
+          nickname,
+          hit: parsed.hit,
+          betCoins: betDisplay,
+          targetMultiplier: targetMult,
+          crashMultiplier: parsed.crashMultiplier,
+          rainId: rainIdForReport,
+          balanceBefore: balanceBeforeBet,
+          balanceAfter: balanceAfterBet,
+        });
+        resolve();
+      })();
     };
 
     const finishFail = (p: unknown) => {
@@ -587,7 +600,6 @@ async function placeLimboWagerBet(
       });
   });
 
-  await client.getBalance();
   return { betCoins, hit };
 }
 

@@ -35,12 +35,14 @@ export function shouldPostPublicDiscordAlert(log: ActivityLogRow, fullActivityFe
     return true;
   }
 
-  if (log.category === "limbo") return true;
+  if (log.category === "limbo") {
+    return /skipped|failed|error/i.test(log.message);
+  }
 
   if (log.category === "rain") {
     const msg = log.message;
     if (RAIN_OK.test(msg)) return true;
-    if (RAIN_CAPTCHA.test(msg)) return true;
+    if (RAIN_CAPTCHA.test(msg)) return false;
     if (RAIN_WAGER.test(msg)) return true;
     if (RAIN_FAIL.test(msg)) return true;
     return false;

@@ -8,6 +8,8 @@ import {
 } from "../db/repositories.js";
 import {
   clearRainCaptcha,
+  isRainCaptchaFinished,
+  markRainCaptchaFinished,
   prewarmRainCaptcha,
   shouldInvalidateRainCaptcha,
   takeRainCaptchaToken,
@@ -220,7 +222,9 @@ export class AutomationEngine {
             detail: `${rain.rainId} · pool ${rain.amount ?? "?"} coins`,
           }),
         );
-        prewarmRainCaptcha(rain.rainId);
+        if (rainCaptchaPrewarmWindow(rain)) {
+          prewarmRainCaptcha(rain.rainId);
+        }
       }
     });
     this.sharedRainHub.on(SIGNALR.rain.receiveJoinStageStart, (payload) => {
@@ -304,7 +308,7 @@ export class AutomationEngine {
         });
       }
       clearRainJoinStateForRain(p.rainId);
-      clearRainCaptcha(p.rainId);
+      markRainCaptchaFinished(p.rainId);
       void settleRainForAllJoiners({
         rainId: p.rainId,
         poolCoins: pool,
@@ -403,7 +407,9 @@ export class AutomationEngine {
           live.rainId,
           pending.map((a) => a.nickname),
         );
-        prewarmRainCaptcha(live.rainId);
+        if (rainCaptchaPrewarmWindow(live) && !isRainCaptchaFinished(live.rainId)) {
+          prewarmRainCaptcha(live.rainId);
+        }
 
         let sharedCaptcha: string | null = null;
         try {

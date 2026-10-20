@@ -53,6 +53,8 @@ export async function reportLimboOutcome(input: {
   targetMultiplier: number;
   crashMultiplier?: number | null;
   rainId?: string | null;
+  balanceBefore?: number | null;
+  balanceAfter?: number | null;
 }): Promise<void> {
   const crash =
     input.crashMultiplier != null ? `${input.crashMultiplier.toFixed(2)}×` : "—";
@@ -66,6 +68,12 @@ export async function reportLimboOutcome(input: {
     { name: "Target", value: `${input.targetMultiplier.toFixed(2)}×`, inline: true },
     { name: "Result", value: crash, inline: true },
   ];
+  if (input.balanceBefore != null) {
+    fields.push({ name: "Balance before", value: `${input.balanceBefore.toFixed(2)} coins`, inline: true });
+  }
+  if (input.balanceAfter != null) {
+    fields.push({ name: "Balance after", value: `${input.balanceAfter.toFixed(2)} coins`, inline: true });
+  }
   if (input.rainId) {
     fields.push({ name: "Rain", value: input.rainId, inline: false });
   }

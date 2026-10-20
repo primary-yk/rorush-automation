@@ -16,6 +16,24 @@ const cache = new Map<string, { token: string; at: number }>();
 const inflight = new Map<string, Promise<string | null>>();
 /** After 2Captcha "could not solve", avoid burning credits on repeated prewarms. */
 const prewarmBlockedUntil = new Map<string, number>();
+/** Rain finished — never spend captcha credits for this id again. */
+const finishedRainIds = new Set<string>();
+
+export function markRainCaptchaFinished(rainId: string): void {
+  if (!rainId) return;
+  finishedRainIds.add(rainId);
+  clearRainCaptcha(rainId);
+  if (finishedRainIds.size > 40) {
+    for (const id of finishedRainIds) {
+      finishedRainIds.delete(id);
+      if (finishedRainIds.size <= 25) break;
+    }
+  }
+}
+
+export function isRainCaptchaFinished(rainId: string): boolean {
+  return finishedRainIds.has(rainId);
+}
 
 function prewarmFailureCooldownMs(): number {
   return Math.max(60_000, Number(process.env.RAIN_CAPTCHA_FAIL_COOLDOWN_MS ?? 300_000) || 300_000);
@@ -63,7 +81,7 @@ async function solveHcaptchaWithRetry(): Promise<string | null> {
 
 /** Start solving before join window so the token is ready when join opens. */
 export function prewarmRainCaptcha(rainId: string): void {
-  if (!rainId || readCached(rainId)) return;
+  if (!rainId || isRainCaptchaFinished(rainId) || readCached(rainId)) return;
   if (inflight.has(cacheKey(rainId))) return;
   const blocked = prewarmBlockedUntil.get(rainId);
   if (blocked != null && Date.now() < blocked) return;
@@ -95,6 +113,7 @@ export async function takeRainCaptchaToken(
   rainId: string,
   opts?: { forRainJoin?: boolean },
 ): Promise<string | null> {
+  if (isRainCaptchaFinished(rainId)) return null;
   const row = cache.get(cacheKey(rainId));
   if (row && opts?.forRainJoin) {
     const age = Date.now() - row.at;
