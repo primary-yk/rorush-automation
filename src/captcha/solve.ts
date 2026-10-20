@@ -145,7 +145,7 @@ async function createAndPoll(
     throw new Error(desc);
   }
 
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < 60; i++) {
     await new Promise((r) => setTimeout(r, 3000));
     const resultJson = (await postJson(resultUrl(provider), {
       clientKey,

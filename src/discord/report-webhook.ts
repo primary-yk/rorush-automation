@@ -14,7 +14,12 @@ export function resolveDiscordReportWebhookUrl(): string | null {
 
   const s = getSettings();
   if (!s.discord_report_enabled || !s.discord_report_webhook_enc) return null;
-  const url = decryptField(s.discord_report_webhook_enc);
+  let url: string | null = null;
+  try {
+    url = decryptField(s.discord_report_webhook_enc);
+  } catch {
+    return null;
+  }
   if (!url || !isValidDiscordWebhookUrl(url)) return null;
   return url;
 }
@@ -29,7 +34,14 @@ export function applyDiscordWebhookFromEnv(): void {
     return;
   }
   const s = getSettings();
-  const existing = s.discord_report_webhook_enc ? decryptField(s.discord_report_webhook_enc) : null;
+  let existing: string | null = null;
+  if (s.discord_report_webhook_enc) {
+    try {
+      existing = decryptField(s.discord_report_webhook_enc);
+    } catch {
+      existing = null;
+    }
+  }
   if (existing === url && s.discord_report_enabled) return;
 
   const enc = encryptField(url);
