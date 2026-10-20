@@ -61,7 +61,7 @@ async function testCaptchaOptional(): Promise<void> {
 
 async function main() {
   getDb();
-  const cfg = loadConfig();
+  loadConfig();
   const probe = arg("--probe");
   const withCaptcha = arg("--with-captcha");
 

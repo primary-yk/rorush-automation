@@ -15,6 +15,8 @@
     "test-stats": "tsx scripts/test-stats.ts",
     "last-rain-errors": "tsx scripts/last-rain-errors.ts",
     "test-captcha": "tsx scripts/test-captcha.ts",
+    "test-limbo": "tsx scripts/test-limbo.ts",
+    "test-rain-pipeline": "tsx scripts/test-limbo.ts -- --probe --with-captcha",
     "preflight": "tsx scripts/preflight.ts",
     "show-urls": "tsx scripts/show-dashboard-url.ts",
     "setup-discord-webhook": "tsx scripts/setup-discord-webhook.ts",
