@@ -18,6 +18,16 @@ HOST_DISCORD_USER_ID=...
 
 After adding the webhook line: `npm run setup-discord-webhook` once to verify.
 
+### Discord bot (friends slash commands — no URLs in replies)
+
+1. [Discord Developer Portal](https://discord.com/developers/applications) → your app → **Bot** → copy token → `DISCORD_BOT_TOKEN`
+2. Developer Mode → right-click **server** → Copy ID → `DISCORD_GUILD_ID`
+3. Right-click **your user** → Copy ID → `HOST_DISCORD_USER_ID`
+4. OAuth2 URL Generator: scopes `bot` + `applications.commands`, permissions **Send Messages**, **Use Slash Commands**, **Embed Links**
+5. `npm run discord-bot-doctor` then `npm run dev`
+
+Friends only use `/` commands — bot replies never include dashboard or site links.
+
 ## You (host)
 
 1. Windows: use WSL or native Node — run from project folder:

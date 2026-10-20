@@ -24,6 +24,11 @@ import {
   setLimbo,
   setToggle,
 } from "./friends-commands.js";
+import { sanitizeDiscordOutbound } from "./sanitize-outbound.js";
+
+function out(text: string): string {
+  return sanitizeDiscordOutbound(text);
+}
 
 let client: Client | null = null;
 
@@ -34,7 +39,7 @@ function buildSlashCommands() {
   new SlashCommandBuilder().setName("accounts").setDescription("Your linked RoRush accounts"),
   new SlashCommandBuilder()
     .setName("account")
-    .setDescription("Add or remove your RoRush login (stored on host PC only)")
+    .setDescription("Add or remove your RoRush login (ephemeral — host stores it securely)")
     .addSubcommand((sub) =>
       sub
         .setName("add")
@@ -180,29 +185,29 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
     const userId = interaction.user.id;
 
     if (interaction.commandName === "setup") {
-      await interaction.reply({ ephemeral: true, content: setupText() });
+      await interaction.reply({ ephemeral: true, content: out(setupText()) });
       return;
     }
 
     if (interaction.commandName === "status") {
-      await interaction.reply({ ephemeral: true, content: engineStatusText() });
+      await interaction.reply({ ephemeral: true, content: out(engineStatusText()) });
       return;
     }
 
     if (interaction.commandName === "accounts") {
       const block = requirePaidSeat(userId);
       if (block) {
-        await interaction.reply({ ephemeral: true, content: block });
+        await interaction.reply({ ephemeral: true, content: out(block) });
         return;
       }
-      await interaction.reply({ ephemeral: true, content: formatAccountList(userId) });
+      await interaction.reply({ ephemeral: true, content: out(formatAccountList(userId)) });
       return;
     }
 
     if (interaction.commandName === "account") {
       const block = requirePaidSeat(userId);
       if (block) {
-        await interaction.reply({ ephemeral: true, content: block });
+        await interaction.reply({ ephemeral: true, content: out(block) });
         return;
       }
       const sub = interaction.options.getSubcommand();
@@ -214,7 +219,7 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
           email: interaction.options.getString("email", true),
           password: interaction.options.getString("password", true),
         });
-        await interaction.editReply(text);
+        await interaction.editReply(out(text));
         return;
       }
       if (sub === "remove") {
@@ -222,7 +227,7 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
           userId,
           interaction.options.getString("nickname", true),
         );
-        await interaction.editReply(text);
+        await interaction.editReply(out(text));
         return;
       }
     }
@@ -230,7 +235,7 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
     if (interaction.commandName === "rain") {
       const block = requirePaidSeat(userId);
       if (block) {
-        await interaction.reply({ ephemeral: true, content: block });
+        await interaction.reply({ ephemeral: true, content: out(block) });
         return;
       }
       await interaction.deferReply({ ephemeral: true });
@@ -240,14 +245,14 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
         "join_rain",
         interaction.options.getBoolean("on", true),
       );
-      await interaction.editReply(text);
+      await interaction.editReply(out(text));
       return;
     }
 
     if (interaction.commandName === "cases") {
       const block = requirePaidSeat(userId);
       if (block) {
-        await interaction.reply({ ephemeral: true, content: block });
+        await interaction.reply({ ephemeral: true, content: out(block) });
         return;
       }
       await interaction.deferReply({ ephemeral: true });
@@ -257,14 +262,14 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
         "auto_open_cases",
         interaction.options.getBoolean("on", true),
       );
-      await interaction.editReply(text);
+      await interaction.editReply(out(text));
       return;
     }
 
     if (interaction.commandName === "limbo") {
       const block = requirePaidSeat(userId);
       if (block) {
-        await interaction.reply({ ephemeral: true, content: block });
+        await interaction.reply({ ephemeral: true, content: out(block) });
         return;
       }
       await interaction.deferReply({ ephemeral: true });
@@ -275,14 +280,14 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
         multiplier: mult,
         betCoins: bet,
       });
-      await interaction.editReply(text);
+      await interaction.editReply(out(text));
       return;
     }
 
     if (interaction.commandName === "license") {
       const sub = interaction.options.getSubcommand();
       if (sub === "status") {
-        await interaction.reply({ ephemeral: true, content: discordSeatStatus(userId) });
+        await interaction.reply({ ephemeral: true, content: out(discordSeatStatus(userId)) });
         return;
       }
       if (sub === "redeem") {
@@ -291,14 +296,16 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
         try {
           const result = activateDiscordSeat(userId, key);
           if (!result.ok) {
-            await interaction.editReply(result.message);
+            await interaction.editReply(out(result.message));
             return;
           }
           await interaction.editReply(
-            `You're in · plan **${result.plan}** · expires ${result.expiresAt ?? "—"}\nNext: \`/account add\``,
+            out(
+              `You're in · plan **${result.plan}** · expires ${result.expiresAt ?? "—"}\nNext: \`/account add\``,
+            ),
           );
         } catch (err) {
-          await interaction.editReply(err instanceof Error ? err.message : String(err));
+          await interaction.editReply(out(err instanceof Error ? err.message : String(err)));
         }
         return;
       }
@@ -325,7 +332,7 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
         if (!pem) {
           await interaction.reply({
             ephemeral: true,
-            content: "Set `LICENSE_PRIVATE_KEY` in the host `.env` to mint keys (see `npm run license:keygen`).",
+            content: out("License signing is not configured on the host."),
           });
           return;
         }
@@ -340,14 +347,16 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
           discordUserId: forUser?.id,
         });
         await interaction.editReply(
-          [
-            `**New license** · \`${id}\` · **${plan}** · ${days} days`,
-            `Expires: ${new Date(exp * 1000).toISOString()}`,
-            forUser ? `Locked to Discord user \`${forUser.id}\`` : "Not locked to a Discord user",
-            "",
-            "Give this key to your customer (DM). They run `/license redeem` — **nothing to install**:",
-            `\`\`\`\n${key}\n\`\`\``,
-          ].join("\n"),
+          out(
+            [
+              `**New license** · \`${id}\` · **${plan}** · ${days} days`,
+              `Expires: ${new Date(exp * 1000).toISOString()}`,
+              forUser ? `Locked to Discord user \`${forUser.id}\`` : "Not locked to a Discord user",
+              "",
+              "DM the key to the buyer → `/license redeem`",
+              `\`\`\`\n${key}\n\`\`\``,
+            ].join("\n"),
+          ),
         );
         return;
       }
@@ -371,9 +380,9 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (interaction.deferred || interaction.replied) {
-      await interaction.editReply({ content: msg }).catch(() => undefined);
+      await interaction.editReply({ content: out(msg) }).catch(() => undefined);
     } else {
-      await interaction.reply({ ephemeral: true, content: msg }).catch(() => undefined);
+      await interaction.reply({ ephemeral: true, content: out(msg) }).catch(() => undefined);
     }
   }
 }

@@ -39,7 +39,7 @@ export async function addAccountForDiscordUser(input: {
     owner_discord_id: input.discordUserId,
   });
   await engine.reloadAccounts();
-  return `Saved **${nick}** on the host PC. Use \`/rain\`, \`/cases\`, and \`/limbo\` to configure.`;
+  return `Saved **${nick}**. Use \`/rain\`, \`/cases\`, and \`/limbo\` to configure.`;
 }
 
 export async function removeAccountForDiscordUser(
@@ -117,8 +117,9 @@ export function engineStatusText(): string {
   const accounts = listAccounts();
   const friends = new Set(accounts.map((a) => a.owner_discord_id).filter(Boolean));
   return [
-    "**Rush Pilot (host PC)**",
-    `Accounts: **${accounts.length}** (${friends.size} friend(s) linked)`,
-    "Friends use slash commands — host uses the web dashboard.",
+    "**Rush Pilot**",
+    "Engine is **online**.",
+    `Accounts: **${accounts.length}** · **${friends.size}** Discord user(s) linked`,
+    "Use `/accounts`, `/rain`, `/limbo`, `/cases`.",
   ].join("\n");
 }

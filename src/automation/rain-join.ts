@@ -3,8 +3,12 @@ import { solveCaptcha } from "../captcha/capmonster.js";
 import { clearRainCaptcha, takeRainCaptchaToken } from "./rain-captcha.js";
 import { loadConfig } from "../config.js";
 import {
+  isRainJoined,
+  markRainJoined,
+  trackJoinInflight,
+} from "./rain-join-state.js";
+import {
   appendLog,
-  hasSuccessfulRainJoin,
   recordRainJoin,
   updateAccount,
   accountIdsWithSuccessfulRainJoin,
@@ -61,13 +65,28 @@ export async function joinRainForAccount(input: {
   captchaToken?: string | null;
 }): Promise<{ success: boolean; reason: string }> {
   const { accountId, rain, hub } = input;
-  const { account, client, creds } = await ensureAuthenticated(accountId);
+  if (isRainJoined(accountId, rain.rainId)) {
+    return { success: true, reason: "Already joined this rain" };
+  }
+  return trackJoinInflight(accountId, rain.rainId, () =>
+    joinRainForAccountOnce({ accountId, rain, hub, captchaToken: input.captchaToken }),
+  );
+}
+
+async function joinRainForAccountOnce(input: {
+  accountId: number;
+  rain: RainState;
+  hub: RoRushHub;
+  captchaToken?: string | null;
+}): Promise<{ success: boolean; reason: string }> {
+  const { accountId, rain, hub } = input;
+  const { account, client } = await ensureAuthenticated(accountId);
 
   if (!account.join_rain) {
     return { success: false, reason: "Join rain disabled for account" };
   }
 
-  if (hasSuccessfulRainJoin(accountId, rain.rainId)) {
+  if (isRainJoined(accountId, rain.rainId)) {
     return { success: true, reason: "Already joined this rain" };
   }
 
@@ -186,6 +205,8 @@ export async function joinRainForAccount(input: {
     });
 
     if (outcome.ok) {
+      markRainJoined(accountId, rain.rainId);
+      clearRainCaptcha(rain.rainId);
       try {
         const bal = await readBalanceCoins(client);
         rainBalanceBeforeJoin.set(rainBalanceKey(accountId, rain.rainId), bal);
@@ -215,7 +236,6 @@ export async function joinRainForAccount(input: {
       poolCoins: rainAmount,
     });
 
-    if (outcome.ok) clearRainCaptcha(rain.rainId);
     return { success: outcome.ok, reason: outcome.message };
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
@@ -377,11 +397,16 @@ async function placeLimboWagerBet(
       hit = parsed.hit;
       const betDisplay = amountCents / 100;
       const targetMult = multiplierCents / 100;
+      const crash =
+        parsed.crashMultiplier != null ? `${parsed.crashMultiplier.toFixed(2)}×` : "unknown";
+      const limboMessage = parsed.hit
+        ? `Limbo hit at ${crash} (target ${targetMult.toFixed(2)}×)`
+        : `Limbo miss — crashed at ${crash} (target ${targetMult.toFixed(2)}×)`;
       appendLog({
         accountId,
         category: "limbo",
-        message: parsed.hit ? "Limbo hit" : "Limbo miss",
-        detail: `${betDisplay.toFixed(2)} @ ${targetMult.toFixed(2)}× → ${parsed.crashMultiplier != null ? `${parsed.crashMultiplier.toFixed(2)}×` : "?"}`,
+        message: limboMessage,
+        detail: `${betDisplay.toFixed(2)} coins @ ${targetMult.toFixed(2)}×`,
       });
       void reportLimboOutcome({
         nickname,
@@ -453,7 +478,7 @@ export async function settleRainForAccount(input: {
 }): Promise<void> {
   const { accountId, rainId, poolCoins, hubs } = input;
   const { account, client } = await ensureAuthenticated(accountId);
-  if (!hasSuccessfulRainJoin(accountId, rainId)) return;
+  if (!isRainJoined(accountId, rainId)) return;
 
   await new Promise((r) => setTimeout(r, 2_500));
   const after = await readBalanceCoins(client);

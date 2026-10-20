@@ -6,6 +6,7 @@ import {
   updateAccount,
 } from "../db/repositories.js";
 import { prewarmRainCaptcha } from "../automation/rain-captcha.js";
+import { clearRainJoinStateForRain, isRainJoined } from "../automation/rain-join-state.js";
 import {
   isWagerRejection,
   joinRainForAccount,
@@ -205,6 +206,7 @@ export class AutomationEngine {
         this.activeRain = null;
       }
       appendLog({ category: "rain", message: "Rain finished", detail: p.rainId });
+      clearRainJoinStateForRain(p.rainId);
       void settleRainForAllJoiners({
         rainId: p.rainId,
         poolCoins: pool,
@@ -259,7 +261,7 @@ export class AutomationEngine {
       return;
     }
 
-    const accounts = listAccounts().filter((a) => a.join_rain);
+    const accounts = listAccounts().filter((a) => a.join_rain && !isRainJoined(a.id, rain.rainId));
     if (accounts.length === 0) {
       appendLog({
         category: "rain",

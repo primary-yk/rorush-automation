@@ -54,16 +54,18 @@ export async function reportLimboOutcome(input: {
   crashMultiplier?: number | null;
   rainId?: string | null;
 }): Promise<void> {
-  const title = input.hit ? "Limbo hit" : "Limbo miss";
+  const crash =
+    input.crashMultiplier != null ? `${input.crashMultiplier.toFixed(2)}×` : "—";
+  const title = input.hit
+    ? `Limbo hit at ${crash}`
+    : `Limbo miss — crashed at ${crash}`;
   const color = input.hit ? COLOR_HIT : COLOR_MISS;
   const fields: Embed["fields"] = [
     { name: "Account", value: input.nickname, inline: true },
     { name: "Bet", value: `${input.betCoins.toFixed(2)} coins`, inline: true },
     { name: "Target", value: `${input.targetMultiplier.toFixed(2)}×`, inline: true },
+    { name: "Result", value: crash, inline: true },
   ];
-  if (input.crashMultiplier != null) {
-    fields.push({ name: "Result", value: `${input.crashMultiplier.toFixed(2)}×`, inline: true });
-  }
   if (input.rainId) {
     fields.push({ name: "Rain", value: input.rainId, inline: false });
   }

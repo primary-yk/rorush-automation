@@ -10,6 +10,7 @@ export type ActivityLogRow = {
 export function redactForDiscord(text: string): string {
   return (
     text
+      .replace(/https?:\/\/[^\s<>)]+/gi, "")
       .replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, "[redacted]")
       .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, "[token]")
       .replace(/\b(Bearer\s+)[A-Za-z0-9._-]+/gi, "$1[token]")
