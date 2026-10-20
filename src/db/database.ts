@@ -6,14 +6,27 @@ import { SCHEMA_SQL } from "./schema.js";
 
 let db: Database.Database | null = null;
 
+function applyDbPragmas(database: Database.Database): void {
+  database.pragma("journal_mode = WAL");
+  database.pragma("foreign_keys = ON");
+  database.pragma("busy_timeout = 8000");
+}
+
+/** Read-only handle for `npm run rain-joins` while `npm run dev` is up (avoids migration + write locks). */
+export function openReadonlyDb(): Database.Database {
+  const cfg = loadConfig();
+  const database = new Database(cfg.DATABASE_PATH, { readonly: true, fileMustExist: true });
+  applyDbPragmas(database);
+  return database;
+}
+
 export function getDb(): Database.Database {
   if (!db) {
     const cfg = loadConfig();
     const dir = path.dirname(cfg.DATABASE_PATH);
     fs.mkdirSync(dir, { recursive: true });
     db = new Database(cfg.DATABASE_PATH);
-    db.pragma("journal_mode = WAL");
-    db.pragma("foreign_keys = ON");
+    applyDbPragmas(db);
     db.exec(SCHEMA_SQL);
     migrateSettings(db);
     migrateAccounts(db);

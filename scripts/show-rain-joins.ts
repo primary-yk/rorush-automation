@@ -1,29 +1,42 @@
 /**
  * Recent rain joins + saved pre-join balance (for post-rain limbo).
- * No sqlite3 CLI needed — uses the same DB as npm run dev.
+ * Safe while npm run dev is running — uses a read-only DB connection.
+ *
+ * Use a **second terminal tab** (dev keeps the first one busy).
  *
  *   npm run rain-joins
  *   npm run rain-joins -- --limit 10
  */
 import "../src/bootstrap-env.js";
 import { loadConfig, projectRoot } from "../src/config.js";
-import { getDb } from "../src/db/database.js";
-import { listAccounts } from "../src/db/repositories.js";
+import { openReadonlyDb } from "../src/db/database.js";
 
 function argVal(name: string): string | undefined {
   const i = process.argv.indexOf(name);
   return i >= 0 ? process.argv[i + 1] : undefined;
 }
 
-getDb();
 const cfg = loadConfig();
 const limit = Math.min(50, Math.max(1, Number(argVal("--limit") ?? 8) || 8));
 
+let db: ReturnType<typeof openReadonlyDb>;
+try {
+  db = openReadonlyDb();
+} catch {
+  console.error("Database not found:", cfg.DATABASE_PATH);
+  console.error("Start npm run dev once to create it, or check DATABASE_PATH in .env");
+  process.exit(1);
+}
+
 console.log("Project:", projectRoot());
 console.log("Database:", cfg.DATABASE_PATH);
-console.log("");
+console.log("(read-only — OK while dev is running; use another terminal tab)\n");
 
-const nickById = new Map(listAccounts().map((a) => [a.id, a.nickname]));
+const nickById = new Map(
+  (
+    db.prepare("SELECT id, nickname FROM accounts").all() as Array<{ id: number; nickname: string }>
+  ).map((a) => [a.id, a.nickname]),
+);
 
 type Row = {
   id: number;
@@ -36,12 +49,14 @@ type Row = {
   created_at: string;
 };
 
-const rows = getDb()
+const rows = db
   .prepare(
     `SELECT id, account_id, rain_id, amount, success, reason, balance_before_coins, created_at
      FROM rain_joins ORDER BY id DESC LIMIT ?`,
   )
   .all(limit) as Row[];
+
+db.close();
 
 if (rows.length === 0) {
   console.log("No rain joins recorded yet — join a rain with npm run dev running.");
