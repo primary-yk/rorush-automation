@@ -153,7 +153,7 @@ async function joinRainForAccountOnce(input: {
         message: "Solving rain captcha",
         detail: rain.rainId,
       });
-      captchaToken = await takeRainCaptchaToken(rain.rainId);
+      captchaToken = await takeRainCaptchaToken(rain.rainId, { forRainJoin: true });
     }
     if (!captchaToken) {
       throw new Error(
@@ -274,7 +274,7 @@ async function joinOnce(
   reqId: string,
   rainId: string,
 ): Promise<{ ok: boolean; message: string }> {
-  const captchaToken = await takeRainCaptchaToken(rainId);
+  const captchaToken = await takeRainCaptchaToken(rainId, { forRainJoin: true });
   if (!captchaToken) {
     return {
       ok: false,

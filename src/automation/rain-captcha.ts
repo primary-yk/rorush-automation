@@ -1,7 +1,14 @@
 import { isTransientNetworkError, solveCaptcha } from "../captcha/solve.js";
 
-/** hCaptcha tokens are short-lived; refresh if older than this. */
-const TOKEN_TTL_MS = 100_000;
+/** Drop cached token after this (ms). hCaptcha/RoRush often reject tokens older than ~2 min. */
+function tokenTtlMs(): number {
+  return Math.max(30_000, Number(process.env.CAPTCHA_TOKEN_TTL_MS ?? 110_000) || 110_000);
+}
+
+/** At join time, discard token older than this and solve again (site acceptance window). */
+function tokenMaxAgeForJoinMs(): number {
+  return Math.max(20_000, Number(process.env.CAPTCHA_TOKEN_MAX_AGE_MS ?? 90_000) || 90_000);
+}
 
 const cache = new Map<string, { token: string; at: number }>();
 const inflight = new Map<string, Promise<string | null>>();
@@ -13,7 +20,7 @@ function cacheKey(rainId: string): string {
 function readCached(rainId: string): string | null {
   const row = cache.get(cacheKey(rainId));
   if (!row) return null;
-  if (Date.now() - row.at > TOKEN_TTL_MS) {
+  if (Date.now() - row.at > tokenTtlMs()) {
     cache.delete(cacheKey(rainId));
     return null;
   }
@@ -56,7 +63,20 @@ export function prewarmRainCaptcha(rainId: string): void {
 }
 
 /** Use cached token from prewarm when possible; otherwise solve now. */
-export async function takeRainCaptchaToken(rainId: string): Promise<string | null> {
+export async function takeRainCaptchaToken(
+  rainId: string,
+  opts?: { forRainJoin?: boolean },
+): Promise<string | null> {
+  const row = cache.get(cacheKey(rainId));
+  if (row && opts?.forRainJoin) {
+    const age = Date.now() - row.at;
+    if (age > tokenMaxAgeForJoinMs()) {
+      console.log(
+        `[rain-captcha] cached token too old for join (${(age / 1000).toFixed(0)}s) — refreshing`,
+      );
+      cache.delete(cacheKey(rainId));
+    }
+  }
   const cached = readCached(rainId);
   if (cached) return cached;
 

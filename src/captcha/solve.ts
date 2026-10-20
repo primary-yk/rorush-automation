@@ -9,6 +9,7 @@ const PAGE_URL = process.env.RORUSH_SITE_URL ?? "https://rorush.com/";
 
 type CreateResult = { taskId?: number | string; errorCode?: string; errorDescription?: string };
 type PollResult = {
+  errorId?: number;
   status?: string;
   errorCode?: string;
   errorDescription?: string;
@@ -148,8 +149,17 @@ async function createAndPoll(
       clientKey,
       taskId,
     })) as PollResult;
+    if (resultJson.errorId != null && resultJson.errorId !== 0) {
+      const msg = resultJson.errorDescription ?? resultJson.errorCode ?? "getTaskResult failed";
+      throw new Error(msg);
+    }
     if (resultJson.status === "ready") {
-      return resultJson.solution?.gRecaptchaResponse ?? resultJson.solution?.token ?? null;
+      const token =
+        resultJson.solution?.gRecaptchaResponse ?? resultJson.solution?.token ?? null;
+      if (!token) {
+        throw new Error("2Captcha status ready but solution token missing — check sitekey/pageurl");
+      }
+      return token;
     }
     if (resultJson.errorDescription) {
       throw new Error(resultJson.errorDescription);
