@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  isPermanentRainJoinFailure,
   isRetryableRainFailure,
   isWagerRejection,
   limboResultHasOutcome,
@@ -21,7 +22,16 @@ describe("isRetryableRainFailure", () => {
   it("treats network and timeout as retryable", () => {
     expect(isRetryableRainFailure("fetch failed")).toBe(true);
     expect(isRetryableRainFailure("Rain join timed out")).toBe(true);
-    expect(isRetryableRainFailure("Captcha invalid")).toBe(false);
+    expect(isRetryableRainFailure("Captcha invalid")).toBe(true);
+    expect(isRetryableRainFailure("Something went wrong")).toBe(true);
+  });
+});
+
+describe("isPermanentRainJoinFailure", () => {
+  it("blocks only hard skips", () => {
+    expect(isPermanentRainJoinFailure("Rain amount 10 below filter")).toBe(true);
+    expect(isPermanentRainJoinFailure("Join rain disabled for account")).toBe(true);
+    expect(isPermanentRainJoinFailure("Rain join failed")).toBe(false);
   });
 });
 

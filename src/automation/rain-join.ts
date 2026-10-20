@@ -150,13 +150,28 @@ export function isWagerRejection(message: string): boolean {
   return WAGER_HINT.test(message);
 }
 
+/** Do not keep burning captcha/join attempts for these (same rain window). */
+export function isPermanentRainJoinFailure(message: string): boolean {
+  const m = message.trim();
+  if (!m) return false;
+  if (/already joined this rain/i.test(m)) return false;
+  if (/join rain disabled for account/i.test(m)) return true;
+  if (/rain amount.*below filter|below filter|pool below minimum|below minimum/i.test(m)) return true;
+  if (/wager required but limbo wager is off/i.test(m)) return true;
+  if (/account (is )?banned|permanently banned|disabled account/i.test(m)) return true;
+  return false;
+}
+
 /** Failures that may succeed on retry within the same rain window. */
 export function isRetryableRainFailure(message: string): boolean {
+  if (isPermanentRainJoinFailure(message)) return false;
   if (isWagerRejection(message)) return true;
   if (isTransientNetworkError(message)) return true;
-  return /timed out|captcha token missing|fetch failed|join timed out|too late|captcha again|complete the captcha/i.test(
-    message,
-  );
+  if (/captcha|hcaptcha|token missing|too late|timed out|fetch failed|join timed out|retry timed out/i.test(message)) {
+    return true;
+  }
+  // RoRush often returns generic copy — keep trying until the window closes.
+  return true;
 }
 
 function accountStatusForRainFailure(message: string): { status: "idle" | "error"; last_error: string } {

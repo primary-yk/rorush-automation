@@ -17,7 +17,7 @@ import {
 } from "../automation/rain-captcha.js";
 import { clearRainJoinStateForRain, isRainJoined } from "../automation/rain-join-state.js";
 import {
-  isRetryableRainFailure,
+  isPermanentRainJoinFailure,
   joinRainForAccount,
   parseRain,
   rainCaptchaPrewarmWindow,
@@ -85,6 +85,23 @@ export class AutomationEngine {
   private preWagerDoneForRain = new Set<string>();
   private captchaLowBalanceAlerted = false;
   private captchaBalanceTimer: NodeJS.Timeout | null = null;
+  private rainJoinWaitLogKeys = new Set<string>();
+
+  private rainJoinScheduleDebounceMs(): number {
+    return Math.max(3_000, Number(process.env.RAIN_JOIN_SCHEDULE_DEBOUNCE_MS ?? 5_000) || 5_000);
+  }
+
+  private rainCaptchaWaitSliceMs(): number {
+    return Math.max(2_000, Number(process.env.RAIN_CAPTCHA_WAIT_SLICE_MS ?? 12_000) || 12_000);
+  }
+
+  private rainJoinInterAttemptMs(): number {
+    return Math.max(1_500, Number(process.env.RAIN_JOIN_INTER_ATTEMPT_MS ?? 3_000) || 3_000);
+  }
+
+  private rainJoinTriesPerWindow(): number {
+    return Math.max(8, Number(process.env.RAIN_JOIN_TRIES_PER_WINDOW ?? 24) || 24);
+  }
 
   /** Join-enabled accounts all marked joined for this rain — ignore further join triggers. */
   private joinEnabledAllInRain(rainId: string): boolean {
@@ -118,9 +135,10 @@ export class AutomationEngine {
     this.hubHealthTimer = setInterval(() => {
       void this.safeRun(this.maintainSharedRainListener());
     }, 45_000);
+    const rainPrepMs = Math.max(5_000, Number(process.env.RAIN_PREP_TICK_MS ?? 10_000) || 10_000);
     this.rainPrepTimer = setInterval(() => {
       void this.safeRun(this.maintainActiveRainPrep());
-    }, 15_000);
+    }, rainPrepMs);
     this.captchaBalanceTimer = setInterval(() => {
       void this.safeRun(this.checkCaptchaBalance());
     }, 300_000);
@@ -531,116 +549,149 @@ export class AutomationEngine {
     };
   }
 
-  /** Wait for this account's captcha only, then join immediately (does not block other accounts). */
+  /** Keep trying captcha + join for this account until joined or the rain window closes. */
   private async attemptRainJoinForAccount(
     account: AccountRow,
     rainId: string,
-    captchaWaitMs: number,
   ): Promise<{ retryable: boolean }> {
     const liveRain = (): RainState | null =>
       this.activeRain?.rainId === rainId ? this.activeRain : null;
 
     if (isRainJoined(account.id, rainId)) return { retryable: false };
-    const live0 = liveRain();
-    if (!live0 || !rainJoinWindowOpen(live0)) return { retryable: false };
 
-    let accountCaptcha: string | null = null;
-    let captchaWaitTimedOut = false;
-    try {
-      const tokenPromise = takeRainCaptchaToken(rainId, {
-        accountId: account.id,
-        forRainJoin: true,
-      });
-      if (captchaWaitMs > 0) {
-        accountCaptcha = await Promise.race([
-          tokenPromise,
-          new Promise<null>((resolve) =>
-            setTimeout(() => {
-              captchaWaitTimedOut = true;
-              resolve(null);
-            }, captchaWaitMs),
-          ),
-        ]);
-      } else {
-        accountCaptcha = await tokenPromise;
+    const maxTries = this.rainJoinTriesPerWindow();
+    const sliceMs = this.rainCaptchaWaitSliceMs();
+    const pauseMs = this.rainJoinInterAttemptMs();
+    let tries = 0;
+    let hub: Awaited<ReturnType<HubRegistry["ensure"]>> | null = null;
+
+    while (tries < maxTries) {
+      tries++;
+      const live = liveRain();
+      if (!live || !rainJoinWindowOpen(live) || isRainCaptchaFinished(rainId)) {
+        break;
       }
-    } catch (err) {
-      accountCaptcha = null;
-      appendLog({
-        accountId: account.id,
-        category: "rain",
-        message: "Rain captcha error",
-        detail: err instanceof Error ? err.message : String(err),
-      });
-    }
+      if (isRainJoined(account.id, rainId)) return { retryable: false };
 
-    const live = liveRain();
-    if (!live || !rainJoinWindowOpen(live)) {
-      appendLog({
-        accountId: account.id,
-        category: "rain",
-        message: "Rain join missed (window closed)",
-        detail: `${account.nickname} · ${rainId.slice(0, 8)}…`,
-      });
-      return { retryable: false };
-    }
-    if (isRainJoined(account.id, rainId)) return { retryable: false };
-
-    if (!accountCaptcha) {
-      const reason = captchaWaitTimedOut
-        ? "Captcha still solving (timed out this pass — will retry while window open)"
-        : "Captcha token missing";
-      rainTelemetryAccountFailed(live.rainId, account.nickname, reason);
-      appendLog({
-        accountId: account.id,
-        category: "rain",
-        message: captchaWaitTimedOut ? "Rain captcha still waiting" : "Rain captcha not ready",
-        detail: `${account.nickname} · ${reason}`,
-      });
-      if (!isRainCaptchaFinished(live.rainId)) {
-        prewarmRainCaptchasParallel(live.rainId, [account.id]);
+      if (!isRainCaptchaFinished(rainId)) {
+        prewarmRainCaptchasParallel(rainId, [account.id]);
       }
-      return { retryable: true };
-    }
 
-    try {
-      rainTelemetryAccountPhase(live.rainId, account.id, account.nickname, "joining");
-      const hub = await this.accountHubs.ensure(account.id, { rain: true, cases: true });
-      const result = await joinRainForAccount({
-        accountId: account.id,
-        rain: live,
-        hub,
-        captchaToken: accountCaptcha,
-      });
-      if (result.success) {
-        rainTelemetryAccountJoined(live.rainId, account.nickname);
-        consumeRainCaptchaToken(live.rainId, account.id);
-        return { retryable: false };
-      }
-      rainTelemetryAccountFailed(live.rainId, account.nickname, result.reason);
-      if (shouldInvalidateRainCaptcha(result.reason)) {
-        consumeRainCaptchaToken(live.rainId, account.id);
-        if (!isRainCaptchaFinished(live.rainId)) {
-          prewarmRainCaptchasParallel(live.rainId, [account.id]);
+      let accountCaptcha: string | null = null;
+      while (!accountCaptcha && rainJoinWindowOpen(liveRain() ?? live)) {
+        const liveNow = liveRain();
+        if (!liveNow || isRainCaptchaFinished(rainId)) break;
+        const remaining = rainJoinWindowRemainingMs(liveNow);
+        const waitMs = Math.min(sliceMs, remaining);
+        if (waitMs < 1_500) break;
+
+        try {
+          accountCaptcha = await Promise.race([
+            takeRainCaptchaToken(rainId, {
+              accountId: account.id,
+              forRainJoin: true,
+            }),
+            new Promise<null>((resolve) => setTimeout(() => resolve(null), waitMs)),
+          ]);
+        } catch (err) {
+          appendLog({
+            accountId: account.id,
+            category: "rain",
+            message: "Rain captcha error",
+            detail: err instanceof Error ? err.message : String(err),
+          });
+        }
+
+        if (!accountCaptcha && rainJoinWindowOpen(liveNow)) {
+          const logKey = `${rainId}:${account.id}:wait`;
+          if (!this.rainJoinWaitLogKeys.has(logKey)) {
+            this.rainJoinWaitLogKeys.add(logKey);
+            appendLog({
+              accountId: account.id,
+              category: "rain",
+              message: "Rain captcha still waiting",
+              detail: `${account.nickname} · retrying until join window closes`,
+            });
+          }
         }
       }
-      return { retryable: isRetryableRainFailure(result.reason) };
-    } catch (err) {
+
+      const liveJoin = liveRain();
+      if (!liveJoin || !rainJoinWindowOpen(liveJoin) || isRainJoined(account.id, rainId)) {
+        break;
+      }
+      if (!accountCaptcha) {
+        await new Promise((r) => setTimeout(r, Math.min(pauseMs, rainJoinWindowRemainingMs(liveJoin))));
+        continue;
+      }
+
+      try {
+        rainTelemetryAccountPhase(liveJoin.rainId, account.id, account.nickname, "joining");
+        hub ??= await this.accountHubs.ensure(account.id, { rain: true, cases: true });
+        const result = await joinRainForAccount({
+          accountId: account.id,
+          rain: liveJoin,
+          hub,
+          captchaToken: accountCaptcha,
+        });
+        if (result.success) {
+          rainTelemetryAccountJoined(liveJoin.rainId, account.nickname);
+          consumeRainCaptchaToken(liveJoin.rainId, account.id);
+          return { retryable: false };
+        }
+
+        rainTelemetryAccountFailed(liveJoin.rainId, account.nickname, result.reason);
+        appendLog({
+          accountId: account.id,
+          category: "rain",
+          message: "Rain join failed (will retry)",
+          detail: `${account.nickname} · ${result.reason.slice(0, 180)}`,
+        });
+
+        if (isPermanentRainJoinFailure(result.reason)) {
+          return { retryable: false };
+        }
+
+        if (shouldInvalidateRainCaptcha(result.reason)) {
+          consumeRainCaptchaToken(liveJoin.rainId, account.id);
+          if (!isRainCaptchaFinished(liveJoin.rainId)) {
+            prewarmRainCaptchasParallel(liveJoin.rainId, [account.id]);
+          }
+        }
+      } catch (err) {
+        appendLog({
+          accountId: account.id,
+          category: "rain",
+          message: "Rain join pipeline error (will retry)",
+          detail: err instanceof Error ? err.message : String(err),
+        });
+      }
+
+      const liveAfter = liveRain();
+      if (!liveAfter || !rainJoinWindowOpen(liveAfter)) break;
+      const wait = Math.min(pauseMs, rainJoinWindowRemainingMs(liveAfter));
+      if (wait < 800) break;
+      await new Promise((r) => setTimeout(r, wait));
+    }
+
+    const liveEnd = liveRain();
+    if (liveEnd && rainJoinWindowOpen(liveEnd) && !isRainJoined(account.id, rainId)) {
       appendLog({
         accountId: account.id,
         category: "rain",
-        message: "Rain join pipeline error",
-        detail: err instanceof Error ? err.message : String(err),
+        message: "Rain join missed (window closed or max tries)",
+        detail: `${account.nickname} · ${rainId.slice(0, 8)}… · ${tries} attempt(s)`,
+        force: true,
       });
-      return { retryable: true };
     }
+    return { retryable: false };
   }
 
   private scheduleRainJoinAttempt(rain: RainState, trigger: string): void {
     if (this.rainJoinInFlight.has(rain.rainId)) return;
     if (this.joinEnabledAllInRain(rain.rainId)) return;
     const last = this.rainJoinLastAttempt.get(rain.rainId) ?? 0;
-    if (Date.now() - last < 12_000) return;
+    if (Date.now() - last < this.rainJoinScheduleDebounceMs()) return;
     this.rainJoinLastAttempt.set(rain.rainId, Date.now());
     void this.onRainMaybeJoin(rain, trigger);
   }
@@ -689,84 +740,47 @@ export class AutomationEngine {
     });
 
     this.rainJoinInFlight.add(rain.rainId);
-    const retryMs = Math.max(8_000, Number(process.env.RAIN_JOIN_RETRY_MS ?? 12_000) || 12_000);
-    let loggedCaptchaWait = false;
     try {
-      while (true) {
-        const live =
-          this.activeRain?.rainId === rain.rainId ? this.activeRain : rain;
-        if (!rainJoinWindowOpen(live)) break;
+      const live =
+        this.activeRain?.rainId === rain.rainId ? this.activeRain : rain;
+      if (!rainJoinWindowOpen(live)) return;
 
-        const pending = this.joinRainEligibleAccounts(live);
-        if (pending.length === 0) {
-          const enabled = this.joinRainEnabledAccounts().filter((a) => !isRainJoined(a.id, live.rainId));
-          if (enabled.length > 0) {
-            appendLog({
-              category: "rain",
-              message: "Rain join stalled (no eligible pilots)",
-              detail: `${live.rainId.slice(0, 8)}… · check min pool vs rain amount`,
-            });
-          }
-          break;
-        }
-
-        rainTelemetryJoinAttempt(
-          live.rainId,
-          pending.map((a) => a.nickname),
-        );
-        const pendingIds = pending.map((a) => a.id);
-        if (!isRainCaptchaFinished(live.rainId)) {
-          this.kickoffRainJoinPrep(live);
-        }
-
-        if (!loggedCaptchaWait) {
-          loggedCaptchaWait = true;
-          const secLeft = Math.round(rainJoinWindowRemainingMs(live) / 1000);
+      const pending = this.joinRainEligibleAccounts(live);
+      if (pending.length === 0) {
+        const enabled = this.joinRainEnabledAccounts().filter((a) => !isRainJoined(a.id, live.rainId));
+        if (enabled.length > 0) {
           appendLog({
             category: "rain",
-            message: "Rain captcha solving",
-            detail: `${live.rainId} · ~${secLeft}s left · ${pendingIds.length} account(s) · join each as token is ready`,
+            message: "Rain join stalled (no eligible pilots)",
+            detail: `${live.rainId.slice(0, 8)}… · check min pool vs rain amount`,
           });
         }
-
-        const captchaWaitMs = Math.min(
-          rainJoinWindowRemainingMs(live),
-          Math.max(45_000, Number(process.env.RAIN_CAPTCHA_PARALLEL_WAIT_MS ?? 150_000) || 150_000),
-        );
-
-        const joinResults = await Promise.all(
-          pending.map((account) =>
-            this.attemptRainJoinForAccount(account, live.rainId, captchaWaitMs),
-          ),
-        );
-        const anyRetryableFail = joinResults.some((r) => r.retryable);
-
-        if (!rainJoinWindowOpen(live)) break;
-
-        const stillPending = this.joinRainEligibleAccounts(live);
-        if (stillPending.length === 0) break;
-        if (!rainJoinWindowOpen(live)) break;
-        if (!anyRetryableFail) {
-          const stuck = pending.filter((a) => !isRainJoined(a.id, live.rainId));
-          if (stuck.length > 0) {
-            appendLog({
-              category: "rain",
-              message: "Rain join stopped (non-retryable)",
-              detail: `${stuck.map((a) => a.nickname).join(", ")} · see Rain join failed lines above`,
-            });
-          }
-          break;
-        }
-
-        const wait = Math.min(
-          anyRetryableFail ? 4_000 : retryMs,
-          rainJoinWindowRemainingMs(live),
-        );
-        if (wait < 2_000) break;
-        await new Promise((r) => setTimeout(r, wait));
+        return;
       }
+
+      rainTelemetryJoinAttempt(
+        live.rainId,
+        pending.map((a) => a.nickname),
+      );
+      if (!isRainCaptchaFinished(live.rainId)) {
+        this.kickoffRainJoinPrep(live);
+      }
+
+      const secLeft = Math.round(rainJoinWindowRemainingMs(live) / 1000);
+      appendLog({
+        category: "rain",
+        message: "Rain join active",
+        detail: `${live.rainId.slice(0, 8)}… · ~${secLeft}s left · ${pending.length} account(s) · retry until joined or window closes`,
+      });
+
+      await Promise.all(
+        pending.map((account) => this.attemptRainJoinForAccount(account, live.rainId)),
+      );
     } finally {
       this.rainJoinInFlight.delete(rain.rainId);
+      for (const key of [...this.rainJoinWaitLogKeys]) {
+        if (key.startsWith(`${rain.rainId}:`)) this.rainJoinWaitLogKeys.delete(key);
+      }
     }
 
     const tel = rainTelemetryGet(rain.rainId);
