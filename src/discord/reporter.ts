@@ -206,16 +206,31 @@ export async function reportRainJoinWindowOpen(input: {
   rainId: string;
   poolCoins: number | null;
   captchaReady: number;
+  captchaSolving?: number;
   captchaTotal: number;
   windowSec: number;
 }): Promise<void> {
+  const solving = input.captchaSolving ?? 0;
+  const desc =
+    input.captchaReady >= input.captchaTotal
+      ? "All captcha tokens ready — joining pilots now."
+      : solving > 0
+        ? `${solving} solve(s) already running on 2Captcha. **0 ready at window open is normal** — joins fire when tokens land.`
+        : "Join stage is live. Waiting on 2Captcha (check balance if this stays 0/ready).";
   await deliverEmbed({
     title: "Rain — Join window open",
-    description: "Join stage is live. Pilots join as each captcha token is ready.",
+    description: desc,
     color: COLORS.rainOk,
     fields: [
       { name: "Pool", value: input.poolCoins != null ? formatCoins(input.poolCoins) : "—", inline: true },
-      { name: "Captchas", value: `${input.captchaReady}/${input.captchaTotal} ready`, inline: true },
+      {
+        name: "Captchas",
+        value:
+          solving > 0
+            ? `${input.captchaReady}/${input.captchaTotal} ready · ${solving} solving`
+            : `${input.captchaReady}/${input.captchaTotal} ready`,
+        inline: true,
+      },
       { name: "Window", value: `~${input.windowSec}s`, inline: true },
       { name: "Rain", value: shortRainId(input.rainId), inline: false },
     ],

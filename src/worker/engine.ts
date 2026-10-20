@@ -287,10 +287,12 @@ export class AutomationEngine {
     const tel = rainTelemetryGet(rain.rainId);
     const ready =
       tel?.accountStatuses.filter((s) => s.phase === "ready" || s.phase === "joined").length ?? 0;
+    const solving = tel?.accountStatuses.filter((s) => s.phase === "solving").length ?? 0;
     void reportRainJoinWindowOpen({
       rainId: rain.rainId,
       poolCoins: rain.amount ?? null,
       captchaReady: ready,
+      captchaSolving: solving,
       captchaTotal: eligible.length,
       windowSec: Math.round(rainJoinWindowRemainingMs(rain) / 1000),
     });
