@@ -12,6 +12,7 @@
     "update-account": "tsx scripts/update-account-cli.ts",
     "test-login": "tsx scripts/test-login.ts",
     "test-stats": "tsx scripts/test-stats.ts",
+    "last-rain-errors": "tsx scripts/last-rain-errors.ts",
     "test-captcha": "tsx scripts/test-captcha.ts",
     "preflight": "tsx scripts/preflight.ts",
     "show-urls": "tsx scripts/show-dashboard-url.ts",

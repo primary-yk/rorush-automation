@@ -271,26 +271,24 @@ export class AutomationEngine {
     this.rainJoinInFlight.add(rain.rainId);
     try {
       for (const account of accounts) {
-      try {
-        const hub = await this.accountHubs.ensure(account.id, { rain: true, cases: true });
-        const result = await joinRainForAccount({ accountId: account.id, rain, hub });
-        const retryable =
-          !result.success &&
-          rainJoinWindowOpen(rain) &&
-          (isWagerRejection(result.reason) ||
-            /captcha|timed out/i.test(result.reason));
-        if (retryable) {
-          this.rainJoinLastAttempt.delete(rain.rainId);
-          this.scheduleRainJoinAttempt(rain, "retry_after_fail");
+        try {
+          const hub = await this.accountHubs.ensure(account.id, { rain: true, cases: true });
+          const result = await joinRainForAccount({ accountId: account.id, rain, hub });
+          // Only retry wager blocks — captcha/timeouts used to re-queue and spam "Rain join error".
+          const retryable =
+            !result.success && rainJoinWindowOpen(rain) && isWagerRejection(result.reason);
+          if (retryable) {
+            this.rainJoinLastAttempt.delete(rain.rainId);
+            this.scheduleRainJoinAttempt(rain, "retry_after_fail");
+          }
+        } catch (err) {
+          appendLog({
+            accountId: account.id,
+            category: "rain",
+            message: "Rain join pipeline error",
+            detail: err instanceof Error ? err.message : String(err),
+          });
         }
-      } catch (err) {
-        appendLog({
-          accountId: account.id,
-          category: "rain",
-          message: "Rain join pipeline error",
-          detail: err instanceof Error ? err.message : String(err),
-        });
-      }
       }
     } finally {
       this.rainJoinInFlight.delete(rain.rainId);

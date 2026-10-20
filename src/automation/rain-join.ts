@@ -175,7 +175,13 @@ export async function joinRainForAccount(input: {
     clearRainCaptcha(rain.rainId);
     recordRainJoin({ accountId, rainId: rain.rainId, amount: rainAmount, success: false, reason });
     updateAccount(accountId, { status: "error", last_error: reason });
-    appendLog({ accountId, category: "rain", message: "Rain join error", detail: reason });
+    const headline = reason.split("\n")[0]!.trim().slice(0, 220);
+    appendLog({
+      accountId,
+      category: "rain",
+      message: `Rain join error: ${headline}`,
+      detail: `${rain.rainId}\n${reason}`,
+    });
     return { success: false, reason };
   }
 }
