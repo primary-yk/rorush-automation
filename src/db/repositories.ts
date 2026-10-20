@@ -3,6 +3,7 @@ import { getDb } from "./database.js";
 export type AccountRow = {
   id: number;
   nickname: string;
+  owner_discord_id: string | null;
   username: string | null;
   password_enc: string | null;
   session_jwt_enc: string | null;
@@ -87,6 +88,7 @@ export function getAccount(id: number): AccountRow | undefined {
 
 export function insertAccount(input: {
   nickname: string;
+  owner_discord_id?: string | null;
   username?: string | null;
   password_enc?: string | null;
   session_jwt_enc?: string | null;
@@ -96,11 +98,12 @@ export function insertAccount(input: {
   const now = new Date().toISOString();
   const info = getDb()
     .prepare(
-      `INSERT INTO accounts (nickname, username, password_enc, session_jwt_enc, api_key_enc, proxy_url, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO accounts (nickname, owner_discord_id, username, password_enc, session_jwt_enc, api_key_enc, proxy_url, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       input.nickname,
+      input.owner_discord_id ?? null,
       input.username ?? null,
       input.password_enc ?? null,
       input.session_jwt_enc ?? null,
@@ -121,7 +124,7 @@ export function updateAccount(
   const next = { ...current, ...patch, updated_at: new Date().toISOString() };
   getDb()
     .prepare(
-      `UPDATE accounts SET nickname = ?, username = ?, password_enc = ?, session_jwt_enc = ?, api_key_enc = ?,
+      `UPDATE accounts SET nickname = ?, owner_discord_id = ?, username = ?, password_enc = ?, session_jwt_enc = ?, api_key_enc = ?,
        proxy_url = ?, join_rain = ?, min_rain_amount = ?, auto_open_cases = ?, auto_redeem_codes = ?,
        min_code_level = ?, limbo_wager_enabled = ?, limbo_multiplier = ?, limbo_bet_coins = ?,
        status = ?, last_error = ?, balance = ?, level = ?,
@@ -130,6 +133,7 @@ export function updateAccount(
     )
     .run(
       next.nickname,
+      next.owner_discord_id,
       next.username,
       next.password_enc,
       next.session_jwt_enc,

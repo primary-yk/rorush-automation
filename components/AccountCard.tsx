@@ -100,7 +100,14 @@ export function AccountCard({
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
               <h3 className="text-xl font-semibold tracking-tight text-white">{local.nickname}</h3>
-              <p className="mt-0.5 text-sm text-slate-400">{local.username ?? "Session login"}</p>
+              <p className="mt-0.5 text-sm text-slate-400">
+                {local.username ?? "Session login"}
+                {local.ownerDiscordId ? (
+                  <span className="text-slate-500"> · Discord friend</span>
+                ) : (
+                  <span className="text-slate-500"> · Host dashboard</span>
+                )}
+              </p>
             </div>
             <StatusPill ok={ok} label={local.status} />
           </div>

@@ -26,6 +26,7 @@ function migrateAccounts(db: Database.Database): void {
     (db.prepare("PRAGMA table_info(accounts)").all() as Array<{ name: string }>).map((c) => c.name),
   );
   const add: Array<[string, string]> = [
+    ["owner_discord_id", "TEXT"],
     ["limbo_wager_enabled", "INTEGER NOT NULL DEFAULT 1"],
     ["limbo_multiplier", "REAL NOT NULL DEFAULT 1.1"],
     ["limbo_bet_coins", "REAL NOT NULL DEFAULT 1"],

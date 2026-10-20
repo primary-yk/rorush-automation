@@ -1,6 +1,7 @@
 export type Account = {
   id: number;
   nickname: string;
+  ownerDiscordId: string | null;
   username: string | null;
   hasPassword: boolean;
   hasSession: boolean;

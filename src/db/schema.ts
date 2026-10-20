@@ -22,6 +22,7 @@ VALUES (1, 0, 0, datetime('now'));
 CREATE TABLE IF NOT EXISTS accounts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   nickname TEXT NOT NULL,
+  owner_discord_id TEXT,
   username TEXT,
   password_enc TEXT,
   session_jwt_enc TEXT,

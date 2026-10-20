@@ -4,6 +4,7 @@ import { startApiServer } from "./api/server.js";
 import { engine } from "./worker/engine.js";
 import { captchaApiKey, loadConfig, projectRoot } from "./config.js";
 import { listAccounts } from "./db/repositories.js";
+import { startFriendsDiscordBot, stopFriendsDiscordBot } from "./discord/friends-bot.js";
 import { startPilotRelayClient, stopPilotRelayClient } from "./relay/pilot-client.js";
 
 process.on("uncaughtException", (err) => {
@@ -31,7 +32,11 @@ async function main() {
   }
   console.log(`Project root: ${projectRoot()}`);
   await engine.start();
-  startPilotRelayClient();
+  if (process.env.DISCORD_BOT_RELAY_URL?.trim()) {
+    startPilotRelayClient();
+  } else {
+    await startFriendsDiscordBot();
+  }
 }
 
 main().catch((err) => {
@@ -41,6 +46,7 @@ main().catch((err) => {
 
 process.on("SIGINT", async () => {
   stopPilotRelayClient();
+  await stopFriendsDiscordBot();
   await engine.stop();
   closeDb();
   process.exit(0);
@@ -48,6 +54,7 @@ process.on("SIGINT", async () => {
 
 process.on("SIGTERM", async () => {
   stopPilotRelayClient();
+  await stopFriendsDiscordBot();
   await engine.stop();
   closeDb();
   process.exit(0);

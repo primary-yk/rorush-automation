@@ -212,7 +212,8 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
               </span>
             </h1>
             <p className="mt-2 max-w-xl text-slate-400">
-              Rain, reward cases, and Discord codes — running locally with encrypted credentials.
+              You host the engine on this PC. Friends use slash commands in Discord only — add or remove any
+              account here.
             </p>
           </div>
 

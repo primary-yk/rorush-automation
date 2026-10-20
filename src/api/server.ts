@@ -271,6 +271,7 @@ function publicAccount(a: ReturnType<typeof listAccounts>[number]) {
   return {
     id: a.id,
     nickname: a.nickname,
+    ownerDiscordId: a.owner_discord_id ?? null,
     username: a.username,
     hasPassword: !!a.password_enc,
     hasSession: !!a.session_jwt_enc,
