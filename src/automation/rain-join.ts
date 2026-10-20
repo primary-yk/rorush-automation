@@ -247,7 +247,10 @@ async function joinRainForAccountOnce(input: {
         message: "Solving rain captcha",
         detail: rain.rainId,
       });
-      captchaToken = await takeRainCaptchaToken(rain.rainId, { forRainJoin: true });
+      captchaToken = await takeRainCaptchaToken(rain.rainId, {
+        forRainJoin: true,
+        accountId,
+      });
     }
     if (!captchaToken) {
       throw new Error(
@@ -273,7 +276,7 @@ async function joinRainForAccountOnce(input: {
       });
       await placeLimboWagerBet(accountId, client, hub, account, rainAmount, account.nickname, rain.rainId);
       const retryReq = uuid();
-      let retryOutcome = await joinOnce(hub, retryReq, rain.rainId);
+      let retryOutcome = await joinOnce(hub, retryReq, rain.rainId, accountId);
       outcome = retryOutcome;
       // Some rains need more than one rain-sized wager before join succeeds.
       let extraWagers = 0;
@@ -292,7 +295,7 @@ async function joinRainForAccountOnce(input: {
         });
         await placeLimboWagerBet(accountId, client, hub, account, rainAmount, account.nickname, rain.rainId);
         const againReq = uuid();
-        retryOutcome = await joinOnce(hub, againReq, rain.rainId);
+        retryOutcome = await joinOnce(hub, againReq, rain.rainId, accountId);
         outcome = retryOutcome;
       }
     } else if (!outcome.ok && isWagerRejection(outcome.message)) {
@@ -383,8 +386,9 @@ async function joinOnce(
   hub: RoRushHub,
   reqId: string,
   rainId: string,
+  accountId: number,
 ): Promise<{ ok: boolean; message: string }> {
-  const captchaToken = await takeRainCaptchaToken(rainId, { forRainJoin: true });
+  const captchaToken = await takeRainCaptchaToken(rainId, { forRainJoin: true, accountId });
   if (!captchaToken) {
     return {
       ok: false,
