@@ -7,6 +7,7 @@ import "../src/bootstrap-env.js";
 import { captchaApiKey, loadConfig, projectRoot } from "../src/config.js";
 import {
   detectCaptchaProvider,
+  fetchCaptchaBalance,
   resolveCaptchaProvider,
   solveCaptcha,
 } from "../src/captcha/solve.js";
@@ -32,7 +33,18 @@ async function main() {
     provider,
     detected ? `(detected via balance: ${detected})` : "(from CAPTCHA_PROVIDER)",
   );
-  console.log("Requesting one hCaptcha token (often 20–90s; 2Captcha queue varies)…");
+  if (provider === "2captcha") {
+    const bal = await fetchCaptchaBalance(key);
+    if (bal != null) {
+      console.log("2Captcha balance: $" + bal.toFixed(2));
+      if (bal < 0.5) {
+        console.warn("Balance is low — top up at 2captcha.com if solves fail or stall.");
+      }
+    }
+  }
+  console.log(
+    "Requesting one hCaptcha token (often 30–120s; set CAPTCHA_VERBOSE=1 to see wait progress)…",
+  );
   const started = Date.now();
   const token = await solveCaptcha("hcaptcha");
   const sec = ((Date.now() - started) / 1000).toFixed(1);

@@ -135,13 +135,18 @@ async function createAndPoll(
   }
 
   const pollMs = Math.max(800, Number(process.env.CAPTCHA_POLL_MS ?? 1500) || 1500);
-  for (let i = 0; i < 60; i++) {
+  const maxPolls = Math.max(20, Number(process.env.CAPTCHA_MAX_POLLS ?? 120) || 120);
+  const verbose = /^(1|true|yes|on)$/i.test(process.env.CAPTCHA_VERBOSE?.trim() ?? "");
+  const started = Date.now();
+  const taskId = createJson.taskId;
+
+  for (let i = 0; i < maxPolls; i++) {
     if (i > 0) {
       await new Promise((r) => setTimeout(r, pollMs));
     }
     const resultJson = (await postJson(resultUrl(provider), {
       clientKey,
-      taskId: createJson.taskId,
+      taskId,
     })) as PollResult;
     if (resultJson.status === "ready") {
       return resultJson.solution?.gRecaptchaResponse ?? resultJson.solution?.token ?? null;
@@ -149,8 +154,30 @@ async function createAndPoll(
     if (resultJson.errorDescription) {
       throw new Error(resultJson.errorDescription);
     }
+    if (verbose && i > 0 && i % 10 === 0) {
+      const sec = ((Date.now() - started) / 1000).toFixed(0);
+      console.log(`[captcha] still waiting… ${sec}s (task ${String(taskId).slice(0, 8)}…)`);
+    }
   }
-  throw new Error("Captcha solve timed out");
+  const waitedSec = ((Date.now() - started) / 1000).toFixed(0);
+  throw new Error(
+    `Captcha solve timed out after ~${waitedSec}s (${maxPolls} polls). ` +
+      "2Captcha queue may be slow — raise CAPTCHA_MAX_POLLS or CAPTCHA_POLL_MS in .env, " +
+      "try off-peak, or set CAPTCHA_PROVIDER=capsolver. Keep npm run dev up during tip stage for prewarm.",
+  );
+}
+
+export async function fetchCaptchaBalance(clientKey: string): Promise<number | null> {
+  try {
+    const json = (await postJson("https://api.2captcha.com/getBalance", { clientKey })) as {
+      errorCode?: string;
+      balance?: number;
+    };
+    if (json.errorCode) return null;
+    return typeof json.balance === "number" ? json.balance : null;
+  } catch {
+    return null;
+  }
 }
 
 let cachedProvider: CaptchaProvider | null = null;
