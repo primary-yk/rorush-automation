@@ -10,7 +10,7 @@ export type DashboardTab = "overview" | "accounts" | "activity" | "settings";
 const NAV: { id: DashboardTab; label: string; Icon: typeof IconGrid }[] = [
   { id: "overview", label: "Overview", Icon: IconGrid },
   { id: "accounts", label: "Accounts", Icon: IconUsers },
-  { id: "activity", label: "Activity", Icon: IconActivity },
+  { id: "activity", label: "Timeline", Icon: IconActivity },
   { id: "settings", label: "Settings", Icon: IconSettings },
 ];
 

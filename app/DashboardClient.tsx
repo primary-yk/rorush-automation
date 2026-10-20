@@ -322,12 +322,18 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
               action={
                 logs.length > 5 ? (
                   <Button variant="ghost" size="sm" onClick={() => setTab("activity")}>
-                    View all
+                    Open timeline
                   </Button>
                 ) : undefined
               }
             />
-            <ActivityFeed logs={logs.slice(0, 8)} accountsById={accountsById} compact maxHeight="420px" />
+            <ActivityFeed
+              logs={logs.slice(0, 8)}
+              accountsById={accountsById}
+              compact
+              maxHeight="420px"
+              showViewToggle={false}
+            />
           </Card>
         </div>
       )}
@@ -400,18 +406,18 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
         <div className="space-y-6">
           <SectionTitle
             eyebrow="Live"
-            title="Activity log"
-            description="Rain attempts, case opens, limbo wagers, and system messages. Secrets never appear here."
+            title="Timeline"
+            description="Joins, payouts, limbo, and errors — routine captcha noise stays in All events."
           />
           <Card padding="lg">
             <div className="mb-4">
               <Input
-                placeholder="Search activity — rain, limbo, account name…"
+                placeholder="Search timeline — rain, limbo, account name…"
                 value={activitySearch}
                 onChange={(e) => setActivitySearch(e.target.value)}
               />
             </div>
-            <ActivityFeed logs={logs} accountsById={accountsById} search={activitySearch} />
+            <ActivityFeed logs={logs} accountsById={accountsById} search={activitySearch} showViewToggle />
           </Card>
         </div>
       )}
@@ -429,12 +435,12 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
           <Card glow="violet">
             <SectionTitle
               title="Privacy on this dashboard"
-              description="Blur RoRush login emails on account cards and activity. Stream-safe when friends look at your screen."
+              description="Mask RoRush login emails on account cards and the timeline. Stream-safe when friends look at your screen."
             />
             <div className="flex flex-wrap items-center gap-4">
               <Toggle
                 label="Blur emails on screen"
-                description={blurEmails ? "Hover an email to peek · or use Show emails in header" : "Emails visible on account cards"}
+                description={blurEmails ? "Masked by default · click an email or use Show emails in header" : "Full emails visible on account cards"}
                 checked={blurEmails}
                 onChange={(v) => setBlurEmails(v)}
               />

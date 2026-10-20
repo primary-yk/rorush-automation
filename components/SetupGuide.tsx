@@ -42,7 +42,7 @@ const STEPS = [
     body: (
       <>
         Save a nickname and login under <strong className="text-slate-300">Accounts</strong>. Enable Join rain, turn{" "}
-        <strong className="text-slate-300">Global pause</strong> off, and watch the Activity tab during the next rain.
+        <strong className="text-slate-300">Global pause</strong> off, and watch the Timeline tab during the next rain.
       </>
     ),
   },

@@ -15,6 +15,25 @@ import { Button } from "./ui";
 const STORAGE_KEY = "rush-pilot-blur-emails";
 
 const EMAIL_RE = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g;
+const EMAIL_SINGLE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+
+export function maskEmail(email: string): string {
+  const trimmed = email.trim();
+  const at = trimmed.indexOf("@");
+  if (at <= 0) return "•••••";
+  const user = trimmed.slice(0, at);
+  const domain = trimmed.slice(at + 1);
+  const dot = domain.lastIndexOf(".");
+  const tld = dot >= 0 ? domain.slice(dot) : "";
+  const host = dot >= 0 ? domain.slice(0, dot) : domain;
+  const u = user.length <= 1 ? "•" : `${user[0]}•••`;
+  const h = host.length <= 1 ? "•••" : `${host[0]}••••`;
+  return `${u}@${h}${tld}`;
+}
+
+export function isEmailLike(text: string): boolean {
+  return EMAIL_SINGLE.test(text.trim());
+}
 
 type PrivacyCtx = {
   blurEmails: boolean;
@@ -83,43 +102,55 @@ export function usePrivacyBlur(): PrivacyCtx {
 export function SensitiveText({
   text,
   className,
-  revealOnHover = true,
 }: {
   text: string;
   className?: string;
-  revealOnHover?: boolean;
 }) {
   const { blurEmails } = usePrivacyBlur();
+  const [revealed, setRevealed] = useState(false);
   const trimmed = text.trim();
-  const looksEmail = EMAIL_RE.test(trimmed);
+  const looksEmail = isEmailLike(trimmed);
 
-  if (!blurEmails || !looksEmail) {
+  if (!looksEmail) {
     return <span className={className}>{text}</span>;
   }
 
+  if (!blurEmails || revealed) {
+    return (
+      <span className={className}>
+        {text}
+        {blurEmails && (
+          <button
+            type="button"
+            className="ml-2 text-[11px] font-normal text-violet-400/80 underline-offset-2 hover:underline"
+            onClick={() => setRevealed(false)}
+          >
+            Hide
+          </button>
+        )}
+      </span>
+    );
+  }
+
   return (
-    <span
+    <button
+      type="button"
+      onClick={() => setRevealed(true)}
       className={clsx(
         className,
-        "inline-block rounded-md bg-violet-500/10 px-1.5 py-0.5 font-mono text-sm text-violet-100/90",
-        revealOnHover && "blur-[5px] transition hover:blur-none focus-within:blur-none",
-        !revealOnHover && "blur-[5px]",
+        "inline-block cursor-pointer rounded-md bg-black/50 px-1.5 py-0.5 font-mono text-sm tracking-wide text-violet-200/80 ring-1 ring-violet-500/25 transition hover:ring-violet-400/40",
       )}
-      title="Email hidden — use Show emails in the header or Settings"
+      title="Login email hidden — click to reveal, or use Show emails in the header"
     >
-      {trimmed}
-    </span>
+      {maskEmail(trimmed)}
+    </button>
   );
 }
 
 /** Redact emails in free-form log lines when blur is on. */
 export function redactEmailsInText(text: string, blur: boolean): string {
   if (!blur) return text;
-  return text.replace(EMAIL_RE, (email) => {
-    const [user, domain] = email.split("@");
-    const u = user.length <= 2 ? "••" : `${user.slice(0, 1)}•••`;
-    return `${u}@${domain}`;
-  });
+  return text.replace(new RegExp(EMAIL_RE.source, "g"), (email) => maskEmail(email));
 }
 
 export function PrivacyEmailToggle({ compact }: { compact?: boolean }) {
