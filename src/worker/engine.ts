@@ -172,6 +172,7 @@ export class AutomationEngine {
         if (!rain) continue;
         this.activeRain = this.mergeRainState(rain);
         if (rainJoinWindowOpen(this.activeRain)) {
+          prewarmRainCaptcha(this.activeRain.rainId);
           this.scheduleRainJoinAttempt(this.activeRain, "current_rains");
         }
       }

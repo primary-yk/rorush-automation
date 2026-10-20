@@ -20,12 +20,22 @@ function readCached(rainId: string): string | null {
   return row.token;
 }
 
+function logSolveDone(rainId: string, started: number, token: string | null): void {
+  const sec = ((Date.now() - started) / 1000).toFixed(1);
+  console.log(
+    `[rain-captcha] ${rainId.slice(0, 8)}… ${token ? "ready" : "failed"} in ${sec}s`,
+  );
+}
+
 /** Start solving during tip stage so the token is ready when the join window opens (~90s). */
 export function prewarmRainCaptcha(rainId: string): void {
   if (!rainId || readCached(rainId)) return;
   if (inflight.has(cacheKey(rainId))) return;
+  const started = Date.now();
+  console.log(`[rain-captcha] prewarm ${rainId.slice(0, 8)}…`);
   const p = solveCaptcha("hcaptcha")
     .then((token) => {
+      logSolveDone(rainId, started, token);
       if (token) cache.set(cacheKey(rainId), { token, at: Date.now() });
       return token;
     })
@@ -42,7 +52,10 @@ export async function takeRainCaptchaToken(rainId: string): Promise<string | nul
 
   let p = inflight.get(cacheKey(rainId));
   if (!p) {
+    const started = Date.now();
+    console.log(`[rain-captcha] solve now ${rainId.slice(0, 8)}… (no cache)`);
     p = solveCaptcha("hcaptcha").then((token) => {
+      logSolveDone(rainId, started, token);
       if (token) cache.set(cacheKey(rainId), { token, at: Date.now() });
       return token;
     });

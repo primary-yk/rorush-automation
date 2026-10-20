@@ -146,7 +146,9 @@ async function createAndPoll(
   }
 
   for (let i = 0; i < 60; i++) {
-    await new Promise((r) => setTimeout(r, 3000));
+    if (i > 0) {
+      await new Promise((r) => setTimeout(r, i <= 20 ? 2000 : 3000));
+    }
     const resultJson = (await postJson(resultUrl(provider), {
       clientKey,
       taskId: createJson.taskId,
@@ -163,11 +165,24 @@ async function createAndPoll(
 
 let cachedProvider: CaptchaProvider | null = null;
 
-export async function resolveCaptchaProvider(clientKey: string): Promise<CaptchaProvider> {
+export async function resolveCaptchaProvider(
+  clientKey: string,
+  kind: CaptchaKind = "hcaptcha",
+): Promise<CaptchaProvider> {
   const forced = providerFromEnv();
   if (forced !== "auto") return forced;
-  if (cachedProvider) return cachedProvider;
+  if (cachedProvider && !(kind === "hcaptcha" && cachedProvider === "capmonster")) {
+    return cachedProvider;
+  }
   const detected = await detectCaptchaProvider(clientKey);
+  if (detected && !(kind === "hcaptcha" && detected === "capmonster")) {
+    cachedProvider = detected;
+    return detected;
+  }
+  if (kind === "hcaptcha") {
+    cachedProvider = "2captcha";
+    return "2captcha";
+  }
   if (detected) {
     cachedProvider = detected;
     return detected;
@@ -180,15 +195,15 @@ export async function solveCaptcha(kind: CaptchaKind): Promise<string | null> {
   const clientKey = captchaApiKey();
   if (!clientKey) return null;
 
-  const provider = await resolveCaptchaProvider(clientKey);
+  const provider = await resolveCaptchaProvider(clientKey, kind);
   try {
     return await createAndPoll(provider, clientKey, kind);
   } catch (firstErr) {
     const forced = providerFromEnv();
     if (forced !== "auto") throw firstErr;
-    const others: CaptchaProvider[] = ["capmonster", "2captcha", "capsolver"].filter(
-      (p) => p !== provider,
-    ) as CaptchaProvider[];
+    const others: CaptchaProvider[] = (
+      kind === "hcaptcha" ? ["2captcha", "capsolver"] : ["capmonster", "2captcha", "capsolver"]
+    ).filter((p) => p !== provider) as CaptchaProvider[];
     for (const alt of others) {
       try {
         cachedProvider = alt;

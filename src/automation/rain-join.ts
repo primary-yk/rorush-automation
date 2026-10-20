@@ -1,5 +1,4 @@
 import { v4 as uuid } from "uuid";
-import { solveCaptcha } from "../captcha/capmonster.js";
 import { clearRainCaptcha, takeRainCaptchaToken } from "./rain-captcha.js";
 import { loadConfig } from "../config.js";
 import {
@@ -259,11 +258,11 @@ async function joinOnce(
   reqId: string,
   rainId: string,
 ): Promise<{ ok: boolean; message: string }> {
-  const captchaToken = await solveCaptcha("hcaptcha");
+  const captchaToken = await takeRainCaptchaToken(rainId);
   if (!captchaToken) {
     return {
       ok: false,
-      message: "Captcha token missing — set CAPMONSTER_API_KEY (and check CapMonster balance)",
+      message: "Captcha token missing — set CAPTCHA_API_KEY + CAPTCHA_PROVIDER=2captcha",
     };
   }
   const outcomePromise = new Promise<{ ok: boolean; message: string }>((resolve) => {
