@@ -292,18 +292,28 @@ export class AutomationEngine {
           client.getBalance(),
           client.getLevel(),
         ]);
-        const balanceCents = parseBalanceCents(balanceRaw);
+        const balanceRawAmount = parseBalanceCents(balanceRaw);
         const level = parseLevel(levelRaw);
         const patch: Parameters<typeof updateAccount>[1] = { status: "idle" };
-        if (balanceCents != null) patch.balance = balanceCents / 100;
+        if (balanceRawAmount != null) {
+          patch.balance =
+            Number.isInteger(balanceRawAmount) && Math.abs(balanceRawAmount) >= 100
+              ? balanceRawAmount / 100
+              : balanceRawAmount;
+        }
         if (level != null) patch.level = level;
         const row = listAccounts().find((a) => a.id === account.id);
         if (row?.last_error && isIgnorableCaseError(row.last_error)) {
           patch.last_error = null;
         }
         updateAccount(account.id, patch);
-      } catch {
-        /* logged in ensureAuthenticated */
+      } catch (err) {
+        appendLog({
+          accountId: account.id,
+          category: "system",
+          message: "Could not refresh balance/level",
+          detail: err instanceof Error ? err.message : String(err),
+        });
       }
     }
   }

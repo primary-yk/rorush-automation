@@ -51,6 +51,10 @@ export function parseLevel(body: unknown): number | null {
   for (const key of ["level", "currentLevel", "userLevel"] as const) {
     const v = record[key];
     if (typeof v === "number" && Number.isFinite(v)) return Math.trunc(v);
+    if (typeof v === "string" && v.trim() !== "") {
+      const n = Number(v);
+      if (Number.isFinite(n)) return Math.trunc(n);
+    }
   }
   const nested = record.userInfo as Record<string, unknown> | undefined;
   if (nested && typeof nested.level === "number") return Math.trunc(nested.level);
