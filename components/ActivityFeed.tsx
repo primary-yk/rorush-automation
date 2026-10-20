@@ -5,16 +5,22 @@ import { useMemo, useState } from "react";
 import { FormattedDateTime } from "./FormattedDateTime";
 import type { ActivityLog } from "@/lib/api";
 
-const CATEGORY_STYLE: Record<string, { dot: string; label: string }> = {
-  rain: { dot: "bg-sky-400", label: "Rain" },
-  case: { dot: "bg-amber-400", label: "Cases" },
-  limbo: { dot: "bg-fuchsia-400", label: "Limbo" },
-  discord: { dot: "bg-indigo-400", label: "Discord" },
-  system: { dot: "bg-slate-400", label: "System" },
+const CATEGORY_STYLE: Record<string, { dot: string; label: string; border: string }> = {
+  rain: { dot: "bg-sky-400", label: "Rain", border: "border-l-sky-400/70" },
+  case: { dot: "bg-amber-400", label: "Cases", border: "border-l-amber-400/70" },
+  limbo: { dot: "bg-fuchsia-400", label: "Limbo", border: "border-l-fuchsia-400/70" },
+  discord: { dot: "bg-indigo-400", label: "Discord", border: "border-l-indigo-400/70" },
+  system: { dot: "bg-slate-400", label: "System", border: "border-l-slate-400/60" },
 };
 
 function categoryMeta(category: string) {
-  return CATEGORY_STYLE[category] ?? { dot: "bg-violet-400", label: category };
+  return (
+    CATEGORY_STYLE[category] ?? {
+      dot: "bg-violet-400",
+      label: category,
+      border: "border-l-violet-400/60",
+    }
+  );
 }
 
 export function ActivityFeed({
@@ -83,7 +89,12 @@ export function ActivityFeed({
               <span
                 className={clsx("relative z-10 mt-1.5 h-[22px] w-[22px] shrink-0 rounded-full ring-4 ring-[#07080f]", meta.dot)}
               />
-              <div className="min-w-0 flex-1 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 transition hover:border-white/10 hover:bg-white/[0.04]">
+              <div
+                className={clsx(
+                  "min-w-0 flex-1 rounded-2xl border border-white/[0.06] border-l-[3px] bg-gradient-to-r from-white/[0.04] to-white/[0.01] px-4 py-3 transition hover:border-white/10 hover:from-white/[0.06]",
+                  meta.border,
+                )}
+              >
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
                   <FormattedDateTime iso={log.created_at} />
                   <span className="rounded-md bg-white/5 px-1.5 py-0.5 font-medium uppercase tracking-wide text-slate-400">

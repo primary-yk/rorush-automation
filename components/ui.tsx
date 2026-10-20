@@ -136,11 +136,11 @@ export function MetricCard({
   trend?: "up" | "neutral";
 }) {
   return (
-    <Card padding="default" className="!p-5">
+    <Card padding="default" hover className="!p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-slate-500">{label}</p>
-          <p className="mt-2 text-3xl font-bold tabular-nums tracking-tight text-white">{value}</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
+          <p className="mt-2 font-display text-3xl font-bold tabular-nums tracking-tight text-white">{value}</p>
           {sub && (
             <p className={clsx("mt-1 text-xs", trend === "up" ? "text-emerald-400/90" : "text-slate-500")}>{sub}</p>
           )}

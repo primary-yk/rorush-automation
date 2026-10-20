@@ -5,7 +5,7 @@ export type PilotAuthMessage = {
 
 export type PilotEventMessage = {
   type: "event";
-  kind: "limbo" | "rain" | "accounts" | "system";
+  kind: "limbo" | "rain" | "accounts" | "system" | "activity";
   embed: {
     title: string;
     description?: string;

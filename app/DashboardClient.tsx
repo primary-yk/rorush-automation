@@ -33,6 +33,8 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
   const [newSession, setNewSession] = useState("");
   const [discordChannel, setDiscordChannel] = useState(initial.settings?.discordChannelId ?? "");
   const [discordToken, setDiscordToken] = useState("");
+  const [discordWebhook, setDiscordWebhook] = useState("");
+  const [discordReportSaving, setDiscordReportSaving] = useState(false);
   const [relayConnected, setRelayConnected] = useState<boolean | null>(null);
   const [savingAccount, setSavingAccount] = useState(false);
 
@@ -204,8 +206,10 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
       {tab === "overview" && (
         <div className="space-y-8">
           <div>
-            <h1 className="font-display text-3xl font-bold tracking-tight text-white sm:text-4xl">
-              Good to go{accounts.length ? `, ${accounts.length} pilot${accounts.length === 1 ? "" : "s"} active` : ""}
+            <h1 className="font-display text-3xl font-bold tracking-tight sm:text-4xl lg:text-[2.75rem] lg:leading-tight">
+              <span className="text-gradient-hero">
+                Good to go{accounts.length ? `, ${accounts.length} pilot${accounts.length === 1 ? "" : "s"} active` : ""}
+              </span>
             </h1>
             <p className="mt-2 max-w-xl text-slate-400">
               Rain, reward cases, and Discord codes — running locally with encrypted credentials.
@@ -356,23 +360,102 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
 
           <Card glow="violet">
             <SectionTitle
-              title="Discord bot (recommended)"
-              description="Use the vendor Rush Pilot bot: /activate your license, get a private thread for limbo hits/misses, rain, and accounts. Set DISCORD_BOT_RELAY_URL in .env — see docs/DISCORD-BOT.md."
+              title="Discord notifications"
+              description="Rain, limbo wagers, errors, and joins — mirrored to your server. Easiest: channel webhook. Optional: your own bot token in .env."
             />
-            <div className="rounded-xl border border-white/[0.08] bg-black/30 px-4 py-3 text-sm">
-              <p className="text-slate-300">
-                Bot relay:{" "}
+            <div className="grid max-w-xl gap-4">
+              {settings && (
+                <>
+                  <Toggle
+                    label="Send to Discord"
+                    description="Rain, limbo, cases, captcha errors, and join results (batched every ~1s)"
+                    checked={settings.discordReportEnabled}
+                    onChange={async (v) => {
+                      const s = await dashboardApi.patchSettings({ discordReportEnabled: v });
+                      setSettings(s);
+                    }}
+                  />
+                  <Toggle
+                    label="Full activity feed"
+                    description="Also post routine system lines (not just rain/limbo/errors)"
+                    checked={settings.discordActivityFeedEnabled}
+                    disabled={!settings.discordReportEnabled}
+                    onChange={async (v) => {
+                      const s = await dashboardApi.patchSettings({ discordActivityFeedEnabled: v });
+                      setSettings(s);
+                    }}
+                  />
+                </>
+              )}
+              <Input
+                type="password"
+                placeholder={
+                  settings?.hasDiscordReportWebhook
+                    ? "Webhook URL saved — paste new to replace"
+                    : "Discord channel webhook URL"
+                }
+                value={discordWebhook}
+                onChange={(e) => setDiscordWebhook(e.target.value)}
+              />
+              <p className="text-xs leading-relaxed text-slate-500">
+                In Discord: channel → Edit → Integrations → Webhooks → New webhook → copy URL. Or set{" "}
+                <code className="text-violet-300/90">DISCORD_BOT_TOKEN</code> +{" "}
+                <code className="text-violet-300/90">DISCORD_ACTIVITY_CHANNEL_ID</code> in{" "}
+                <code className="text-violet-300/90">.env</code> (bot needs Send Messages).
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="soft"
+                  disabled={discordReportSaving}
+                  onClick={async () => {
+                    setDiscordReportSaving(true);
+                    try {
+                      await dashboardApi.patchSettings({
+                        discordReportEnabled: true,
+                        discordReportWebhook: discordWebhook || undefined,
+                      });
+                      const s = await dashboardApi.getSettings();
+                      setSettings(s);
+                      setDiscordWebhook("");
+                      toast.push("Discord webhook saved", "success");
+                    } catch (e) {
+                      toast.push(e instanceof Error ? e.message : "Save failed", "error");
+                    } finally {
+                      setDiscordReportSaving(false);
+                    }
+                  }}
+                >
+                  Save webhook
+                </Button>
+                <Button
+                  variant="ghost"
+                  disabled={discordReportSaving}
+                  onClick={async () => {
+                    try {
+                      await dashboardApi.testDiscordReport();
+                      toast.push("Test message sent — check Discord", "success");
+                    } catch (e) {
+                      toast.push(e instanceof Error ? e.message : "Test failed", "error");
+                    }
+                  }}
+                >
+                  Send test
+                </Button>
+              </div>
+            </div>
+            <div className="mt-6 rounded-xl border border-white/[0.08] bg-black/30 px-4 py-3 text-sm">
+              <p className="font-medium text-slate-200">Vendor bot relay (optional)</p>
+              <p className="mt-2 text-slate-400">
+                Relay:{" "}
                 {relayConnected === true ? (
                   <span className="text-emerald-400">Connected</span>
                 ) : relayConnected === false ? (
-                  <span className="text-amber-400/90">Not connected — check .env and /activate in Discord</span>
+                  <span className="text-amber-400/90">Off — set DISCORD_BOT_RELAY_URL + /activate</span>
                 ) : (
                   <span className="text-slate-500">…</span>
                 )}
               </p>
-              <p className="mt-2 text-xs leading-relaxed text-slate-500">
-                Commands: /status · /accounts · /pause · /resume — or use this dashboard; same engine.
-              </p>
+              <p className="mt-2 text-xs text-slate-500">/status · /accounts · /pause · /resume — docs/DISCORD-BOT.md</p>
             </div>
           </Card>
 

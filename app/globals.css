@@ -4,26 +4,45 @@
 
 :root {
   color-scheme: dark;
-  --bg-base: #050508;
-  --panel: rgba(12, 14, 22, 0.72);
+  --bg-base: #030305;
+  --panel: rgba(10, 12, 20, 0.78);
+  --accent-glow: rgba(139, 92, 246, 0.45);
 }
 
 body {
   @apply min-h-screen bg-[var(--bg-base)] text-slate-100 antialiased;
   background-image:
-    url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E"),
-    linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px),
-    radial-gradient(ellipse 100% 70% at 50% -25%, rgba(124, 58, 237, 0.35), transparent 55%),
-    radial-gradient(ellipse 55% 45% at 100% 0%, rgba(56, 189, 248, 0.12), transparent),
-    radial-gradient(ellipse 50% 40% at 0% 100%, rgba(217, 70, 239, 0.1), transparent);
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E"),
+    linear-gradient(rgba(255, 255, 255, 0.022) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.022) 1px, transparent 1px),
+    radial-gradient(ellipse 120% 80% at 50% -30%, rgba(124, 58, 237, 0.42), transparent 58%),
+    radial-gradient(ellipse 60% 50% at 100% 10%, rgba(56, 189, 248, 0.16), transparent),
+    radial-gradient(ellipse 55% 45% at 0% 90%, rgba(217, 70, 239, 0.14), transparent),
+    radial-gradient(ellipse 40% 30% at 80% 60%, rgba(52, 211, 153, 0.08), transparent);
   background-size:
     256px 256px,
-    56px 56px,
-    56px 56px,
+    48px 48px,
+    48px 48px,
+    auto,
     auto,
     auto,
     auto;
+}
+
+body::before {
+  content: "";
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle at 50% 0%, var(--accent-glow), transparent 42%);
+  opacity: 0.35;
+  animation: aurora-shift 18s ease-in-out infinite alternate;
+  z-index: 0;
+}
+
+body > * {
+  position: relative;
+  z-index: 1;
 }
 
 .font-display {
@@ -85,6 +104,24 @@ body {
 
 .animate-fade-in {
   animation: fade-in 0.45s ease-out both;
+}
+
+@keyframes aurora-shift {
+  0% {
+    opacity: 0.28;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0.42;
+    transform: translateY(-2%) scale(1.03);
+  }
+}
+
+.text-gradient-hero {
+  background: linear-gradient(135deg, #fff 0%, #c4b5fd 35%, #67e8f9 70%, #f0abfc 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 @keyframes spin-slow {

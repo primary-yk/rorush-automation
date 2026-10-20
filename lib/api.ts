@@ -36,6 +36,7 @@ export type Settings = {
   hasDiscordToken: boolean;
   discordReportEnabled: boolean;
   hasDiscordReportWebhook: boolean;
+  discordActivityFeedEnabled: boolean;
   /** True when automation process loaded CAPMONSTER_API_KEY from .env */
   capmonsterConfigured?: boolean;
 };
@@ -79,7 +80,11 @@ export const dashboardApi = {
   getSettings: () => api<Settings>("/api/settings"),
   patchSettings: (
     body: Partial<
-      Settings & { discordToken?: string | null; discordReportWebhook?: string | null }
+      Settings & {
+        discordToken?: string | null;
+        discordReportWebhook?: string | null;
+        discordActivityFeedEnabled?: boolean;
+      }
     >,
   ) => api<Settings>("/api/settings", { method: "PATCH", body: JSON.stringify(body) }),
   testDiscordReport: () => api<{ ok: true }>("/api/discord/test-report", { method: "POST" }),

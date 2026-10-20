@@ -53,6 +53,7 @@ export function createApiServer() {
       hasDiscordToken: !!s.discord_token_enc,
       discordReportEnabled: !!s.discord_report_enabled,
       hasDiscordReportWebhook: !!s.discord_report_webhook_enc,
+      discordActivityFeedEnabled: !!s.discord_activity_feed_enabled,
       capmonsterConfigured: !!captchaApiKey(cfg),
     });
   });
@@ -65,6 +66,7 @@ export function createApiServer() {
       discordToken?: string | null;
       discordReportEnabled?: boolean;
       discordReportWebhook?: string | null;
+      discordActivityFeedEnabled?: boolean;
     };
     const patch: Record<string, unknown> = {};
     if (typeof body.globalPause === "boolean") patch.global_pause = body.globalPause ? 1 : 0;
@@ -81,6 +83,9 @@ export function createApiServer() {
         ? encryptField(body.discordReportWebhook)
         : null;
     }
+    if (typeof body.discordActivityFeedEnabled === "boolean") {
+      patch.discord_activity_feed_enabled = body.discordActivityFeedEnabled ? 1 : 0;
+    }
     const next = updateSettings(patch as Parameters<typeof updateSettings>[0]);
     res.json({
       globalPause: !!next.global_pause,
@@ -89,6 +94,7 @@ export function createApiServer() {
       hasDiscordToken: !!next.discord_token_enc,
       discordReportEnabled: !!next.discord_report_enabled,
       hasDiscordReportWebhook: !!next.discord_report_webhook_enc,
+      discordActivityFeedEnabled: !!next.discord_activity_feed_enabled,
     });
   });
 

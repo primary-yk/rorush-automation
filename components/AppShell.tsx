@@ -28,7 +28,7 @@ export function AppShell({
 }) {
   return (
     <div className="relative min-h-screen lg:flex">
-      <aside className="glass-panel fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-white/[0.06] lg:flex">
+      <aside className="glass-panel fixed inset-y-0 left-0 z-40 hidden w-[17.5rem] flex-col border-r border-white/[0.08] bg-gradient-to-b from-white/[0.04] to-transparent lg:flex">
         <div className="flex items-center gap-3 border-b border-white/[0.06] px-5 py-5">
           <IconLogo />
           <div>
@@ -71,7 +71,7 @@ export function AppShell({
 
       <div className="flex min-h-screen flex-1 flex-col lg:pl-64">
         <header className="glass-panel sticky top-0 z-30 border-b border-white/[0.06] px-4 py-4 sm:px-6">
-          <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4">
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-3 lg:hidden">
               <IconLogo className="h-7 w-7" />
               <span className="font-semibold text-white">Rush Pilot</span>
@@ -84,7 +84,7 @@ export function AppShell({
             </div>
             {headerExtra}
           </div>
-          <nav className="mx-auto mt-4 flex max-w-5xl gap-1 overflow-x-auto pb-0.5 lg:hidden">
+          <nav className="mx-auto mt-4 flex max-w-6xl gap-1 overflow-x-auto pb-0.5 lg:hidden">
             {NAV.map(({ id, label, Icon }) => (
               <button
                 key={id}
@@ -102,7 +102,7 @@ export function AppShell({
           </nav>
         </header>
 
-        <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6 sm:py-10 animate-fade-in">{children}</main>
+        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6 sm:py-10 animate-fade-in">{children}</main>
 
         <footer className="border-t border-white/[0.04] px-6 py-8 text-center text-xs text-slate-600">
           Self-hosted · Unaffiliated with RoRush · Use at your own risk

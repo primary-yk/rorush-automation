@@ -35,6 +35,7 @@ export type SettingsRow = {
   discord_token_enc: string | null;
   discord_report_enabled: number;
   discord_report_webhook_enc: string | null;
+  discord_activity_feed_enabled: number;
   license_key_enc: string | null;
   license_payload_json: string | null;
   license_id: string | null;
@@ -54,6 +55,7 @@ export function updateSettings(patch: Partial<Omit<SettingsRow, "id">>): Setting
     .prepare(
       `UPDATE settings SET global_pause = ?, discord_enabled = ?, discord_channel_id = ?,
        discord_token_enc = ?, discord_report_enabled = ?, discord_report_webhook_enc = ?,
+       discord_activity_feed_enabled = ?,
        license_key_enc = ?, license_payload_json = ?,
        license_id = ?, license_plan = ?, license_exp = ?, updated_at = ? WHERE id = 1`,
     )
@@ -64,6 +66,7 @@ export function updateSettings(patch: Partial<Omit<SettingsRow, "id">>): Setting
       next.discord_token_enc,
       next.discord_report_enabled ?? 0,
       next.discord_report_webhook_enc ?? null,
+      next.discord_activity_feed_enabled ?? 0,
       next.license_key_enc ?? null,
       next.license_payload_json ?? null,
       next.license_id ?? null,
@@ -174,6 +177,17 @@ export function appendLog(input: {
       input.detail ?? null,
       new Date().toISOString(),
     );
+  void import("../discord/activity-feed.js")
+    .then((m) =>
+      m.onActivityLog({
+        account_id: input.accountId ?? null,
+        category: input.category,
+        message: input.message,
+        detail: input.detail ?? null,
+        created_at: new Date().toISOString(),
+      }),
+    )
+    .catch(() => undefined);
 }
 
 export function listLogs(limit = 200): Array<{
