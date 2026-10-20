@@ -5,7 +5,7 @@ import {
   listAccounts,
   updateAccount,
 } from "../db/repositories.js";
-import { prewarmRainCaptcha } from "../automation/rain-captcha.js";
+import { clearRainCaptcha, prewarmRainCaptcha, takeRainCaptchaToken } from "../automation/rain-captcha.js";
 import { clearRainJoinStateForRain, isRainJoined } from "../automation/rain-join-state.js";
 import {
   isRetryableRainFailure,
@@ -38,6 +38,7 @@ export class AutomationEngine {
   private rainJoinLastAttempt = new Map<string, number>();
   /** One active join pipeline per rain (captcha + hub invoke can take >90s if overlapped). */
   private rainJoinInFlight = new Set<string>();
+  private rainSettlementDone = new Set<string>();
   private caseTimer: NodeJS.Timeout | null = null;
   private discordTimer: NodeJS.Timeout | null = null;
   private statusTimer: NodeJS.Timeout | null = null;
@@ -214,8 +215,11 @@ export class AutomationEngine {
       if (this.activeRain?.rainId === p.rainId) {
         this.activeRain = null;
       }
+      if (this.rainSettlementDone.has(p.rainId)) return;
+      this.rainSettlementDone.add(p.rainId);
       appendLog({ category: "rain", message: "Rain finished", detail: p.rainId });
       clearRainJoinStateForRain(p.rainId);
+      clearRainCaptcha(p.rainId);
       void settleRainForAllJoiners({
         rainId: p.rainId,
         poolCoins: pool,
@@ -270,8 +274,9 @@ export class AutomationEngine {
       return;
     }
 
-    const accounts = listAccounts().filter((a) => a.join_rain && !isRainJoined(a.id, rain.rainId));
-    if (accounts.length === 0) {
+    const joinEnabled = listAccounts().filter((a) => Number(a.join_rain) !== 0);
+    const accounts = joinEnabled.filter((a) => !isRainJoined(a.id, rain.rainId));
+    if (joinEnabled.length === 0) {
       appendLog({
         category: "rain",
         message: "Rain join skipped (no accounts with Join rain enabled)",
@@ -279,21 +284,43 @@ export class AutomationEngine {
       });
       return;
     }
+    if (accounts.length === 0) {
+      appendLog({
+        category: "rain",
+        message: "Rain join skipped (every account already joined this rain)",
+        detail: rain.rainId,
+      });
+      return;
+    }
 
     if (this.rainJoinInFlight.has(rain.rainId)) return;
 
+    const nickList = accounts.map((a) => a.nickname).join(", ");
     appendLog({
       category: "rain",
       message: "Attempting rain join",
-      detail: `${rain.rainId} · ${accounts.length} account(s) · ${trigger}`,
+      detail: `${rain.rainId} · ${accounts.length} account(s): ${nickList} · ${trigger}`,
     });
 
     this.rainJoinInFlight.add(rain.rainId);
+    let sharedCaptcha: string | null = await takeRainCaptchaToken(rain.rainId, {
+      forRainJoin: true,
+    }).catch(() => null);
     try {
       for (const account of accounts) {
         try {
           const hub = await this.accountHubs.ensure(account.id, { rain: true, cases: true });
-          const result = await joinRainForAccount({ accountId: account.id, rain, hub });
+          const result = await joinRainForAccount({
+            accountId: account.id,
+            rain,
+            hub,
+            captchaToken: sharedCaptcha,
+          });
+          if (result.success) sharedCaptcha = null;
+          if (!result.success && /captcha|token/i.test(result.reason)) {
+            sharedCaptcha = null;
+            prewarmRainCaptcha(rain.rainId);
+          }
           // Only retry wager blocks — captcha/timeouts used to re-queue and spam "Rain join error".
           const retryable =
             !result.success && rainJoinWindowOpen(rain) && isRetryableRainFailure(result.reason);
@@ -313,6 +340,13 @@ export class AutomationEngine {
       }
     } finally {
       this.rainJoinInFlight.delete(rain.rainId);
+    }
+    if (accounts.length > 1) {
+      appendLog({
+        category: "rain",
+        message: "Rain join batch finished",
+        detail: `${rain.rainId} · ${accounts.length} account(s) processed`,
+      });
     }
   }
 

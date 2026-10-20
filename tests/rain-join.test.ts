@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   isRetryableRainFailure,
   isWagerRejection,
+  limboResultHasOutcome,
   matchesJoinReqId,
+  parseLimboResult,
   parseRain,
   rainCaptchaPrewarmWindow,
   rainJoinWindowOpen,
@@ -97,5 +99,35 @@ describe("matchesJoinReqId", () => {
   it("accepts RoRush success payload (plain reqId string)", () => {
     expect(matchesJoinReqId("req-1", "req-1")).toBe(true);
     expect(matchesJoinReqId("req-2", "req-1")).toBe(false);
+  });
+});
+
+describe("parseLimboResult", () => {
+  it("parses cent-style multiplier and IsWin", () => {
+    const r = parseLimboResult({ IsWin: false, Multiplier: 112 }, 1.3);
+    expect(r.crashMultiplier).toBe(1.12);
+    expect(r.hit).toBe(false);
+  });
+
+  it("parses nested result object", () => {
+    const r = parseLimboResult({ result: { multiplier: 2.45 }, isWin: true }, 1.3);
+    expect(r.crashMultiplier).toBe(2.45);
+    expect(r.hit).toBe(true);
+  });
+
+  it("infers hit from crash vs target when isWin missing", () => {
+    const r = parseLimboResult({ multiplier: 1.5 }, 1.3);
+    expect(r.hit).toBe(true);
+    expect(r.crashMultiplier).toBe(1.5);
+  });
+});
+
+describe("limboResultHasOutcome", () => {
+  it("rejects bare reqId ack strings", () => {
+    expect(limboResultHasOutcome("a5624ad8-96f1-4418-b0fc-bba89f5b6d53")).toBe(false);
+  });
+
+  it("accepts full outcome payloads", () => {
+    expect(limboResultHasOutcome({ reqId: "x", multiplier: 1.2, isWin: false })).toBe(true);
   });
 });

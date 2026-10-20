@@ -41,17 +41,103 @@ async function readBalanceCoins(
 }
 
 function limboPayloadReqId(payload: unknown): string | undefined {
-  if (typeof payload === "string") return payload;
+  if (typeof payload === "string") {
+    const s = payload.trim();
+    if (/^[0-9a-f-]{36}$/i.test(s)) return s;
+    return undefined;
+  }
   if (!payload || typeof payload !== "object") return undefined;
   const p = payload as Record<string, unknown>;
-  const id = p.reqId ?? p.ReqId ?? p.requestId;
+  const id = p.reqId ?? p.ReqId ?? p.requestId ?? p.RequestId;
   return typeof id === "string" ? id : undefined;
 }
 
+function normalizeLimboMultiplier(raw: number): number | null {
+  if (!Number.isFinite(raw) || raw <= 0) return null;
+  if (raw >= 10_000 && Number.isInteger(raw)) return raw / 100;
+  if (raw >= 100 && Number.isInteger(raw)) return raw / 100;
+  return raw;
+}
+
+function readLimboMultiplierFromObject(p: Record<string, unknown>): number | null {
+  const directKeys = [
+    "multiplier",
+    "Multiplier",
+    "crashMultiplier",
+    "CrashMultiplier",
+    "resultMultiplier",
+    "gameMultiplier",
+    "outcomeMultiplier",
+    "point",
+    "crashPoint",
+    "bustMultiplier",
+    "roll",
+    "value",
+    "result",
+  ];
+  for (const key of directKeys) {
+    const v = p[key];
+    if (typeof v === "number") {
+      const n = normalizeLimboMultiplier(v);
+      if (n != null && n >= 1) return n;
+    }
+    if (typeof v === "string") {
+      const n = parseFloat(v.replace(/×|x/gi, "").trim());
+      const norm = normalizeLimboMultiplier(n);
+      if (norm != null && norm >= 1) return norm;
+    }
+  }
+  for (const nested of ["result", "game", "data", "limbo", "limboResult", "payload", "Game"]) {
+    const inner = p[nested];
+    if (inner && typeof inner === "object") {
+      const m = readLimboMultiplierFromObject(inner as Record<string, unknown>);
+      if (m != null) return m;
+    }
+  }
+  return null;
+}
+
+function readLimboIsWin(p: Record<string, unknown>): boolean | null {
+  for (const key of ["isWin", "IsWin", "win", "Win", "won", "isWinner", "IsWinner"]) {
+    if (p[key] === true || p[key] === 1) return true;
+    if (p[key] === false || p[key] === 0) return false;
+  }
+  return null;
+}
+
+/** True when payload includes crash/target outcome (not a bare reqId ack). */
+export function limboResultHasOutcome(payload: unknown): boolean {
+  if (typeof payload === "string") {
+    const s = payload.trim();
+    if (/^[0-9a-f-]{36}$/i.test(s)) return false;
+    try {
+      return limboResultHasOutcome(JSON.parse(s) as unknown);
+    } catch {
+      return false;
+    }
+  }
+  if (!payload || typeof payload !== "object") return false;
+  const p = payload as Record<string, unknown>;
+  if (readLimboMultiplierFromObject(p) != null) return true;
+  if (readLimboIsWin(p) != null) return true;
+  return false;
+}
+
 function limboResultMatchesReqId(payload: unknown, reqId: string): boolean {
-  const id = limboPayloadReqId(payload);
-  if (id) return id === reqId;
-  return true;
+  let body = payload;
+  if (typeof body === "string") {
+    const s = body.trim();
+    if (s === reqId) return false;
+    try {
+      body = JSON.parse(s) as unknown;
+    } catch {
+      return false;
+    }
+  }
+  if (!body || typeof body !== "object") return false;
+  const id = limboPayloadReqId(body);
+  if (id && id !== reqId) return false;
+  return limboResultHasOutcome(body);
 }
 
 export function isWagerRejection(message: string): boolean {
@@ -220,7 +306,6 @@ async function joinRainForAccountOnce(input: {
 
     if (outcome.ok) {
       markRainJoined(accountId, rain.rainId);
-      clearRainCaptcha(rain.rainId);
       try {
         const bal = await readBalanceCoins(client);
         rainBalanceBeforeJoin.set(rainBalanceKey(accountId, rain.rainId), bal);
@@ -308,17 +393,25 @@ async function joinOnce(
   return outcomePromise;
 }
 
-export function parseLimboResult(payload: unknown): { hit: boolean; crashMultiplier: number | null } {
+export function parseLimboResult(
+  payload: unknown,
+  targetMultiplier?: number,
+): { hit: boolean; crashMultiplier: number | null } {
+  if (typeof payload === "string") {
+    try {
+      return parseLimboResult(JSON.parse(payload) as unknown, targetMultiplier);
+    } catch {
+      return { hit: false, crashMultiplier: null };
+    }
+  }
   if (!payload || typeof payload !== "object") return { hit: false, crashMultiplier: null };
   const p = payload as Record<string, unknown>;
-  const hit = p.isWin === true || p.isWin === 1;
-  let crashMultiplier: number | null = null;
-  if (typeof p.multiplier === "number") {
-    crashMultiplier = p.multiplier > 100 ? p.multiplier / 100 : p.multiplier;
-  } else if (typeof p.crashMultiplier === "number") {
-    crashMultiplier =
-      p.crashMultiplier > 100 ? p.crashMultiplier / 100 : p.crashMultiplier;
+  const crashMultiplier = readLimboMultiplierFromObject(p);
+  let hit = readLimboIsWin(p);
+  if (hit == null && crashMultiplier != null && targetMultiplier != null && targetMultiplier > 0) {
+    hit = crashMultiplier >= targetMultiplier;
   }
+  if (hit == null) hit = false;
   return { hit, crashMultiplier };
 }
 
@@ -405,15 +498,25 @@ async function placeLimboWagerBet(
     const timeout = setTimeout(() => reject(new Error("Limbo bet timed out")), timeoutMs);
 
     const cleanups: Array<() => void> = [];
+    let settled = false;
+    const limboDebug = /^(1|true|yes|on)$/i.test(process.env.LIMBO_DEBUG?.trim() ?? "");
 
     const finishOk = (raw: unknown) => {
+      if (settled) return;
       if (!limboResultMatchesReqId(raw, reqId)) return;
       clearTimeout(timeout);
       for (const c of cleanups) c();
-      const parsed = parseLimboResult(raw);
-      hit = parsed.hit;
+      settled = true;
       const betDisplay = amountCents / 100;
       const targetMult = multiplierCents / 100;
+      const parsed = parseLimboResult(raw, targetMult);
+      hit = parsed.hit;
+      if (limboDebug) {
+        console.log(
+          "[limbo] result payload",
+          typeof raw === "string" ? raw.slice(0, 400) : JSON.stringify(raw).slice(0, 400),
+        );
+      }
       const crash =
         parsed.crashMultiplier != null ? `${parsed.crashMultiplier.toFixed(2)}×` : "unknown";
       const limboMessage = parsed.hit
@@ -552,7 +655,23 @@ export async function settleRainForAccount(input: {
   }
 }
 
+const rainSettlementInflight = new Set<string>();
+
 export async function settleRainForAllJoiners(input: {
+  rainId: string;
+  poolCoins?: number;
+  hubs: HubRegistry;
+}): Promise<void> {
+  if (rainSettlementInflight.has(input.rainId)) return;
+  rainSettlementInflight.add(input.rainId);
+  try {
+    await settleRainForAllJoinersInner(input);
+  } finally {
+    rainSettlementInflight.delete(input.rainId);
+  }
+}
+
+async function settleRainForAllJoinersInner(input: {
   rainId: string;
   poolCoins?: number;
   hubs: HubRegistry;

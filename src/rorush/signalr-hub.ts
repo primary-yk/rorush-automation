@@ -26,11 +26,15 @@ export function hubEventVariants(canonical: string): string[] {
   return [...new Set([canonical, camel, lower])];
 }
 
+const HUB_EVENT_DEDUPE_MS = 2_000;
+
 export class RoRushHub {
   private connection: HubConnection | null = null;
   private readonly listeners = new Map<string, Set<(payload: unknown) => void>>();
   /** Registered SignalR method names (any casing). */
   private readonly boundEvents = new Set<string>();
+  /** RoRush sometimes invokes the same rain/limbo event multiple times (or via several casings). */
+  private readonly recentEventKeys = new Map<string, number>();
   private rainSubscribed = false;
   private caseSubscribed = false;
   private wantRain = false;
@@ -165,16 +169,57 @@ export class RoRushHub {
     }
   }
 
+  /** @internal exported for unit tests */
+  eventDedupeKey(canonical: string, payload: unknown): string {
+    if (payload && typeof payload === "object") {
+      const p = payload as Record<string, unknown>;
+      const rainId = String(p.rainId ?? p.id ?? "");
+      if (rainId && /AmountUpdated/i.test(canonical) && typeof p.amount === "number") {
+        return `${canonical}:${rainId}:${p.amount}`;
+      }
+      if (rainId) return `${canonical}:${rainId}`;
+      const reqId = p.reqId ?? p.ReqId;
+      if (typeof reqId === "string" && reqId) return `${canonical}:${reqId}`;
+    }
+    if (typeof payload === "string") {
+      return `${canonical}:${payload.slice(0, 96)}`;
+    }
+    try {
+      return `${canonical}:${JSON.stringify(payload).slice(0, 120)}`;
+    } catch {
+      return `${canonical}:unknown`;
+    }
+  }
+
+  private shouldSkipDuplicate(canonical: string, payload: unknown): boolean {
+    const key = this.eventDedupeKey(canonical, payload);
+    const now = Date.now();
+    const prev = this.recentEventKeys.get(key);
+    if (prev != null && now - prev < HUB_EVENT_DEDUPE_MS) return true;
+    this.recentEventKeys.set(key, now);
+    if (this.recentEventKeys.size > 400) {
+      for (const [k, t] of this.recentEventKeys) {
+        if (now - t > 10_000) this.recentEventKeys.delete(k);
+      }
+    }
+    return false;
+  }
+
+  private dispatchEvent(canonical: string, payload: unknown, handler?: (payload: unknown) => void): void {
+    if (this.shouldSkipDuplicate(canonical, payload)) return;
+    handler?.(payload);
+    for (const fn of this.listeners.get(canonical) ?? []) {
+      fn(payload);
+    }
+  }
+
   private bindEvent(canonical: string, handler?: (payload: unknown) => void): void {
     if (!this.connection) return;
     for (const name of hubEventVariants(canonical)) {
       if (this.boundEvents.has(name)) continue;
       this.boundEvents.add(name);
       this.connection.on(name, (payload: unknown) => {
-        handler?.(payload);
-        for (const fn of this.listeners.get(canonical) ?? []) {
-          fn(payload);
-        }
+        this.dispatchEvent(canonical, payload, handler);
       });
     }
   }
