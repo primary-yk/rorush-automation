@@ -286,6 +286,16 @@ function parseLimboResult(payload: unknown): { hit: boolean; crashMultiplier: nu
   return { hit, crashMultiplier };
 }
 
+type LimboWagerOpts = {
+  reasonLabel?: string;
+  rainId?: string;
+  /** Exact bet size (dashboard test, rain payout). */
+  betCoinsOverride?: number;
+  multiplierOverride?: number;
+  /** Only wager balance gained since join — never touch pre-rain stack. */
+  balanceBeforeRain?: number;
+};
+
 async function placeLimboWagerBet(
   accountId: number,
   client: import("../rorush/http-client.js").RoRushHttpClient,
@@ -294,30 +304,51 @@ async function placeLimboWagerBet(
   rainAmountCoins: number,
   nickname: string,
   rainId: string,
-  reasonLabel = "Limbo wager for rain requirement",
-): Promise<void> {
+  opts: LimboWagerOpts = {},
+): Promise<{ betCoins: number; hit: boolean }> {
   await ensureAuthenticated(accountId);
   const reqId = uuid();
   const envBetCents = Number(process.env.LIMBO_MIN_BET_CENTS ?? NaN);
   const envMultCents = Number(process.env.LIMBO_MIN_MULTIPLIER_CENTS ?? NaN);
   const envMaxBet = Number(process.env.LIMBO_MAX_BET_COINS ?? NaN);
-  const mult = Number.isFinite(envMultCents) ? envMultCents / 100 : account.limbo_multiplier;
+  const mult =
+    opts.multiplierOverride != null && Number.isFinite(opts.multiplierOverride)
+      ? opts.multiplierOverride
+      : Number.isFinite(envMultCents)
+        ? envMultCents / 100
+        : account.limbo_multiplier;
 
   const balanceCoins = await readBalanceCoins(client);
-  let targetBet =
-    rainAmountCoins > 0
-      ? rainAmountCoins
-      : Number.isFinite(envBetCents)
-        ? envBetCents / 100
-        : account.limbo_bet_coins;
-  if (Number.isFinite(envMaxBet)) targetBet = Math.min(targetBet, envMaxBet);
-  const betCoins = Math.min(targetBet, balanceCoins * 0.98);
+  let betCoins: number;
+
+  if (opts.betCoinsOverride != null && Number.isFinite(opts.betCoinsOverride)) {
+    betCoins = opts.betCoinsOverride;
+    if (opts.balanceBeforeRain != null) {
+      const rainOnlyCap = Math.max(0, balanceCoins - opts.balanceBeforeRain);
+      betCoins = Math.min(betCoins, rainOnlyCap);
+    }
+  } else {
+    let targetBet =
+      rainAmountCoins > 0
+        ? rainAmountCoins
+        : Number.isFinite(envBetCents)
+          ? envBetCents / 100
+          : account.limbo_bet_coins;
+    if (Number.isFinite(envMaxBet)) targetBet = Math.min(targetBet, envMaxBet);
+    betCoins = Math.min(targetBet, balanceCoins * 0.98);
+  }
+
+  if (Number.isFinite(envMaxBet)) betCoins = Math.min(betCoins, envMaxBet);
+  betCoins = Math.min(betCoins, balanceCoins * 0.98);
 
   if (betCoins < 0.01) {
     throw new Error(
       `Limbo skipped — balance ${balanceCoins.toFixed(2)} coins, need at least 0.01 to wager`,
     );
   }
+
+  const reasonLabel = opts.reasonLabel ?? "Limbo wager for rain requirement";
+  const rainIdForReport = opts.rainId ?? rainId;
 
   const amountCents = Math.max(1, Math.round(betCoins * 100));
   const multiplierCents = Math.max(110, Math.round(mult * 100));
@@ -331,6 +362,7 @@ async function placeLimboWagerBet(
 
   const resultEvents = [SIGNALR.limbo.receiveResult, SIGNALR.limbo.receiveResultAlt];
 
+  let hit = false;
   await new Promise<void>((resolve, reject) => {
     const timeoutMs = Number(process.env.LIMBO_RESULT_TIMEOUT_MS ?? 45_000);
     const timeout = setTimeout(() => reject(new Error("Limbo bet timed out")), timeoutMs);
@@ -342,6 +374,7 @@ async function placeLimboWagerBet(
       clearTimeout(timeout);
       for (const c of cleanups) c();
       const parsed = parseLimboResult(raw);
+      hit = parsed.hit;
       const betDisplay = amountCents / 100;
       const targetMult = multiplierCents / 100;
       appendLog({
@@ -356,7 +389,7 @@ async function placeLimboWagerBet(
         betCoins: betDisplay,
         targetMultiplier: targetMult,
         crashMultiplier: parsed.crashMultiplier,
-        rainId,
+        rainId: rainIdForReport,
       });
       resolve();
     };
@@ -387,6 +420,28 @@ async function placeLimboWagerBet(
   });
 
   await client.getBalance();
+  return { betCoins, hit };
+}
+
+/** Dashboard / manual test — does not use rain-only caps unless you pass balanceBeforeRain. */
+export async function runTestLimboBet(input: {
+  accountId: number;
+  betCoins: number;
+  multiplier?: number;
+  hubs: HubRegistry;
+}): Promise<{ betCoins: number; hit: boolean }> {
+  const { accountId, betCoins, multiplier, hubs } = input;
+  if (!Number.isFinite(betCoins) || betCoins < 0.01) {
+    throw new Error("Bet must be at least 0.01 coins");
+  }
+  const { account, client } = await ensureAuthenticated(accountId);
+  const hub = await hubs.ensure(accountId, { rain: true, cases: true });
+  return placeLimboWagerBet(accountId, client, hub, account, 0, account.nickname, "test-limbo", {
+    betCoinsOverride: betCoins,
+    multiplierOverride: multiplier,
+    reasonLabel: "Test limbo (dashboard)",
+    rainId: "test-limbo",
+  });
 }
 
 /** After rain pays out: credit lifetime earnings + optional limbo wager (every rain when enabled). */
@@ -406,8 +461,9 @@ export async function settleRainForAccount(input: {
   const before = rainBalanceBeforeJoin.get(key);
   rainBalanceBeforeJoin.delete(key);
 
+  let earned: number | null = null;
   if (before != null && after > before + 0.0001) {
-    const earned = after - before;
+    earned = after - before;
     updateAccount(accountId, {
       lifetime_rain: account.lifetime_rain + earned,
       balance: after,
@@ -424,18 +480,24 @@ export async function settleRainForAccount(input: {
 
   if (!account.limbo_wager_enabled) return;
 
+  if (earned == null || before == null || earned < 0.01) {
+    appendLog({
+      accountId,
+      category: "limbo",
+      message: "Limbo skipped after rain",
+      detail: "Could not measure rain payout — no wager (your existing balance is untouched)",
+    });
+    return;
+  }
+
   try {
     const hub = await hubs.ensure(accountId, { rain: true, cases: true });
-    await placeLimboWagerBet(
-      accountId,
-      client,
-      hub,
-      account,
-      poolCoins ?? 0,
-      account.nickname,
+    await placeLimboWagerBet(accountId, client, hub, account, poolCoins ?? 0, account.nickname, rainId, {
+      betCoinsOverride: earned,
+      balanceBeforeRain: before,
+      reasonLabel: "Limbo wager (rain payout only)",
       rainId,
-      "Limbo wager after rain",
-    );
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     appendLog({

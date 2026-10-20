@@ -99,5 +99,11 @@ export const dashboardApi = {
   patchAccount: (id: number, body: Record<string, unknown>) =>
     api<Account>(`/api/rush-accounts/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteAccount: (id: number) => api<{ ok: true; id: number }>(`/api/rush-accounts/${id}`, { method: "DELETE" }),
+  testLimbo: (id: number, body: { betCoins: number; multiplier?: number }) =>
+    api<{ ok: true; betCoins: number; hit: boolean }>(`/api/rush-accounts/${id}/test-limbo`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(60_000),
+    }),
   listLogs: () => api<ActivityLog[]>("/api/logs"),
 };

@@ -29,6 +29,8 @@ export function AccountCard({
   const [removing, setRemoving] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [pending, setPending] = useState<string | null>(null);
+  const [testLimboBet, setTestLimboBet] = useState("1");
+  const [testLimboRunning, setTestLimboRunning] = useState(false);
 
   useEffect(() => {
     setLocal(account);
@@ -171,7 +173,8 @@ export function AccountCard({
       {advancedOpen && (
         <div className="mt-3 space-y-4 rounded-xl border border-amber-500/15 bg-gradient-to-b from-amber-500/[0.06] to-transparent p-4">
           <p className="text-xs leading-relaxed text-slate-500">
-            If rain rejects for wager, Pilot limbos for the rain pool size, then retries — up to 3 tries per rain.
+            After rain pays out, auto-limbo wagers <strong className="font-medium text-slate-400">only what you earned</strong>{" "}
+            from that rain — not your existing balance. If join fails for wager, limbo uses pool size then retries.
           </p>
           <Toggle
             label="Auto limbo wager"
@@ -213,6 +216,58 @@ export function AccountCard({
                 }}
               />
             </label>
+          </div>
+          <div className="rounded-lg border border-violet-500/20 bg-violet-500/5 p-3">
+            <p className="text-xs font-medium text-violet-200/90">Test limbo</p>
+            <p className="mt-1 text-xs text-slate-500">Manual bet to verify SignalR + captcha-free limbo on this account.</p>
+            <div className="mt-3 flex flex-wrap items-end gap-2">
+              <label className="min-w-[7rem] flex-1 text-sm text-slate-400">
+                Bet (coins)
+                <Input
+                  type="number"
+                  step="0.01"
+                  min={0.01}
+                  className="mt-1.5"
+                  value={testLimboBet}
+                  disabled={testLimboRunning || busy}
+                  onChange={(e) => setTestLimboBet(e.target.value)}
+                />
+              </label>
+              <Button
+                variant="soft"
+                disabled={testLimboRunning || busy}
+                onClick={async () => {
+                  const bet = Number(testLimboBet);
+                  if (!Number.isFinite(bet) || bet < 0.01) {
+                    toast.push("Enter a bet of at least 0.01", "error");
+                    return;
+                  }
+                  setTestLimboRunning(true);
+                  try {
+                    const r = await dashboardApi.testLimbo(account.id, {
+                      betCoins: bet,
+                      multiplier: local.limboMultiplier,
+                    });
+                    toast.push(
+                      `Limbo ${r.hit ? "hit" : "miss"} · ${r.betCoins.toFixed(2)} coins`,
+                      r.hit ? "success" : "info",
+                    );
+                    const refreshed = await dashboardApi.refreshAccountStats();
+                    const updated = refreshed.accounts.find((a) => a.id === account.id);
+                    if (updated) {
+                      onAccountUpdate(updated);
+                      setLocal(updated);
+                    }
+                  } catch (e) {
+                    toast.push(e instanceof Error ? e.message : "Test limbo failed", "error");
+                  } finally {
+                    setTestLimboRunning(false);
+                  }
+                }}
+              >
+                {testLimboRunning ? "Playing…" : "Test limbo"}
+              </Button>
+            </div>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm text-slate-400">

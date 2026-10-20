@@ -11,6 +11,7 @@ import {
   joinRainForAccount,
   parseRain,
   rainJoinWindowOpen,
+  runTestLimboBet,
   settleRainForAllJoiners,
 } from "../automation/rain-join.js";
 import {
@@ -354,6 +355,19 @@ export class AutomationEngine {
 
   async refreshCaseSchedulesOnly(): Promise<void> {
     await refreshAllCaseSchedules();
+  }
+
+  async testLimbo(
+    accountId: number,
+    betCoins: number,
+    multiplier?: number,
+  ): Promise<{ betCoins: number; hit: boolean }> {
+    return runTestLimboBet({
+      accountId,
+      betCoins,
+      multiplier,
+      hubs: this.accountHubs,
+    });
   }
 }
 

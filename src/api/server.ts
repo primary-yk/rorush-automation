@@ -230,6 +230,31 @@ export function createApiServer() {
     }
   });
 
+  app.post("/api/rush-accounts/:id/test-limbo", async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id < 1) {
+      res.status(400).json({ error: "Invalid account id" });
+      return;
+    }
+    if (!getAccount(id)) {
+      res.status(404).json({ error: "Account not found" });
+      return;
+    }
+    const body = req.body as { betCoins?: number; multiplier?: number };
+    const betCoins = Number(body.betCoins);
+    if (!Number.isFinite(betCoins) || betCoins < 0.01) {
+      res.status(400).json({ error: "betCoins must be at least 0.01" });
+      return;
+    }
+    const multiplier = body.multiplier != null ? Number(body.multiplier) : undefined;
+    try {
+      const result = await engine.testLimbo(id, betCoins, multiplier);
+      res.json({ ok: true, ...result });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
   app.delete("/api/rush-accounts/:id", async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isFinite(id) || id < 1) {
