@@ -56,15 +56,26 @@ describe("rainJoinWindowOpen", () => {
 });
 
 describe("rainCaptchaPrewarmWindow", () => {
-  it("includes tip stage before join opens", () => {
+  it("prewarms shortly before join opens, not early tip stage", () => {
     const rain: RainState = {
       rainId: "1",
       createdTimestamp: 1_000,
-      tipStageDuration: 500,
+      tipStageDuration: 600_000,
       joinStageDuration: 2_000,
     };
-    expect(rainCaptchaPrewarmWindow(rain, 1_200)).toBe(true);
     expect(rainJoinWindowOpen(rain, 1_200)).toBe(false);
+    expect(rainCaptchaPrewarmWindow(rain, 1_200)).toBe(false);
+    expect(rainCaptchaPrewarmWindow(rain, 600_500)).toBe(true);
+  });
+
+  it("does not prewarm during long tip stage far from join", () => {
+    const rain: RainState = {
+      rainId: "1",
+      createdTimestamp: 0,
+      tipStageDuration: 600_000,
+      joinStageDuration: 90_000,
+    };
+    expect(rainCaptchaPrewarmWindow(rain, 60_000)).toBe(false);
   });
 });
 

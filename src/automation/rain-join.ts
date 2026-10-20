@@ -841,16 +841,25 @@ export function rainJoinWindowRemainingMs(rain: RainState, now = Date.now()): nu
   return Math.max(0, bounds.joinEnd - now);
 }
 
-/** Tip stage or join window — start captcha early so 2Captcha finishes before join opens. */
+/** Start captcha shortly before join opens — not on every pool tip during a long tip stage. */
 export function rainCaptchaPrewarmWindow(rain: RainState, now = Date.now()): boolean {
+  if (rainJoinWindowOpen(rain, now)) return true;
   const bounds = rainJoinStageBounds(rain, now);
+  const leadMs = Math.max(
+    60_000,
+    Number(process.env.RAIN_CAPTCHA_PREWARM_BEFORE_JOIN_MS ?? 180_000) || 180_000,
+  );
   if (!bounds) {
-    return !!(rain.createdTimestamp && rain.tipStageDuration && now >= rain.createdTimestamp);
+    return !!(
+      rain.createdTimestamp &&
+      now >= rain.createdTimestamp &&
+      now - rain.createdTimestamp < 45_000
+    );
   }
   if (now > bounds.joinEnd) return false;
   if (now >= bounds.joinStart) return true;
-  if (rain.createdTimestamp != null && now >= rain.createdTimestamp) return true;
-  return false;
+  const msUntilJoin = bounds.joinStart - now;
+  return msUntilJoin > 0 && msUntilJoin <= leadMs;
 }
 
 export function maxFailures(): number {

@@ -216,6 +216,12 @@ export class RoRushHub {
       "ReceiveChatHistory",
       "receiveuserdata",
       "ReceiveUserData",
+      "receivemanagerraintipped",
+      "ReceiveManagerRainTipped",
+      "receivelevelprogress",
+      "ReceiveLevelProgress",
+      "receiveremovechatmessage",
+      "ReceiveRemoveChatMessage",
     ]) {
       this.bindEvent(chatEvent);
     }

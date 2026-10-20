@@ -14,6 +14,12 @@ function tokenMaxAgeForJoinMs(): number {
 
 const cache = new Map<string, { token: string; at: number }>();
 const inflight = new Map<string, Promise<string | null>>();
+/** After 2Captcha "could not solve", avoid burning credits on repeated prewarms. */
+const prewarmBlockedUntil = new Map<string, number>();
+
+function prewarmFailureCooldownMs(): number {
+  return Math.max(60_000, Number(process.env.RAIN_CAPTCHA_FAIL_COOLDOWN_MS ?? 300_000) || 300_000);
+}
 
 function cacheKey(rainId: string): string {
   return rainId;
@@ -55,17 +61,28 @@ async function solveHcaptchaWithRetry(): Promise<string | null> {
   }
 }
 
-/** Start solving during tip stage so the token is ready when the join window opens (~90s). */
+/** Start solving before join window so the token is ready when join opens. */
 export function prewarmRainCaptcha(rainId: string): void {
   if (!rainId || readCached(rainId)) return;
   if (inflight.has(cacheKey(rainId))) return;
+  const blocked = prewarmBlockedUntil.get(rainId);
+  if (blocked != null && Date.now() < blocked) return;
   const started = Date.now();
   console.log(`[rain-captcha] prewarm ${rainId.slice(0, 8)}…`);
   const p = solveHcaptchaWithRetry()
     .then((token) => {
       logSolveDone(rainId, started, token);
-      if (token) cache.set(cacheKey(rainId), { token, at: Date.now() });
+      if (token) {
+        cache.set(cacheKey(rainId), { token, at: Date.now() });
+        prewarmBlockedUntil.delete(rainId);
+      }
       return token;
+    })
+    .catch((err) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[rain-captcha] prewarm failed ${rainId.slice(0, 8)}…: ${msg}`);
+      prewarmBlockedUntil.set(rainId, Date.now() + prewarmFailureCooldownMs());
+      return null;
     })
     .finally(() => {
       inflight.delete(cacheKey(rainId));

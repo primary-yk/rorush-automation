@@ -267,9 +267,7 @@ export class AutomationEngine {
       }
       if (this.activeRain) {
         rainTelemetryUpdateWindow(this.activeRain);
-        if (rainCaptchaPrewarmWindow(this.activeRain)) {
-          prewarmRainCaptcha(this.activeRain.rainId);
-        }
+        // Pool tips (owner topping up) must not re-trigger paid captcha solves.
         if (rainJoinWindowOpen(this.activeRain)) {
           this.scheduleRainJoinAttempt(this.activeRain, "amount_updated");
         }
