@@ -115,9 +115,10 @@ async function createAndPoll(
     throw new Error(`${desc}\n\nUse ${providerHint(provider)}`);
   }
 
+  const pollMs = Math.max(800, Number(process.env.CAPTCHA_POLL_MS ?? 1500) || 1500);
   for (let i = 0; i < 60; i++) {
     if (i > 0) {
-      await new Promise((r) => setTimeout(r, i <= 20 ? 2000 : 3000));
+      await new Promise((r) => setTimeout(r, pollMs));
     }
     const resultJson = (await postJson(resultUrl(provider), {
       clientKey,

@@ -32,13 +32,22 @@ async function main() {
     provider,
     detected ? `(detected via balance: ${detected})` : "(from CAPTCHA_PROVIDER)",
   );
-  console.log("Requesting one hCaptcha token (may take 15–60s)…");
+  console.log("Requesting one hCaptcha token (often 20–90s; 2Captcha queue varies)…");
+  const started = Date.now();
   const token = await solveCaptcha("hcaptcha");
+  const sec = ((Date.now() - started) / 1000).toFixed(1);
   if (!token) {
     console.error("Provider returned no token — check balance and site key.");
     process.exit(1);
   }
-  console.log("\nOK — captcha solve works. Token length:", token.length);
+  console.log("\nOK — captcha solve works. Token length:", token.length, `· ${sec}s`);
+  if (Number(sec) > 75) {
+    console.log(
+      "\nNote: >75s is usually provider queue load, not Rush Pilot.",
+      "Keep npm run dev running before rain so prewarm finishes during tip stage.",
+      "Try CapSolver (CAPTCHA_PROVIDER=capsolver) and compare with npm run test-captcha.",
+    );
+  }
 }
 
 main().catch((e) => {
