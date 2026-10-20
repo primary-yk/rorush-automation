@@ -9,6 +9,7 @@
     "accounts": "tsx scripts/list-accounts.ts",
     "doctor": "tsx scripts/doctor.ts",
     "add-account": "tsx scripts/add-account-cli.ts",
+    "activate-license": "tsx scripts/activate-license-cli.ts",
     "update-account": "tsx scripts/update-account-cli.ts",
     "test-login": "tsx scripts/test-login.ts",
     "test-stats": "tsx scripts/test-stats.ts",

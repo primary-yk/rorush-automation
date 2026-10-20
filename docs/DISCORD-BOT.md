@@ -1,6 +1,6 @@
 # Rush Pilot Discord bot (vendor-hosted)
 
-One **Discord application** you run 24/7. Customers choose **website** or **Discord** (or both) — same automation on their PC.
+One **Discord application** you run 24/7. **Discord-first** is the default for published builds — the website dashboard is optional. See [DISCORD-FIRST.md](./DISCORD-FIRST.md).
 
 ## Architecture
 
@@ -54,18 +54,23 @@ npm run discord-bot
 DISCORD_BOT_RELAY_URL=wss://relay.yourdomain.com/pilot
 ```
 
-4. Activate the same license in the dashboard (stores key for relay auth).
+4. `npm run activate-license -- --key 'RP1…'` on their PC (or activate in the dashboard).
 5. `npm run dev` — console should log `[relay] connected to Discord bot`.
 
 ## Bot commands
 
 | Command | What it does |
 |---------|----------------|
+| `/setup` | Install checklist (no website) |
 | `/activate` | Link license + open private thread |
+| `/account add` | Save RoRush login on PC (ephemeral) |
+| `/rain` / `/cases` | Toggle join rain / auto cases |
+| `/stats` / `/logs` | Balance, level, activity |
 | `/status` | Pause state, account count, relay |
-| `/accounts` | Nicknames, toggles, errors |
+| `/accounts` | Nicknames, balance, toggles, errors |
+| `/license` | Store key on PC while online |
 | `/pause` / `/resume` | Global automation |
-| `/help` | Short guide |
+| `/help` | Discord-first guide |
 
 ## What appears in the private thread
 

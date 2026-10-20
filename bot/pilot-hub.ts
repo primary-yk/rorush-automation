@@ -35,13 +35,18 @@ export function isPilotOnline(licenseId: string): boolean {
   return ws != null && ws.readyState === ws.OPEN;
 }
 
-export function sendCommand(licenseId: string, cmd: BotCommandMessage["name"], timeoutMs = 12_000): Promise<string> {
+export function sendCommand(
+  licenseId: string,
+  cmd: BotCommandMessage["name"],
+  args?: Record<string, unknown>,
+  timeoutMs = 12_000,
+): Promise<string> {
   const ws = byLicense.get(licenseId);
   if (!ws || ws.readyState !== ws.OPEN) {
     return Promise.reject(new Error("Pilot is offline — run `npm run dev` on your PC with DISCORD_BOT_RELAY_URL set."));
   }
   const requestId = crypto.randomUUID();
-  const msg: BotCommandMessage = { type: "cmd", requestId, name: cmd };
+  const msg: BotCommandMessage = { type: "cmd", requestId, name: cmd, args };
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       pendingCommands.delete(requestId);
@@ -49,7 +54,10 @@ export function sendCommand(licenseId: string, cmd: BotCommandMessage["name"], t
     }, timeoutMs);
     pendingCommands.set(requestId, {
       timer,
-      resolve: (r) => resolve(r.text),
+      resolve: (r) => {
+        if (!r.ok) reject(new Error(r.text));
+        else resolve(r.text);
+      },
       reject,
     });
     ws.send(JSON.stringify(msg));

@@ -15,10 +15,23 @@ export type PilotEventMessage = {
   };
 };
 
+export type BotCommandName =
+  | "status"
+  | "accounts"
+  | "pause"
+  | "resume"
+  | "logs"
+  | "stats"
+  | "rain_toggle"
+  | "cases_toggle"
+  | "account_add"
+  | "license_store";
+
 export type BotCommandMessage = {
   type: "cmd";
   requestId: string;
-  name: "status" | "accounts" | "pause" | "resume" | "logs";
+  name: BotCommandName;
+  args?: Record<string, unknown>;
 };
 
 export type PilotCommandResult = {
