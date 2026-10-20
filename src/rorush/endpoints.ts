@@ -40,6 +40,8 @@ export const SIGNALR = {
   limbo: {
     play: "PlayLimboGame",
     receiveResult: "ReceivePrivateLimboResult",
+    /** Some builds emit this name instead of ReceivePrivateLimboResult. */
+    receiveResultAlt: "ReceiveLimboResult",
     receiveFailure: "ReceiveLimboFailure",
   },
   caseUnboxing: {

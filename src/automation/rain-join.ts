@@ -2,7 +2,15 @@ import { v4 as uuid } from "uuid";
 import { solveCaptcha } from "../captcha/capmonster.js";
 import { clearRainCaptcha, takeRainCaptchaToken } from "./rain-captcha.js";
 import { loadConfig } from "../config.js";
-import { appendLog, recordRainJoin, updateAccount } from "../db/repositories.js";
+import {
+  appendLog,
+  hasSuccessfulRainJoin,
+  recordRainJoin,
+  updateAccount,
+  accountIdsWithSuccessfulRainJoin,
+} from "../db/repositories.js";
+import { parseBalanceCents } from "../rorush/balance-level.js";
+import type { HubRegistry } from "../worker/hub-registry.js";
 import { SIGNALR } from "../rorush/endpoints.js";
 import { RoRushHub } from "../rorush/signalr-hub.js";
 import type { RainState } from "../rorush/types.js";
@@ -11,6 +19,36 @@ import { reportLimboOutcome, reportRainOutcome } from "../discord/reporter.js";
 
 const WAGER_HINT =
   /wager|play.?through|recent|activity|requirement|bet/i;
+
+/** Balance (coins) before join — used to compute real rain earnings when the pool finishes. */
+const rainBalanceBeforeJoin = new Map<string, number>();
+
+function rainBalanceKey(accountId: number, rainId: string): string {
+  return `${accountId}:${rainId}`;
+}
+
+async function readBalanceCoins(
+  client: import("../rorush/http-client.js").RoRushHttpClient,
+): Promise<number> {
+  const raw = await client.getBalance();
+  const cents = parseBalanceCents(raw);
+  if (cents == null) return 0;
+  return Math.abs(cents) >= 100 ? cents / 100 : cents;
+}
+
+function limboPayloadReqId(payload: unknown): string | undefined {
+  if (typeof payload === "string") return payload;
+  if (!payload || typeof payload !== "object") return undefined;
+  const p = payload as Record<string, unknown>;
+  const id = p.reqId ?? p.ReqId ?? p.requestId;
+  return typeof id === "string" ? id : undefined;
+}
+
+function limboResultMatchesReqId(payload: unknown, reqId: string): boolean {
+  const id = limboPayloadReqId(payload);
+  if (id) return id === reqId;
+  return true;
+}
 
 export function isWagerRejection(message: string): boolean {
   return WAGER_HINT.test(message);
@@ -27,6 +65,10 @@ export async function joinRainForAccount(input: {
 
   if (!account.join_rain) {
     return { success: false, reason: "Join rain disabled for account" };
+  }
+
+  if (hasSuccessfulRainJoin(accountId, rain.rainId)) {
+    return { success: true, reason: "Already joined this rain" };
   }
 
   const rainAmount = rain.amount ?? 0;
@@ -144,10 +186,15 @@ export async function joinRainForAccount(input: {
     });
 
     if (outcome.ok) {
+      try {
+        const bal = await readBalanceCoins(client);
+        rainBalanceBeforeJoin.set(rainBalanceKey(accountId, rain.rainId), bal);
+      } catch {
+        /* balance snapshot optional */
+      }
       updateAccount(accountId, {
         status: "idle",
         last_error: null,
-        lifetime_rain: account.lifetime_rain + rainAmount,
       });
       appendLog({ accountId, category: "rain", message: "Joined rain", detail: rain.rainId });
     } else {
@@ -247,48 +294,56 @@ async function placeLimboWagerBet(
   rainAmountCoins: number,
   nickname: string,
   rainId: string,
+  reasonLabel = "Limbo wager for rain requirement",
 ): Promise<void> {
-  const { creds } = await ensureAuthenticated(accountId);
+  await ensureAuthenticated(accountId);
   const reqId = uuid();
   const envBetCents = Number(process.env.LIMBO_MIN_BET_CENTS ?? NaN);
   const envMultCents = Number(process.env.LIMBO_MIN_MULTIPLIER_CENTS ?? NaN);
+  const envMaxBet = Number(process.env.LIMBO_MAX_BET_COINS ?? NaN);
   const mult = Number.isFinite(envMultCents) ? envMultCents / 100 : account.limbo_multiplier;
-  // Wager exactly the rain pool share (coins), not a fixed amount — fallback if unknown.
-  const betCoins =
+
+  const balanceCoins = await readBalanceCoins(client);
+  let targetBet =
     rainAmountCoins > 0
       ? rainAmountCoins
       : Number.isFinite(envBetCents)
         ? envBetCents / 100
         : account.limbo_bet_coins;
+  if (Number.isFinite(envMaxBet)) targetBet = Math.min(targetBet, envMaxBet);
+  const betCoins = Math.min(targetBet, balanceCoins * 0.98);
+
+  if (betCoins < 0.01) {
+    throw new Error(
+      `Limbo skipped — balance ${balanceCoins.toFixed(2)} coins, need at least 0.01 to wager`,
+    );
+  }
+
   const amountCents = Math.max(1, Math.round(betCoins * 100));
   const multiplierCents = Math.max(110, Math.round(mult * 100));
 
   appendLog({
     accountId,
     category: "limbo",
-    message: "Limbo wager for rain requirement",
+    message: reasonLabel,
     detail: `${(amountCents / 100).toFixed(2)} coins @ ${(multiplierCents / 100).toFixed(2)}x`,
   });
 
-  await hub.playLimbo({
-    reqId,
-    amount: amountCents,
-    currency: "CRYPTO",
-    multiplier: multiplierCents,
-  });
-
-  const targetMult = multiplierCents / 100;
-  const betDisplay = amountCents / 100;
+  const resultEvents = [SIGNALR.limbo.receiveResult, SIGNALR.limbo.receiveResultAlt];
 
   await new Promise<void>((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error("Limbo bet timed out")), 20_000);
-    const offOk = hub.on(SIGNALR.limbo.receiveResult, (raw) => {
-      const p = raw as { reqId?: string };
-      if (p.reqId && p.reqId !== reqId) return;
+    const timeoutMs = Number(process.env.LIMBO_RESULT_TIMEOUT_MS ?? 45_000);
+    const timeout = setTimeout(() => reject(new Error("Limbo bet timed out")), timeoutMs);
+
+    const cleanups: Array<() => void> = [];
+
+    const finishOk = (raw: unknown) => {
+      if (!limboResultMatchesReqId(raw, reqId)) return;
       clearTimeout(timeout);
-      offOk();
-      offFail();
+      for (const c of cleanups) c();
       const parsed = parseLimboResult(raw);
+      const betDisplay = amountCents / 100;
+      const targetMult = multiplierCents / 100;
       appendLog({
         accountId,
         category: "limbo",
@@ -304,17 +359,117 @@ async function placeLimboWagerBet(
         rainId,
       });
       resolve();
-    });
-    const offFail = hub.on(SIGNALR.limbo.receiveFailure, (p) => {
+    };
+
+    const finishFail = (p: unknown) => {
       clearTimeout(timeout);
-      offOk();
-      offFail();
+      for (const c of cleanups) c();
       reject(new Error((p as { message?: string }).message ?? "Limbo failed"));
-    });
+    };
+
+    for (const ev of resultEvents) {
+      cleanups.push(hub.on(ev, finishOk));
+    }
+    cleanups.push(hub.on(SIGNALR.limbo.receiveFailure, finishFail));
+
+    void hub
+      .playLimbo({
+        reqId,
+        amount: amountCents,
+        currency: "CRYPTO",
+        multiplier: multiplierCents,
+      })
+      .catch((err) => {
+        clearTimeout(timeout);
+        for (const c of cleanups) c();
+        reject(err instanceof Error ? err : new Error(String(err)));
+      });
   });
 
   await client.getBalance();
-  void creds;
+}
+
+/** After rain pays out: credit lifetime earnings + optional limbo wager (every rain when enabled). */
+export async function settleRainForAccount(input: {
+  accountId: number;
+  rainId: string;
+  poolCoins?: number;
+  hubs: HubRegistry;
+}): Promise<void> {
+  const { accountId, rainId, poolCoins, hubs } = input;
+  const { account, client } = await ensureAuthenticated(accountId);
+  if (!hasSuccessfulRainJoin(accountId, rainId)) return;
+
+  await new Promise((r) => setTimeout(r, 2_500));
+  const after = await readBalanceCoins(client);
+  const key = rainBalanceKey(accountId, rainId);
+  const before = rainBalanceBeforeJoin.get(key);
+  rainBalanceBeforeJoin.delete(key);
+
+  if (before != null && after > before + 0.0001) {
+    const earned = after - before;
+    updateAccount(accountId, {
+      lifetime_rain: account.lifetime_rain + earned,
+      balance: after,
+    });
+    appendLog({
+      accountId,
+      category: "rain",
+      message: "Rain payout recorded",
+      detail: `+${earned.toFixed(2)} coins (not pool size)`,
+    });
+  } else {
+    updateAccount(accountId, { balance: after });
+  }
+
+  if (!account.limbo_wager_enabled) return;
+
+  try {
+    const hub = await hubs.ensure(accountId, { rain: true, cases: true });
+    await placeLimboWagerBet(
+      accountId,
+      client,
+      hub,
+      account,
+      poolCoins ?? 0,
+      account.nickname,
+      rainId,
+      "Limbo wager after rain",
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    appendLog({
+      accountId,
+      category: "limbo",
+      message: "Limbo wager failed",
+      detail: msg,
+    });
+    updateAccount(accountId, { last_error: msg, status: "error" });
+  }
+}
+
+export async function settleRainForAllJoiners(input: {
+  rainId: string;
+  poolCoins?: number;
+  hubs: HubRegistry;
+}): Promise<void> {
+  for (const accountId of accountIdsWithSuccessfulRainJoin(input.rainId)) {
+    try {
+      await settleRainForAccount({
+        accountId,
+        rainId: input.rainId,
+        poolCoins: input.poolCoins,
+        hubs: input.hubs,
+      });
+    } catch (err) {
+      appendLog({
+        accountId,
+        category: "rain",
+        message: "Rain settlement error",
+        detail: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
 }
 
 /** RoRush sends success as the reqId string; failures use `{ reqId, message }`. */

@@ -104,6 +104,7 @@ export class RoRushHub {
     this.bindEvent(SIGNALR.rain.receiveAmountUpdated);
     this.bindEvent(SIGNALR.rain.receiveFinished);
     this.bindEvent(SIGNALR.limbo.receiveResult, this.handlers.onLimboResult);
+    this.bindEvent(SIGNALR.limbo.receiveResultAlt, this.handlers.onLimboResult);
     this.bindEvent(SIGNALR.limbo.receiveFailure, (p) =>
       this.handlers.onLimboFailure?.(p as { message?: string }),
     );

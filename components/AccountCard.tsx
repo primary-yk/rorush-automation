@@ -114,7 +114,7 @@ export function AccountCard({
           <div className="mt-4 grid grid-cols-3 gap-2 sm:gap-3">
             <StatChip label="Balance" value={local.balance != null ? local.balance.toFixed(2) : "—"} />
             <StatChip label="Level" value={local.level != null ? String(local.level) : "—"} />
-            <StatChip label="Lifetime" value={local.lifetimeEarnings.total.toFixed(2)} accent />
+            <StatChip label="Earned" value={local.lifetimeEarnings.total.toFixed(2)} accent />
           </div>
         </div>
       </div>

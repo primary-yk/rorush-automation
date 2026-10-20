@@ -214,6 +214,22 @@ export function listLogs(limit = 200): Array<{
   }>;
 }
 
+export function hasSuccessfulRainJoin(accountId: number, rainId: string): boolean {
+  const row = getDb()
+    .prepare(
+      "SELECT 1 FROM rain_joins WHERE account_id = ? AND rain_id = ? AND success = 1 LIMIT 1",
+    )
+    .get(accountId, rainId) as { 1: number } | undefined;
+  return row != null;
+}
+
+export function accountIdsWithSuccessfulRainJoin(rainId: string): number[] {
+  const rows = getDb()
+    .prepare("SELECT DISTINCT account_id FROM rain_joins WHERE rain_id = ? AND success = 1")
+    .all(rainId) as Array<{ account_id: number }>;
+  return rows.map((r) => r.account_id);
+}
+
 export function recordRainJoin(input: {
   accountId: number;
   rainId: string;

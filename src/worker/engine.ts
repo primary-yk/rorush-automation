@@ -11,6 +11,7 @@ import {
   joinRainForAccount,
   parseRain,
   rainJoinWindowOpen,
+  settleRainForAllJoiners,
 } from "../automation/rain-join.js";
 import {
   msUntilNextCaseUnlock,
@@ -197,10 +198,17 @@ export class AutomationEngine {
 
     this.sharedRainHub.on(SIGNALR.rain.receiveFinished, (payload) => {
       const p = payload as { rainId?: string };
-      if (p.rainId && this.activeRain?.rainId === p.rainId) {
+      if (!p.rainId) return;
+      const pool = this.activeRain?.rainId === p.rainId ? this.activeRain.amount : undefined;
+      if (this.activeRain?.rainId === p.rainId) {
         this.activeRain = null;
-        appendLog({ category: "rain", message: "Rain finished", detail: p.rainId });
       }
+      appendLog({ category: "rain", message: "Rain finished", detail: p.rainId });
+      void settleRainForAllJoiners({
+        rainId: p.rainId,
+        poolCoins: pool,
+        hubs: this.accountHubs,
+      });
     });
   }
 
