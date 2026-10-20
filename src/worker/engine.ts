@@ -11,7 +11,6 @@ import {
   consumeRainCaptchaToken,
   isRainCaptchaFinished,
   markRainCaptchaFinished,
-  prewarmRainCaptcha,
   prewarmRainCaptchasParallel,
   shouldInvalidateRainCaptcha,
   takeRainCaptchaToken,
@@ -66,8 +65,10 @@ export class AutomationEngine {
   private discordTimer: NodeJS.Timeout | null = null;
   private statusTimer: NodeJS.Timeout | null = null;
   private hubHealthTimer: NodeJS.Timeout | null = null;
+  private rainPrepTimer: NodeJS.Timeout | null = null;
   private rainListenerRecovering = false;
   private lastListenerDisconnectLogMs = 0;
+  private rainPrepLogged = new Set<string>();
 
   /** Join-enabled accounts all marked joined for this rain — ignore further join triggers. */
   private joinEnabledAllInRain(rainId: string): boolean {
@@ -101,6 +102,9 @@ export class AutomationEngine {
     this.hubHealthTimer = setInterval(() => {
       void this.safeRun(this.maintainSharedRainListener());
     }, 45_000);
+    this.rainPrepTimer = setInterval(() => {
+      void this.safeRun(this.maintainActiveRainPrep());
+    }, 15_000);
     void this.safeRun(this.refreshAccountStats());
   }
 
@@ -115,6 +119,7 @@ export class AutomationEngine {
     if (this.discordTimer) clearInterval(this.discordTimer);
     if (this.statusTimer) clearInterval(this.statusTimer);
     if (this.hubHealthTimer) clearInterval(this.hubHealthTimer);
+    if (this.rainPrepTimer) clearInterval(this.rainPrepTimer);
     await this.sharedRainHub?.disconnect();
     this.sharedRainHub = null;
     await this.accountHubs.disconnectAll();
@@ -144,6 +149,60 @@ export class AutomationEngine {
       this.caseTimer = setTimeout(tick, delay);
     };
     void tick();
+  }
+
+  private joinRainEnabledIds(): number[] {
+    return listAccounts()
+      .filter((a) => Number(a.join_rain) !== 0)
+      .map((a) => a.id);
+  }
+
+  /** Parallel captcha + SignalR warm-up for every join-enabled account (safe to call repeatedly). */
+  private kickoffRainJoinPrep(rain: RainState): void {
+    if (!rain.rainId || isRainCaptchaFinished(rain.rainId)) return;
+    const joinIds = this.joinRainEnabledIds();
+    if (joinIds.length === 0) return;
+
+    if (!this.rainPrepLogged.has(rain.rainId)) {
+      this.rainPrepLogged.add(rain.rainId);
+      appendLog({
+        category: "rain",
+        message: "Rain join prep",
+        detail: `${rain.rainId.slice(0, 8)}… · ${joinIds.length} account(s) · parallel captcha + hub warm-up`,
+      });
+    }
+
+    prewarmRainCaptchasParallel(rain.rainId, joinIds);
+    void this.safeRun(this.preconnectJoinRainHubs(joinIds));
+  }
+
+  private async preconnectJoinRainHubs(accountIds: number[]): Promise<void> {
+    await Promise.all(
+      accountIds.map(async (accountId) => {
+        try {
+          await this.accountHubs.ensure(accountId, { rain: true, cases: false });
+        } catch (err) {
+          appendLog({
+            accountId,
+            category: "rain",
+            message: "Rain hub preconnect skipped",
+            detail: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }),
+    );
+  }
+
+  /** Start prep during tip-stage lead window (SignalR may not emit again until join opens). */
+  private async maintainActiveRainPrep(): Promise<void> {
+    if (!this.activeRain) return;
+    const rain = this.activeRain;
+    if (isRainCaptchaFinished(rain.rainId)) return;
+    if (!rainCaptchaPrewarmWindow(rain) && !rainJoinWindowOpen(rain)) return;
+    this.kickoffRainJoinPrep(rain);
+    if (rainJoinWindowOpen(rain)) {
+      this.scheduleRainJoinAttempt(rain, "prep_tick");
+    }
   }
 
   private async pickRainListenerAccount(): Promise<number | null> {
@@ -225,7 +284,7 @@ export class AutomationEngine {
           }),
         );
         if (rainCaptchaPrewarmWindow(rain)) {
-          prewarmRainCaptcha(rain.rainId);
+          this.kickoffRainJoinPrep(rain);
         }
       }
     });
@@ -242,10 +301,7 @@ export class AutomationEngine {
             detail: `${rain.rainId} · window ${rainJoinWindowOpen(rain) ? "open" : "closed"}`,
           }),
         );
-        const joinIds = listAccounts()
-          .filter((a) => Number(a.join_rain) !== 0)
-          .map((a) => a.id);
-        prewarmRainCaptchasParallel(rain.rainId, joinIds);
+        this.kickoffRainJoinPrep(rain);
         this.scheduleRainJoinAttempt(rain, "join_stage");
       }
     });
@@ -257,7 +313,7 @@ export class AutomationEngine {
         this.activeRain = this.mergeRainState(rain);
         rainTelemetryUpdateWindow(this.activeRain);
         if (rainCaptchaPrewarmWindow(this.activeRain)) {
-          prewarmRainCaptcha(this.activeRain.rainId);
+          this.kickoffRainJoinPrep(this.activeRain);
         }
         if (rainJoinWindowOpen(this.activeRain)) {
           this.scheduleRainJoinAttempt(this.activeRain, "current_rains");
@@ -314,6 +370,7 @@ export class AutomationEngine {
       }
       clearRainJoinStateForRain(p.rainId);
       markRainCaptchaFinished(p.rainId);
+      this.rainPrepLogged.delete(p.rainId);
       void settleRainForAllJoiners({
         rainId: p.rainId,
         poolCoins: pool,
@@ -489,7 +546,7 @@ export class AutomationEngine {
         );
         const pendingIds = pending.map((a) => a.id);
         if (!isRainCaptchaFinished(live.rainId)) {
-          prewarmRainCaptchasParallel(live.rainId, pendingIds);
+          this.kickoffRainJoinPrep(live);
         }
 
         if (!loggedCaptchaWait) {

@@ -202,7 +202,7 @@ async function createAndPoll(
     throw new Error(`${desc}\n\nUse ${providerHint(provider)}`);
   }
 
-  const pollMs = Math.max(800, Number(process.env.CAPTCHA_POLL_MS ?? 1500) || 1500);
+  const pollMs = Math.max(800, Number(process.env.CAPTCHA_POLL_MS ?? 1000) || 1000);
   const maxPolls = Math.max(20, Number(process.env.CAPTCHA_MAX_POLLS ?? 180) || 180);
   const verbose = /^(1|true|yes|on)$/i.test(process.env.CAPTCHA_VERBOSE?.trim() ?? "");
   const started = Date.now();
