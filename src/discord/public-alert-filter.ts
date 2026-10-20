@@ -41,6 +41,8 @@ export function shouldPostPublicDiscordAlert(log: ActivityLogRow, fullActivityFe
 
   if (log.category === "rain") {
     const msg = log.message;
+    if (/^joined rain$/i.test(msg)) return false;
+    if (msg === "Rain join summary") return false;
     if (RAIN_OK.test(msg)) return true;
     if (RAIN_CAPTCHA.test(msg)) return false;
     if (RAIN_WAGER.test(msg)) return true;

@@ -570,6 +570,7 @@ async function placeLimboWagerBet(
           rainId: rainIdForReport,
           balanceBefore: balanceBeforeBet,
           balanceAfter: balanceAfterBet,
+          reasonLabel: reasonLabel,
         });
         resolve();
       })();
