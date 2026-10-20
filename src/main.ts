@@ -50,11 +50,28 @@ async function main() {
   } else if (!process.env.DISCORD_BOT_RELAY_URL?.trim()) {
     console.log("Friends mode — Discord bot only for your group; no license keys required.");
   }
+  await startDiscordSidecar();
   await engine.start();
+}
+
+async function startDiscordSidecar(): Promise<void> {
   if (process.env.DISCORD_BOT_RELAY_URL?.trim()) {
+    console.log(
+      "[friends-bot] not started — DISCORD_BOT_RELAY_URL is set (relay mode; use npm run discord-bot on relay host)",
+    );
     startPilotRelayClient();
-  } else {
+    return;
+  }
+  try {
     await startFriendsDiscordBot();
+  } catch (err) {
+    console.error(
+      "[friends-bot] failed to start:",
+      err instanceof Error ? err.message : String(err),
+    );
+    console.error(
+      "[friends-bot] Rain/cases still run. Fix DISCORD_BOT_TOKEN + DISCORD_GUILD_ID, or use DISCORD_REPORT_WEBHOOK only.",
+    );
   }
 }
 

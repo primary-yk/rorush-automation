@@ -166,8 +166,18 @@ export async function startFriendsDiscordBot(): Promise<void> {
     console.log(`[friends-bot] logged in as ${c.user.tag}`);
     const rest = new REST({ version: "10" }).setToken(token);
     const mode = isHostedSaasMode() ? "hosted SaaS (licenses on)" : "friends (no licenses)";
-    await rest.put(Routes.applicationGuildCommands(c.application.id, guildId), { body: buildSlashCommands() });
-    console.log(`[friends-bot] slash commands registered on guild ${guildId} — ${mode}`);
+    try {
+      await rest.put(Routes.applicationGuildCommands(c.application.id, guildId), {
+        body: buildSlashCommands(),
+      });
+      console.log(`[friends-bot] slash commands registered on guild ${guildId} — ${mode}`);
+    } catch (err) {
+      console.error(
+        "[friends-bot] slash command registration failed:",
+        err instanceof Error ? err.message : String(err),
+      );
+      console.error("[friends-bot] Re-invite the bot with applications.commands scope, or check DISCORD_GUILD_ID.");
+    }
   });
 
   client.on(Events.InteractionCreate, (interaction) => {
