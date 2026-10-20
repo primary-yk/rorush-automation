@@ -18,6 +18,23 @@ function loadDotenv(): void {
 
 loadDotenv();
 
+/** Strip quotes, spaces, accidental `clientKey=` prefix from pasted API keys. */
+export function normalizeCaptchaApiKey(raw: unknown): string | undefined {
+  if (raw === undefined || raw === null || raw === "") return undefined;
+  let t = String(raw).trim();
+  if (
+    (t.startsWith('"') && t.endsWith('"')) ||
+    (t.startsWith("'") && t.endsWith("'"))
+  ) {
+    t = t.slice(1, -1).trim();
+  }
+  t = t.replace(/\s+/g, "");
+  if (/^clientkey=/i.test(t)) {
+    t = t.replace(/^clientkey=/i, "");
+  }
+  return t.length ? t : undefined;
+}
+
 const envSchema = z.object({
   ENCRYPTION_KEY: z.string().min(1).optional(),
   RORUSH_API_BASE: z.string().url().default("https://api.rorush.com"),
@@ -35,17 +52,9 @@ const envSchema = z.object({
     .optional()
     .default("2captcha"),
   /** 2Captcha or CapSolver key (RoRush rain hCaptcha). */
-  CAPTCHA_API_KEY: z.preprocess((v) => {
-    if (v === undefined || v === null || v === "") return undefined;
-    const t = String(v).trim();
-    return t.length ? t : undefined;
-  }, z.string().optional()),
+  CAPTCHA_API_KEY: z.preprocess(normalizeCaptchaApiKey, z.string().optional()),
   /** Legacy alias — same as CAPTCHA_API_KEY if that is unset (dcd081d-era .env). */
-  CAPMONSTER_API_KEY: z.preprocess((v) => {
-    if (v === undefined || v === null || v === "") return undefined;
-    const t = String(v).trim();
-    return t.length ? t : undefined;
-  }, z.string().optional()),
+  CAPMONSTER_API_KEY: z.preprocess(normalizeCaptchaApiKey, z.string().optional()),
   AUTOMATION_API_HOST: z.string().default("127.0.0.1"),
   AUTOMATION_API_PORT: z.coerce.number().int().positive().default(43124),
   REQUEST_MIN_INTERVAL_MS: z.coerce.number().int().positive().default(350),

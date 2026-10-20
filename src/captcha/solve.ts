@@ -7,7 +7,12 @@ export type CaptchaProvider = "2captcha" | "capsolver";
 const DEFAULT_HCAPTCHA_SITEKEY = "d5eed048-d092-4296-8496-a040aaccc710";
 const PAGE_URL = process.env.RORUSH_SITE_URL ?? "https://rorush.com/";
 
-type CreateResult = { taskId?: number | string; errorCode?: string; errorDescription?: string };
+type CreateResult = {
+  errorId?: number;
+  taskId?: number | string;
+  errorCode?: string;
+  errorDescription?: string;
+};
 type PollResult = {
   errorId?: number;
   status?: string;
@@ -128,7 +133,27 @@ async function createAndPoll(
 ): Promise<string | null> {
   const websiteKey = siteKey(kind);
   const task = buildTask(provider, kind, websiteKey);
-  const createJson = (await postJson(createUrl(provider), { clientKey, task })) as CreateResult;
+  const clientKeyClean = clientKey.trim();
+  if (!clientKeyClean) {
+    throw new Error("CAPTCHA_API_KEY is empty after trim — fix .env in ~/rush-pilot");
+  }
+
+  const createJson = (await postJson(createUrl(provider), {
+    clientKey: clientKeyClean,
+    task,
+  })) as CreateResult;
+
+  if (createJson.errorId != null && createJson.errorId !== 0) {
+    const desc =
+      createJson.errorDescription ??
+      createJson.errorCode ??
+      "createTask rejected the API key";
+    throw new Error(
+      `${desc}\n\n` +
+        "Copy the key from 2captcha.com → Settings → API Key (32 hex chars, no quotes). " +
+        "In .env use exactly: CAPTCHA_API_KEY=your_key  and CAPTCHA_PROVIDER=2captcha",
+    );
+  }
 
   if (!createJson.taskId) {
     const desc = createJson.errorDescription ?? "createTask failed";
@@ -177,17 +202,52 @@ async function createAndPoll(
   );
 }
 
-export async function fetchCaptchaBalance(clientKey: string): Promise<number | null> {
+export async function verify2CaptchaKey(clientKey: string): Promise<{
+  ok: boolean;
+  balance?: number;
+  errorCode?: string;
+  errorDescription?: string;
+}> {
+  const clientKeyClean = clientKey.trim();
   try {
-    const json = (await postJson("https://api.2captcha.com/getBalance", { clientKey })) as {
+    const json = (await postJson("https://api.2captcha.com/getBalance", {
+      clientKey: clientKeyClean,
+    })) as {
+      errorId?: number;
       errorCode?: string;
+      errorDescription?: string;
       balance?: number;
     };
-    if (json.errorCode) return null;
-    return typeof json.balance === "number" ? json.balance : null;
-  } catch {
-    return null;
+    if (json.errorId != null && json.errorId !== 0) {
+      return {
+        ok: false,
+        errorCode: json.errorCode,
+        errorDescription: json.errorDescription ?? json.errorCode,
+      };
+    }
+    if (json.errorCode) {
+      return { ok: false, errorCode: json.errorCode, errorDescription: json.errorDescription };
+    }
+    if (typeof json.balance !== "number") {
+      return { ok: false, errorDescription: "Unexpected getBalance response" };
+    }
+    return { ok: true, balance: json.balance };
+  } catch (err) {
+    return {
+      ok: false,
+      errorDescription: err instanceof Error ? err.message : String(err),
+    };
   }
+}
+
+export async function fetchCaptchaBalance(clientKey: string): Promise<number | null> {
+  const v = await verify2CaptchaKey(clientKey);
+  return v.ok && v.balance != null ? v.balance : null;
+}
+
+export function captchaKeyFingerprint(key: string): string {
+  if (key.length <= 10) return "(too short)";
+  return `${key.slice(0, 4)}…${key.slice(-4)} (${key.length} chars)`;
 }
 
 let cachedProvider: CaptchaProvider | null = null;

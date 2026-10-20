@@ -6,10 +6,11 @@
 import "../src/bootstrap-env.js";
 import { captchaApiKey, loadConfig, projectRoot } from "../src/config.js";
 import {
+  captchaKeyFingerprint,
   detectCaptchaProvider,
-  fetchCaptchaBalance,
   resolveCaptchaProvider,
   solveCaptcha,
+  verify2CaptchaKey,
 } from "../src/captcha/solve.js";
 
 async function main() {
@@ -25,7 +26,26 @@ async function main() {
     console.error("3. Restart npm run dev (Ctrl+C, then npm run dev again)");
     process.exit(1);
   }
-  console.log("Captcha API key: loaded (" + key.length + " chars)");
+  console.log("Captcha API key:", captchaKeyFingerprint(key));
+  if (!/^[a-f0-9]{32}$/i.test(key)) {
+    console.warn(
+      "Warning: 2Captcha keys are usually 32 hex characters. Yours may be mistyped or include hidden characters.",
+    );
+  }
+
+  const verify = await verify2CaptchaKey(key);
+  if (!verify.ok) {
+    console.error("\n2Captcha rejected this API key (getBalance failed):");
+    console.error(" ", verify.errorDescription ?? verify.errorCode ?? "unknown error");
+    console.error("\nFix ~/rush-pilot/.env — one line, no quotes, no spaces:");
+    console.error("  CAPTCHA_API_KEY=<paste from 2captcha.com → API Key>");
+    console.error("  CAPTCHA_PROVIDER=2captcha");
+    console.error("\nRemove duplicate CAPTCHA_API_KEY or old CAPMONSTER lines if the wrong one wins.");
+    console.error("Then: npm run test-captcha");
+    process.exit(1);
+  }
+  console.log("2Captcha balance: $" + verify.balance!.toFixed(2));
+
   const detected = await detectCaptchaProvider(key);
   const provider = await resolveCaptchaProvider(key);
   console.log(
@@ -33,15 +53,7 @@ async function main() {
     provider,
     detected ? `(detected via balance: ${detected})` : "(from CAPTCHA_PROVIDER)",
   );
-  if (provider === "2captcha") {
-    const bal = await fetchCaptchaBalance(key);
-    if (bal != null) {
-      console.log("2Captcha balance: $" + bal.toFixed(2));
-      if (bal < 0.5) {
-        console.warn("Balance is low — top up at 2captcha.com if solves fail or stall.");
-      }
-    }
-  }
+
   console.log(
     "Requesting one hCaptcha token (often 30–120s; set CAPTCHA_VERBOSE=1 to see wait progress)…",
   );
@@ -57,7 +69,6 @@ async function main() {
     console.log(
       "\nNote: >75s is usually provider queue load, not Rush Pilot.",
       "Keep npm run dev running before rain so prewarm finishes during tip stage.",
-      "Try CapSolver (CAPTCHA_PROVIDER=capsolver) and compare with npm run test-captcha.",
     );
   }
 }
