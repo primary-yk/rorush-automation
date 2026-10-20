@@ -250,7 +250,7 @@ async function joinRainForAccountOnce(input: {
       accountId,
       category: "rain",
       message: "Sending rain join",
-      detail: `${rain.rainId} · pool ${rainAmount} coins`,
+      detail: `${rain.rainId} · pool ${rainAmount} coins${captchaToken ? " · captcha ready" : ""}`,
     });
     const outcomePromise = waitForOutcome();
     await hub.joinRain({ reqId, rainId: rain.rainId, captchaToken });
@@ -306,11 +306,15 @@ async function joinRainForAccountOnce(input: {
 
     if (outcome.ok) {
       markRainJoined(accountId, rain.rainId);
-      try {
-        const bal = await readBalanceCoins(client);
-        rainBalanceBeforeJoin.set(rainBalanceKey(accountId, rain.rainId), bal);
-      } catch {
-        /* balance snapshot optional */
+      const balKey = rainBalanceKey(accountId, rain.rainId);
+      for (let i = 0; i < 4; i++) {
+        try {
+          const bal = await readBalanceCoins(client);
+          rainBalanceBeforeJoin.set(balKey, bal);
+          break;
+        } catch {
+          await new Promise((r) => setTimeout(r, 400));
+        }
       }
       updateAccount(accountId, {
         status: "idle",
@@ -504,9 +508,9 @@ async function placeLimboWagerBet(
     const finishOk = (raw: unknown) => {
       if (settled) return;
       if (!limboResultMatchesReqId(raw, reqId)) return;
+      settled = true;
       clearTimeout(timeout);
       for (const c of cleanups) c();
-      settled = true;
       const betDisplay = amountCents / 100;
       const targetMult = multiplierCents / 100;
       const parsed = parseLimboResult(raw, targetMult);
@@ -597,18 +601,23 @@ export async function settleRainForAccount(input: {
   hubs: HubRegistry;
 }): Promise<void> {
   const { accountId, rainId, poolCoins, hubs } = input;
-  const { account, client } = await ensureAuthenticated(accountId);
-  if (!isRainJoined(accountId, rainId)) return;
+  const settleKey = accountRainSettleKey(accountId, rainId);
+  if (accountRainSettled.has(settleKey)) return;
+  accountRainSettled.add(settleKey);
 
-  await new Promise((r) => setTimeout(r, 2_500));
-  const after = await readBalanceCoins(client);
+  const { account, client } = await ensureAuthenticated(accountId);
+  if (!isRainJoined(accountId, rainId)) {
+    accountRainSettled.delete(settleKey);
+    return;
+  }
+
   const key = rainBalanceKey(accountId, rainId);
-  const before = rainBalanceBeforeJoin.get(key);
+  const before = rainBalanceBeforeJoin.get(key) ?? null;
+  await new Promise((r) => setTimeout(r, 1_500));
+  const { after, earned } = await measureRainPayoutCoins(client, before);
   rainBalanceBeforeJoin.delete(key);
 
-  let earned: number | null = null;
-  if (before != null && after > before + 0.0001) {
-    earned = after - before;
+  if (earned != null && earned >= 0.01) {
     updateAccount(accountId, {
       lifetime_rain: account.lifetime_rain + earned,
       balance: after,
@@ -626,11 +635,17 @@ export async function settleRainForAccount(input: {
   if (!account.limbo_wager_enabled) return;
 
   if (earned == null || before == null || earned < 0.01) {
+    const why =
+      before == null
+        ? "No pre-join balance snapshot — enable Join rain before the window and keep dev running"
+        : earned == null
+          ? "Payout not on balance yet — limbo skipped (your stack was not wagered)"
+          : `Payout too small (${earned.toFixed(2)} coins) for limbo`;
     appendLog({
       accountId,
       category: "limbo",
       message: "Limbo skipped after rain",
-      detail: "Could not measure rain payout — no wager (your existing balance is untouched)",
+      detail: why,
     });
     return;
   }
@@ -656,6 +671,32 @@ export async function settleRainForAccount(input: {
 }
 
 const rainSettlementInflight = new Set<string>();
+const accountRainSettled = new Set<string>();
+
+function accountRainSettleKey(accountId: number, rainId: string): string {
+  return `${accountId}:${rainId}`;
+}
+
+async function measureRainPayoutCoins(
+  client: import("../rorush/http-client.js").RoRushHttpClient,
+  before: number | null,
+): Promise<{ after: number; earned: number | null }> {
+  const maxWaitMs = Math.max(5_000, Number(process.env.RAIN_PAYOUT_WAIT_MS ?? 22_000) || 22_000);
+  const pollMs = 2_000;
+  const start = Date.now();
+  let after = await readBalanceCoins(client);
+  while (Date.now() - start < maxWaitMs) {
+    if (before != null && after > before + 0.0001) {
+      return { after, earned: after - before };
+    }
+    await new Promise((r) => setTimeout(r, pollMs));
+    after = await readBalanceCoins(client);
+  }
+  if (before != null && after > before + 0.0001) {
+    return { after, earned: after - before };
+  }
+  return { after, earned: null };
+}
 
 export async function settleRainForAllJoiners(input: {
   rainId: string;

@@ -1,4 +1,5 @@
 import { getDb } from "./database.js";
+import { shouldSkipDuplicateActivityLog } from "./activity-dedupe.js";
 
 export type AccountRow = {
   id: number;
@@ -165,6 +166,18 @@ export function deleteAccount(id: number): void {
 }
 
 export function appendLog(input: {
+  accountId?: number | null;
+  category: string;
+  message: string;
+  detail?: string | null;
+  /** Bypass dedupe for rare one-off diagnostics. */
+  force?: boolean;
+}): void {
+  if (!input.force && shouldSkipDuplicateActivityLog(input)) return;
+  insertActivityLogRow(input);
+}
+
+function insertActivityLogRow(input: {
   accountId?: number | null;
   category: string;
   message: string;

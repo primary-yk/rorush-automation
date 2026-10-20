@@ -1,4 +1,5 @@
 import { captchaApiKey, loadConfig, reloadEnv } from "../config.js";
+import { clearActivityDedupeForRain } from "../db/activity-dedupe.js";
 import {
   appendLog,
   getSettings,
@@ -39,6 +40,8 @@ export class AutomationEngine {
   /** One active join pipeline per rain (captcha + hub invoke can take >90s if overlapped). */
   private rainJoinInFlight = new Set<string>();
   private rainSettlementDone = new Set<string>();
+  /** One dashboard line per rain lifecycle step (created / join stage / finished). */
+  private rainLifecycleLogged = new Set<string>();
   private caseTimer: NodeJS.Timeout | null = null;
   private discordTimer: NodeJS.Timeout | null = null;
   private statusTimer: NodeJS.Timeout | null = null;
@@ -145,11 +148,13 @@ export class AutomationEngine {
       const rain = parseRain(payload);
       if (rain) {
         this.activeRain = rain;
-        appendLog({
-          category: "rain",
-          message: "Rain created",
-          detail: `${rain.rainId} · pool ${rain.amount ?? "?"} coins`,
-        });
+        this.logRainLifecycleOnce("created", rain.rainId, () =>
+          appendLog({
+            category: "rain",
+            message: "Rain created",
+            detail: `${rain.rainId} · pool ${rain.amount ?? "?"} coins`,
+          }),
+        );
         prewarmRainCaptcha(rain.rainId);
       }
     });
@@ -158,11 +163,13 @@ export class AutomationEngine {
       const rain = partial ? this.mergeRainState(partial) : this.activeRain;
       if (rain) {
         this.activeRain = rain;
-        appendLog({
-          category: "rain",
-          message: "Rain join stage started",
-          detail: `${rain.rainId} · window ${rainJoinWindowOpen(rain) ? "open" : "closed"}`,
-        });
+        this.logRainLifecycleOnce("join_stage", rain.rainId, () =>
+          appendLog({
+            category: "rain",
+            message: "Rain join stage started",
+            detail: `${rain.rainId} · window ${rainJoinWindowOpen(rain) ? "open" : "closed"}`,
+          }),
+        );
         prewarmRainCaptcha(rain.rainId);
         this.scheduleRainJoinAttempt(rain, "join_stage");
       }
@@ -217,7 +224,10 @@ export class AutomationEngine {
       }
       if (this.rainSettlementDone.has(p.rainId)) return;
       this.rainSettlementDone.add(p.rainId);
-      appendLog({ category: "rain", message: "Rain finished", detail: p.rainId });
+      this.logRainLifecycleOnce("finished", p.rainId, () =>
+        appendLog({ category: "rain", message: "Rain finished", detail: p.rainId }),
+      );
+      clearActivityDedupeForRain(p.rainId);
       clearRainJoinStateForRain(p.rainId);
       clearRainCaptcha(p.rainId);
       void settleRainForAllJoiners({
@@ -226,6 +236,13 @@ export class AutomationEngine {
         hubs: this.accountHubs,
       });
     });
+  }
+
+  private logRainLifecycleOnce(step: string, rainId: string, log: () => void): void {
+    const key = `${step}:${rainId}`;
+    if (this.rainLifecycleLogged.has(key)) return;
+    this.rainLifecycleLogged.add(key);
+    log();
   }
 
   private mergeRainState(incoming: RainState): RainState {
@@ -266,11 +283,6 @@ export class AutomationEngine {
       return;
     }
     if (!rainJoinWindowOpen(rain)) {
-      appendLog({
-        category: "rain",
-        message: "Rain join window not open yet",
-        detail: `${rain.rainId} · trigger ${trigger}`,
-      });
       return;
     }
 
@@ -392,6 +404,8 @@ export class AutomationEngine {
     this.sharedRainHub = null;
     this.activeRain = null;
     this.rainJoinLastAttempt.clear();
+    this.rainLifecycleLogged.clear();
+    this.rainSettlementDone.clear();
     await this.ensureSharedRainListener();
     void this.safeRun(this.refreshAccountStats());
   }

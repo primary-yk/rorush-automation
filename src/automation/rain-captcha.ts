@@ -1,4 +1,5 @@
 import { isTransientNetworkError, solveCaptcha } from "../captcha/solve.js";
+import { appendLog } from "../db/repositories.js";
 
 /** Drop cached token after this (ms). hCaptcha/RoRush often reject tokens older than ~2 min. */
 function tokenTtlMs(): number {
@@ -32,6 +33,13 @@ function logSolveDone(rainId: string, started: number, token: string | null): vo
   console.log(
     `[rain-captcha] ${rainId.slice(0, 8)}… ${token ? "ready" : "failed"} in ${sec}s`,
   );
+  if (token) {
+    appendLog({
+      category: "rain",
+      message: "Rain captcha ready",
+      detail: `${rainId} · ${sec}s`,
+    });
+  }
 }
 
 async function solveHcaptchaWithRetry(): Promise<string | null> {

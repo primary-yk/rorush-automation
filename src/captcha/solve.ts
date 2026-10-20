@@ -203,7 +203,7 @@ async function createAndPoll(
   }
 
   const pollMs = Math.max(800, Number(process.env.CAPTCHA_POLL_MS ?? 1500) || 1500);
-  const maxPolls = Math.max(20, Number(process.env.CAPTCHA_MAX_POLLS ?? 120) || 120);
+  const maxPolls = Math.max(20, Number(process.env.CAPTCHA_MAX_POLLS ?? 180) || 180);
   const verbose = /^(1|true|yes|on)$/i.test(process.env.CAPTCHA_VERBOSE?.trim() ?? "");
   const started = Date.now();
   const taskId = createJson.taskId;
