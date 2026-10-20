@@ -42,19 +42,61 @@ function isTransientNetworkError(err: unknown): boolean {
   return /fetch failed|ECONNRESET|ETIMEDOUT|ENOTFOUND|ECONNREFUSED|socket|network|abort/i.test(msg);
 }
 
+function isJsonParseError(err: unknown): boolean {
+  return err instanceof SyntaxError || /JSON|Unexpected token|non-whitespace character after JSON/i.test(
+    err instanceof Error ? err.message : String(err),
+  );
+}
+
+/** Some proxies/WSL setups prepend junk (e.g. `200 `) before JSON — res.json() then fails at position 4. */
+export function parseCaptchaApiBody(text: string, context: string): unknown {
+  let s = text.trim();
+  if (s.charCodeAt(0) === 0xfeff) s = s.slice(1).trim();
+  if (!s) {
+    throw new Error(`Empty captcha API response (${context})`);
+  }
+
+  const tryParse = (raw: string): unknown | null => {
+    try {
+      return JSON.parse(raw) as unknown;
+    } catch {
+      return null;
+    }
+  };
+
+  let parsed = tryParse(s);
+  if (parsed !== null) return parsed;
+
+  const jsonStart = s.search(/[{\[]/);
+  if (jsonStart > 0) {
+    parsed = tryParse(s.slice(jsonStart));
+    if (parsed !== null) return parsed;
+  }
+
+  const preview = s.slice(0, 160).replace(/\s+/g, " ");
+  throw new Error(
+    `Captcha API returned non-JSON (${context}): ${preview}${s.length > 160 ? "…" : ""}`,
+  );
+}
+
 async function postJson(url: string, body: unknown, attempt = 1): Promise<unknown> {
   const maxAttempts = Math.max(1, Number(process.env.CAPTCHA_HTTP_RETRIES ?? 4) || 4);
   const timeoutMs = Math.max(5_000, Number(process.env.CAPTCHA_HTTP_TIMEOUT_MS ?? 30_000) || 30_000);
   try {
     const res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(timeoutMs),
     });
-    return res.json();
+    const text = await res.text();
+    const json = parseCaptchaApiBody(text, url);
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status} from captcha API (${url})`);
+    }
+    return json;
   } catch (err) {
-    if (attempt < maxAttempts && isTransientNetworkError(err)) {
+    if (attempt < maxAttempts && (isTransientNetworkError(err) || isJsonParseError(err))) {
       const delay = Math.min(8000, 500 * 2 ** (attempt - 1));
       await new Promise((r) => setTimeout(r, delay));
       return postJson(url, body, attempt + 1);
@@ -171,7 +213,7 @@ async function createAndPoll(
       await new Promise((r) => setTimeout(r, pollMs));
     }
     const resultJson = (await postJson(resultUrl(provider), {
-      clientKey,
+      clientKey: clientKeyClean,
       taskId,
     })) as PollResult;
     if (resultJson.errorId != null && resultJson.errorId !== 0) {
