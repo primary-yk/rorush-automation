@@ -38,7 +38,8 @@ export type Settings = {
   discordReportEnabled: boolean;
   hasDiscordReportWebhook: boolean;
   discordActivityFeedEnabled: boolean;
-  /** True when automation process loaded CAPMONSTER_API_KEY from .env */
+  captchaConfigured?: boolean;
+  /** @deprecated use captchaConfigured */
   capmonsterConfigured?: boolean;
 };
 

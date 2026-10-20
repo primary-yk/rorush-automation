@@ -43,7 +43,8 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
   const totalEarnings = accounts.reduce((n, a) => n + a.lifetimeEarnings.total, 0);
   const rainEnabled = accounts.filter((a) => a.joinRain).length;
   const casesEnabled = accounts.filter((a) => a.autoOpenCases).length;
-  const captchaMissing = apiOk && rainEnabled > 0 && settings?.capmonsterConfigured === false;
+  const captchaOk = settings?.captchaConfigured ?? settings?.capmonsterConfigured;
+  const captchaMissing = apiOk && rainEnabled > 0 && captchaOk === false;
 
   const accountsById = useMemo(() => new Map(accounts.map((a) => [a.id, a.nickname])), [accounts]);
 

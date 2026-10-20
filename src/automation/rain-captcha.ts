@@ -1,4 +1,4 @@
-import { solveCaptcha } from "../captcha/solve.js";
+import { isTransientNetworkError, solveCaptcha } from "../captcha/solve.js";
 
 /** hCaptcha tokens are short-lived; refresh if older than this. */
 const TOKEN_TTL_MS = 100_000;
@@ -27,19 +27,23 @@ function logSolveDone(rainId: string, started: number, token: string | null): vo
   );
 }
 
+async function solveHcaptchaWithRetry(): Promise<string | null> {
+  try {
+    return await solveCaptcha("hcaptcha");
+  } catch (err) {
+    if (!isTransientNetworkError(err)) throw err;
+    console.warn("[rain-captcha] retry after network error…");
+    return solveCaptcha("hcaptcha");
+  }
+}
+
 /** Start solving during tip stage so the token is ready when the join window opens (~90s). */
 export function prewarmRainCaptcha(rainId: string): void {
   if (!rainId || readCached(rainId)) return;
   if (inflight.has(cacheKey(rainId))) return;
   const started = Date.now();
   console.log(`[rain-captcha] prewarm ${rainId.slice(0, 8)}…`);
-  const runSolve = () =>
-    solveCaptcha("hcaptcha").catch(async (err) => {
-      if (!/fetch failed|network|ETIMEDOUT/i.test(String(err))) throw err;
-      console.warn("[rain-captcha] retry after network error…");
-      return solveCaptcha("hcaptcha");
-    });
-  const p = runSolve()
+  const p = solveHcaptchaWithRetry()
     .then((token) => {
       logSolveDone(rainId, started, token);
       if (token) cache.set(cacheKey(rainId), { token, at: Date.now() });
@@ -60,13 +64,7 @@ export async function takeRainCaptchaToken(rainId: string): Promise<string | nul
   if (!p) {
     const started = Date.now();
     console.log(`[rain-captcha] solve now ${rainId.slice(0, 8)}… (no cache)`);
-    const runSolve = () =>
-      solveCaptcha("hcaptcha").catch(async (err) => {
-        if (!/fetch failed|network|ETIMEDOUT/i.test(String(err))) throw err;
-        console.warn("[rain-captcha] retry after network error…");
-        return solveCaptcha("hcaptcha");
-      });
-    p = runSolve().then((token) => {
+    p = solveHcaptchaWithRetry().then((token) => {
       logSolveDone(rainId, started, token);
       if (token) cache.set(cacheKey(rainId), { token, at: Date.now() });
       return token;

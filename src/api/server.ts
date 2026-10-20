@@ -39,7 +39,9 @@ export function createApiServer() {
       databasePath: cfg.DATABASE_PATH,
       accountCount: listAccounts().length,
       encryptionConfigured: !!cfg.ENCRYPTION_KEY?.trim(),
+      captchaConfigured: !!captchaApiKey(cfg),
       capmonsterConfigured: !!captchaApiKey(cfg),
+      accounts: listAccounts().map((a) => ({ id: a.id, nickname: a.nickname, joinRain: !!a.join_rain })),
     });
   });
 
@@ -54,6 +56,7 @@ export function createApiServer() {
       discordReportEnabled: !!s.discord_report_enabled,
       hasDiscordReportWebhook: !!s.discord_report_webhook_enc,
       discordActivityFeedEnabled: !!s.discord_activity_feed_enabled,
+      captchaConfigured: !!captchaApiKey(cfg),
       capmonsterConfigured: !!captchaApiKey(cfg),
     });
   });
@@ -217,11 +220,12 @@ export function createApiServer() {
       body.apiKey !== undefined ||
       body.proxyUrl !== undefined;
     const caseToggleChanged = body.autoOpenCases !== undefined;
+    const joinRainChanged = body.joinRain !== undefined;
 
     res.json(publicAccount(updated));
 
     // Respond first — toggles/dismiss should feel instant; heavy work runs after.
-    if (authChanged) {
+    if (authChanged || joinRainChanged) {
       void engine.reloadAccounts().catch((err) => {
         console.error("[patch account reload]", err instanceof Error ? err.message : String(err));
       });

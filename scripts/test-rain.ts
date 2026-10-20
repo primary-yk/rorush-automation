@@ -2,7 +2,7 @@
  * Live rain test — run while RoRush may have an active or upcoming rain.
  *
  *   npx tsx scripts/test-rain.ts              # listen 3 min, log hub events
- *   npx tsx scripts/test-rain.ts --join       # also attempt join on join stage (needs CAPMONSTER_API_KEY)
+ *   npx tsx scripts/test-rain.ts --join       # also attempt join on join stage (needs CAPTCHA_API_KEY)
  *   npx tsx scripts/test-rain.ts --any        # use first account even if Join rain is off (listen/login test)
  */
 import "../src/bootstrap-env.js";

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  isRetryableRainFailure,
   isWagerRejection,
   matchesJoinReqId,
   parseRain,
@@ -7,6 +8,14 @@ import {
   rainJoinWindowOpen,
 } from "../src/automation/rain-join.js";
 import type { RainState } from "../src/rorush/types.js";
+
+describe("isRetryableRainFailure", () => {
+  it("treats network and timeout as retryable", () => {
+    expect(isRetryableRainFailure("fetch failed")).toBe(true);
+    expect(isRetryableRainFailure("Rain join timed out")).toBe(true);
+    expect(isRetryableRainFailure("Captcha invalid")).toBe(false);
+  });
+});
 
 describe("isWagerRejection", () => {
   it("detects wager-related failures", () => {

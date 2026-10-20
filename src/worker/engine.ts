@@ -8,7 +8,7 @@ import {
 import { prewarmRainCaptcha } from "../automation/rain-captcha.js";
 import { clearRainJoinStateForRain, isRainJoined } from "../automation/rain-join-state.js";
 import {
-  isWagerRejection,
+  isRetryableRainFailure,
   joinRainForAccount,
   parseRain,
   rainCaptchaPrewarmWindow,
@@ -296,9 +296,10 @@ export class AutomationEngine {
           const result = await joinRainForAccount({ accountId: account.id, rain, hub });
           // Only retry wager blocks — captcha/timeouts used to re-queue and spam "Rain join error".
           const retryable =
-            !result.success && rainJoinWindowOpen(rain) && isWagerRejection(result.reason);
+            !result.success && rainJoinWindowOpen(rain) && isRetryableRainFailure(result.reason);
           if (retryable) {
             this.rainJoinLastAttempt.delete(rain.rainId);
+            prewarmRainCaptcha(rain.rainId);
             this.scheduleRainJoinAttempt(rain, "retry_after_fail");
           }
         } catch (err) {
@@ -325,7 +326,7 @@ export class AutomationEngine {
         ]);
         const balanceRawAmount = parseBalanceCents(balanceRaw);
         const level = parseLevel(levelRaw);
-        const patch: Parameters<typeof updateAccount>[1] = { status: "idle" };
+        const patch: Parameters<typeof updateAccount>[1] = {};
         if (balanceRawAmount != null) {
           patch.balance =
             Number.isInteger(balanceRawAmount) && Math.abs(balanceRawAmount) >= 100
@@ -336,6 +337,7 @@ export class AutomationEngine {
         const row = listAccounts().find((a) => a.id === account.id);
         if (row?.last_error && isIgnorableCaseError(row.last_error)) {
           patch.last_error = null;
+          patch.status = "idle";
         }
         updateAccount(account.id, patch);
       } catch (err) {

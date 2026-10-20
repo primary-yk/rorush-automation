@@ -1,6 +1,6 @@
 import { fetch } from "undici";
 import { decryptField } from "../accounts/session-manager.js";
-import { solveCaptcha } from "../captcha/capmonster.js";
+import { solveCaptcha } from "../captcha/solve.js";
 import {
   appendLog,
   getSettings,

@@ -1,3 +1,4 @@
+import { isTransientNetworkError } from "../captcha/solve.js";
 import { requireEncryptionKey } from "../config.js";
 import { decryptSecret, encryptSecret } from "../crypto/secret-box.js";
 import {
@@ -83,7 +84,9 @@ export async function ensureAuthenticated(accountId: number): Promise<{
     return { account, client, creds };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    updateAccount(accountId, { status: "error", last_error: message });
+    if (!isTransientNetworkError(err)) {
+      updateAccount(accountId, { status: "error", last_error: message });
+    }
     throw err;
   }
 }

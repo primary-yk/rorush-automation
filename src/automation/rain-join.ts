@@ -1,13 +1,12 @@
 import { v4 as uuid } from "uuid";
 import { isTransientNetworkError } from "../captcha/solve.js";
 import { clearRainCaptcha, takeRainCaptchaToken } from "./rain-captcha.js";
-import { loadConfig } from "../config.js";
+import { LIMBO_MIN_MULTIPLIER, loadConfig } from "../config.js";
 import {
   isRainJoined,
   markRainJoined,
   trackJoinInflight,
 } from "./rain-join-state.js";
-import { LIMBO_MIN_MULTIPLIER } from "../config.js";
 import {
   appendLog,
   recordRainJoin,
@@ -57,6 +56,20 @@ function limboResultMatchesReqId(payload: unknown, reqId: string): boolean {
 
 export function isWagerRejection(message: string): boolean {
   return WAGER_HINT.test(message);
+}
+
+/** Failures that may succeed on retry within the same rain window. */
+export function isRetryableRainFailure(message: string): boolean {
+  if (isWagerRejection(message)) return true;
+  if (isTransientNetworkError(message)) return true;
+  return /timed out|captcha token missing|fetch failed|join timed out|too late/i.test(message);
+}
+
+function accountStatusForRainFailure(message: string): { status: "idle" | "error"; last_error: string } {
+  return {
+    status: isRetryableRainFailure(message) ? "idle" : "error",
+    last_error: message,
+  };
 }
 
 export async function joinRainForAccount(input: {
@@ -220,7 +233,7 @@ async function joinRainForAccountOnce(input: {
       });
       appendLog({ accountId, category: "rain", message: "Joined rain", detail: rain.rainId });
     } else {
-      updateAccount(accountId, { status: "error", last_error: outcome.message });
+      updateAccount(accountId, accountStatusForRainFailure(outcome.message));
       appendLog({
         accountId,
         category: "rain",
@@ -244,13 +257,7 @@ async function joinRainForAccountOnce(input: {
       clearRainCaptcha(rain.rainId);
     }
     recordRainJoin({ accountId, rainId: rain.rainId, amount: rainAmount, success: false, reason });
-    const patch: Parameters<typeof updateAccount>[1] = { last_error: reason };
-    if (isTransientNetworkError(err)) {
-      patch.status = "idle";
-    } else {
-      patch.status = "error";
-    }
-    updateAccount(accountId, patch);
+    updateAccount(accountId, accountStatusForRainFailure(reason));
     const headline = reason.split("\n")[0]!.trim().slice(0, 220);
     appendLog({
       accountId,
@@ -275,7 +282,7 @@ async function joinOnce(
     };
   }
   const outcomePromise = new Promise<{ ok: boolean; message: string }>((resolve) => {
-    const timeout = setTimeout(() => resolve({ ok: false, message: "Retry timed out" }), 30_000);
+    const timeout = setTimeout(() => resolve({ ok: false, message: "Retry timed out" }), 60_000);
     const finish = (result: { ok: boolean; message: string }) => {
       clearTimeout(timeout);
       offOk();
