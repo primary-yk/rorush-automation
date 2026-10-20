@@ -187,16 +187,16 @@ export function AccountCard({
           />
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm text-slate-400">
-              Multiplier (min 1.1×)
+              Multiplier (min 1.3×)
               <Input
                 type="number"
                 step="0.01"
-                min={1.1}
+                min={1.3}
                 className="mt-1.5"
-                defaultValue={local.limboMultiplier}
+                defaultValue={Math.max(1.3, local.limboMultiplier)}
                 disabled={busy}
                 onBlur={async (e) => {
-                  const v = Math.max(1.1, Number(e.target.value) || 1.1);
+                  const v = Math.max(1.3, Number(e.target.value) || 1.3);
                   await applyPatch("limboMultiplier", { limboMultiplier: v }, { limboMultiplier: v });
                 }}
               />

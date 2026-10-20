@@ -1,5 +1,5 @@
 import express from "express";
-import { captchaApiKey, loadConfig, projectRoot } from "../config.js";
+import { captchaApiKey, LIMBO_MIN_MULTIPLIER, loadConfig, projectRoot } from "../config.js";
 import {
   deleteAccount,
   getSettings,
@@ -189,7 +189,9 @@ export function createApiServer() {
     if (body.autoRedeemCodes !== undefined) patch.auto_redeem_codes = body.autoRedeemCodes ? 1 : 0;
     if (body.minCodeLevel !== undefined) patch.min_code_level = body.minCodeLevel;
     if (body.limboWagerEnabled !== undefined) patch.limbo_wager_enabled = body.limboWagerEnabled ? 1 : 0;
-    if (body.limboMultiplier !== undefined) patch.limbo_multiplier = body.limboMultiplier;
+    if (body.limboMultiplier !== undefined) {
+      patch.limbo_multiplier = Math.max(LIMBO_MIN_MULTIPLIER, body.limboMultiplier);
+    }
     if (body.limboBetCoins !== undefined) patch.limbo_bet_coins = body.limboBetCoins;
     if (body.clearError) {
       patch.last_error = null;

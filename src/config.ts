@@ -9,6 +9,9 @@ export function projectRoot(): string {
   return PROJECT_ROOT;
 }
 
+/** RoRush: multipliers below ~1.3× can leave wager lock; enforce on all limbo bets. */
+export const LIMBO_MIN_MULTIPLIER = 1.3;
+
 function loadDotenv(): void {
   loadProjectEnv();
 }

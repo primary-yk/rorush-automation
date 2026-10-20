@@ -1,7 +1,7 @@
 import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
-import { loadConfig } from "../config.js";
+import { LIMBO_MIN_MULTIPLIER, loadConfig } from "../config.js";
 import { SCHEMA_SQL } from "./schema.js";
 
 let db: Database.Database | null = null;
@@ -43,13 +43,19 @@ function migrateAccounts(db: Database.Database): void {
   const add: Array<[string, string]> = [
     ["owner_discord_id", "TEXT"],
     ["limbo_wager_enabled", "INTEGER NOT NULL DEFAULT 1"],
-    ["limbo_multiplier", "REAL NOT NULL DEFAULT 1.1"],
+    ["limbo_multiplier", "REAL NOT NULL DEFAULT 1.3"],
     ["limbo_bet_coins", "REAL NOT NULL DEFAULT 1"],
   ];
   for (const [name, type] of add) {
     if (!cols.has(name)) {
       db.exec(`ALTER TABLE accounts ADD COLUMN ${name} ${type}`);
     }
+  }
+  if (cols.has("limbo_multiplier")) {
+    db.prepare("UPDATE accounts SET limbo_multiplier = ? WHERE limbo_multiplier < ?").run(
+      LIMBO_MIN_MULTIPLIER,
+      LIMBO_MIN_MULTIPLIER,
+    );
   }
 }
 

@@ -7,6 +7,7 @@ import {
   markRainJoined,
   trackJoinInflight,
 } from "./rain-join-state.js";
+import { LIMBO_MIN_MULTIPLIER } from "../config.js";
 import {
   appendLog,
   recordRainJoin,
@@ -331,12 +332,13 @@ async function placeLimboWagerBet(
   const envBetCents = Number(process.env.LIMBO_MIN_BET_CENTS ?? NaN);
   const envMultCents = Number(process.env.LIMBO_MIN_MULTIPLIER_CENTS ?? NaN);
   const envMaxBet = Number(process.env.LIMBO_MAX_BET_COINS ?? NaN);
-  const mult =
+  let mult =
     opts.multiplierOverride != null && Number.isFinite(opts.multiplierOverride)
       ? opts.multiplierOverride
       : Number.isFinite(envMultCents)
         ? envMultCents / 100
         : account.limbo_multiplier;
+  mult = Math.max(LIMBO_MIN_MULTIPLIER, mult);
 
   const balanceCoins = await readBalanceCoins(client);
   let betCoins: number;
@@ -371,7 +373,7 @@ async function placeLimboWagerBet(
   const rainIdForReport = opts.rainId ?? rainId;
 
   const amountCents = Math.max(1, Math.round(betCoins * 100));
-  const multiplierCents = Math.max(110, Math.round(mult * 100));
+  const multiplierCents = Math.max(Math.round(LIMBO_MIN_MULTIPLIER * 100), Math.round(mult * 100));
 
   appendLog({
     accountId,

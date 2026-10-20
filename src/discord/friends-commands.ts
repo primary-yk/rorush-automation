@@ -7,6 +7,7 @@ import {
   updateAccount,
   type AccountRow,
 } from "../db/repositories.js";
+import { LIMBO_MIN_MULTIPLIER } from "../config.js";
 import { engine } from "../worker/engine.js";
 
 export function accountsForDiscordUser(discordUserId: string): AccountRow[] {
@@ -99,7 +100,7 @@ export async function setLimbo(
     limbo_wager_enabled: input.enabled ? 1 : 0,
   };
   if (input.multiplier != null) {
-    patch.limbo_multiplier = Math.max(1.1, input.multiplier);
+    patch.limbo_multiplier = Math.max(LIMBO_MIN_MULTIPLIER, input.multiplier);
   }
   if (input.betCoins != null) {
     patch.limbo_bet_coins = Math.max(0.01, input.betCoins);

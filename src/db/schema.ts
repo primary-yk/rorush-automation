@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS accounts (
   auto_redeem_codes INTEGER NOT NULL DEFAULT 0,
   min_code_level INTEGER NOT NULL DEFAULT 0,
   limbo_wager_enabled INTEGER NOT NULL DEFAULT 1,
-  limbo_multiplier REAL NOT NULL DEFAULT 1.1,
+  limbo_multiplier REAL NOT NULL DEFAULT 1.3,
   limbo_bet_coins REAL NOT NULL DEFAULT 1,
   status TEXT NOT NULL DEFAULT 'idle',
   last_error TEXT,

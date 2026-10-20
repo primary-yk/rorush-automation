@@ -7,6 +7,7 @@ import {
   SlashCommandBuilder,
   type ChatInputCommandInteraction,
 } from "discord.js";
+import { LIMBO_MIN_MULTIPLIER } from "../config.js";
 import { updateSettings } from "../db/repositories.js";
 import {
   activateDiscordSeat,
@@ -69,7 +70,9 @@ function buildSlashCommands() {
     .setDescription("Limbo wager when rain requires play-through")
     .addStringOption((o) => o.setName("account").setDescription("Your account nickname").setRequired(true))
     .addBooleanOption((o) => o.setName("on").setDescription("Enable limbo wager").setRequired(true))
-    .addNumberOption((o) => o.setName("multiplier").setDescription("Target multiplier (min 1.1)").setMinValue(1.1))
+    .addNumberOption((o) =>
+      o.setName("multiplier").setDescription(`Target multiplier (min ${LIMBO_MIN_MULTIPLIER})`).setMinValue(LIMBO_MIN_MULTIPLIER),
+    )
     .addNumberOption((o) => o.setName("bet").setDescription("Fallback bet in coins if pool unknown")),
   new SlashCommandBuilder().setName("pause").setDescription("Pause all automation (host)"),
   new SlashCommandBuilder().setName("resume").setDescription("Resume automation (host)"),
