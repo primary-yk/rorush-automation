@@ -19,13 +19,22 @@ export type HubHandlers = {
   onCaseFailure?: (payload: { message?: string }) => void;
 };
 
+/** RoRush / SignalR may invoke PascalCase, camelCase, or all-lowercase client methods. */
+export function hubEventVariants(canonical: string): string[] {
+  const camel = canonical.charAt(0).toLowerCase() + canonical.slice(1);
+  const lower = canonical.toLowerCase();
+  return [...new Set([canonical, camel, lower])];
+}
+
 export class RoRushHub {
   private connection: HubConnection | null = null;
   private readonly listeners = new Map<string, Set<(payload: unknown) => void>>();
-  /** SignalR .on() registrations — includes events added only via hub.on() after connect. */
+  /** Registered SignalR method names (any casing). */
   private readonly boundEvents = new Set<string>();
   private rainSubscribed = false;
   private caseSubscribed = false;
+  private wantRain = false;
+  private wantCases = false;
 
   constructor(
     private readonly creds: RoRushCredentials,
@@ -49,11 +58,24 @@ export class RoRushHub {
         skipNegotiation: true,
         transport: 1,
       })
-      .withAutomaticReconnect()
-      .configureLogging(LogLevel.Warning);
+      .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
+      .configureLogging(LogLevel.Error);
 
     this.connection = builder.build();
     this.boundEvents.clear();
+    this.connection.onreconnected(async () => {
+      this.rainSubscribed = false;
+      this.caseSubscribed = false;
+      try {
+        if (this.wantRain) await this.ensureRainSubscribed();
+        if (this.wantCases) await this.ensureCaseSubscribed();
+      } catch (err) {
+        console.warn(
+          "[signalr] re-subscribe after reconnect failed:",
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    });
     this.wireEvents();
     for (const event of this.listeners.keys()) {
       this.bindEvent(event);
@@ -75,15 +97,19 @@ export class RoRushHub {
     this.boundEvents.clear();
     this.rainSubscribed = false;
     this.caseSubscribed = false;
+    this.wantRain = false;
+    this.wantCases = false;
   }
 
   async ensureRainSubscribed(): Promise<void> {
+    this.wantRain = true;
     if (this.rainSubscribed) return;
     await this.subscribeRain();
     this.rainSubscribed = true;
   }
 
   async ensureCaseSubscribed(): Promise<void> {
+    this.wantCases = true;
     if (this.caseSubscribed) return;
     await this.subscribeCaseUnboxing();
     this.caseSubscribed = true;
@@ -103,6 +129,7 @@ export class RoRushHub {
     this.bindEvent(SIGNALR.rain.receiveJoinStageStart);
     this.bindEvent(SIGNALR.rain.receiveAmountUpdated);
     this.bindEvent(SIGNALR.rain.receiveFinished);
+    this.bindEvent(SIGNALR.rain.receiveJoinRain);
     this.bindEvent(SIGNALR.limbo.receiveResult, this.handlers.onLimboResult);
     this.bindEvent(SIGNALR.limbo.receiveResultAlt, this.handlers.onLimboResult);
     this.bindEvent(SIGNALR.limbo.receiveFailure, (p) =>
@@ -112,7 +139,16 @@ export class RoRushHub {
     this.bindEvent(SIGNALR.caseUnboxing.receiveFailure, (p) =>
       this.handlers.onCaseFailure?.(p as { message?: string }),
     );
-    // RoRush chat hub noise — ignore but register so SignalR does not warn every ~15s.
+
+    for (const extra of [
+      "ReceiveBalanceUpdate",
+      "ReceiveUserBalanceUpdate",
+      "ReceiveRainJoinFailure",
+      "ReceivePrivateRainJoinSuccess",
+    ]) {
+      this.bindEvent(extra);
+    }
+
     for (const chatEvent of [
       "ping",
       "Ping",
@@ -129,16 +165,18 @@ export class RoRushHub {
     }
   }
 
-  /** Register a server push event once; fan out to optional handler + hub.on() listeners. */
-  private bindEvent(event: string, handler?: (payload: unknown) => void): void {
-    if (this.boundEvents.has(event) || !this.connection) return;
-    this.boundEvents.add(event);
-    this.connection.on(event, (payload: unknown) => {
-      handler?.(payload);
-      for (const fn of this.listeners.get(event) ?? []) {
-        fn(payload);
-      }
-    });
+  private bindEvent(canonical: string, handler?: (payload: unknown) => void): void {
+    if (!this.connection) return;
+    for (const name of hubEventVariants(canonical)) {
+      if (this.boundEvents.has(name)) continue;
+      this.boundEvents.add(name);
+      this.connection.on(name, (payload: unknown) => {
+        handler?.(payload);
+        for (const fn of this.listeners.get(canonical) ?? []) {
+          fn(payload);
+        }
+      });
+    }
   }
 
   on(event: string, fn: (payload: unknown) => void): () => void {

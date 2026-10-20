@@ -33,7 +33,13 @@ export function prewarmRainCaptcha(rainId: string): void {
   if (inflight.has(cacheKey(rainId))) return;
   const started = Date.now();
   console.log(`[rain-captcha] prewarm ${rainId.slice(0, 8)}…`);
-  const p = solveCaptcha("hcaptcha")
+  const runSolve = () =>
+    solveCaptcha("hcaptcha").catch(async (err) => {
+      if (!/fetch failed|network|ETIMEDOUT/i.test(String(err))) throw err;
+      console.warn("[rain-captcha] retry after network error…");
+      return solveCaptcha("hcaptcha");
+    });
+  const p = runSolve()
     .then((token) => {
       logSolveDone(rainId, started, token);
       if (token) cache.set(cacheKey(rainId), { token, at: Date.now() });
@@ -54,7 +60,13 @@ export async function takeRainCaptchaToken(rainId: string): Promise<string | nul
   if (!p) {
     const started = Date.now();
     console.log(`[rain-captcha] solve now ${rainId.slice(0, 8)}… (no cache)`);
-    p = solveCaptcha("hcaptcha").then((token) => {
+    const runSolve = () =>
+      solveCaptcha("hcaptcha").catch(async (err) => {
+        if (!/fetch failed|network|ETIMEDOUT/i.test(String(err))) throw err;
+        console.warn("[rain-captcha] retry after network error…");
+        return solveCaptcha("hcaptcha");
+      });
+    p = runSolve().then((token) => {
       logSolveDone(rainId, started, token);
       if (token) cache.set(cacheKey(rainId), { token, at: Date.now() });
       return token;

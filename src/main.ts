@@ -32,7 +32,9 @@ async function main() {
   const cfg = loadConfig();
   await startApiServer();
   console.log(`Automation API listening on http://${cfg.AUTOMATION_API_HOST}:${cfg.AUTOMATION_API_PORT}`);
-  console.log(`Database: ${cfg.DATABASE_PATH} (${listAccounts().length} account(s))`);
+  const accounts = listAccounts();
+  const nickList = accounts.map((a) => `#${a.id} ${a.nickname}`).join(", ") || "(none)";
+  console.log(`Database: ${cfg.DATABASE_PATH} (${accounts.length} account(s): ${nickList})`);
   if (!cfg.ENCRYPTION_KEY?.trim()) {
     console.warn("WARNING: ENCRYPTION_KEY missing in .env — you cannot save RoRush accounts until it is set.");
   }

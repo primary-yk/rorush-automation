@@ -1,4 +1,5 @@
 import { v4 as uuid } from "uuid";
+import { isTransientNetworkError } from "../captcha/solve.js";
 import { clearRainCaptcha, takeRainCaptchaToken } from "./rain-captcha.js";
 import { loadConfig } from "../config.js";
 import {
@@ -107,7 +108,7 @@ async function joinRainForAccountOnce(input: {
           message:
             "Rain join timed out (no success/failure from RoRush — often captcha or joining too late in the window)",
         });
-      }, 45_000);
+      }, 60_000);
 
       const onSuccess = (payload: unknown) => {
         if (!matchesJoinReqId(payload, reqId)) return;
@@ -239,9 +240,17 @@ async function joinRainForAccountOnce(input: {
     return { success: outcome.ok, reason: outcome.message };
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
-    clearRainCaptcha(rain.rainId);
+    if (!isTransientNetworkError(err)) {
+      clearRainCaptcha(rain.rainId);
+    }
     recordRainJoin({ accountId, rainId: rain.rainId, amount: rainAmount, success: false, reason });
-    updateAccount(accountId, { status: "error", last_error: reason });
+    const patch: Parameters<typeof updateAccount>[1] = { last_error: reason };
+    if (isTransientNetworkError(err)) {
+      patch.status = "idle";
+    } else {
+      patch.status = "error";
+    }
+    updateAccount(accountId, patch);
     const headline = reason.split("\n")[0]!.trim().slice(0, 220);
     appendLog({
       accountId,

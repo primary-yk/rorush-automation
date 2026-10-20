@@ -31,18 +31,37 @@ function providerFromEnv(): CaptchaProvider | "auto" {
   return "auto";
 }
 
-async function postJson(url: string, body: unknown): Promise<unknown> {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  return res.json();
+function isTransientNetworkError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /fetch failed|ECONNRESET|ETIMEDOUT|ENOTFOUND|ECONNREFUSED|socket|network|abort/i.test(msg);
+}
+
+async function postJson(url: string, body: unknown, attempt = 1): Promise<unknown> {
+  const maxAttempts = Math.max(1, Number(process.env.CAPTCHA_HTTP_RETRIES ?? 4) || 4);
+  const timeoutMs = Math.max(5_000, Number(process.env.CAPTCHA_HTTP_TIMEOUT_MS ?? 30_000) || 30_000);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    return res.json();
+  } catch (err) {
+    if (attempt < maxAttempts && isTransientNetworkError(err)) {
+      const delay = Math.min(8000, 500 * 2 ** (attempt - 1));
+      await new Promise((r) => setTimeout(r, delay));
+      return postJson(url, body, attempt + 1);
+    }
+    const hint = isTransientNetworkError(err)
+      ? " (network — check WSL internet / VPN / firewall; captcha API will retry on next rain)"
+      : "";
+    throw new Error(`${err instanceof Error ? err.message : String(err)}${hint}`);
+  }
 }
 
 export async function detectCaptchaProvider(clientKey: string): Promise<CaptchaProvider | null> {
   const probes: Array<{ provider: CaptchaProvider; url: string }> = [
-    // CapMonster disabled — no RoRush rain hCaptcha support.
     { provider: "2captcha", url: "https://api.2captcha.com/getBalance" },
     { provider: "capsolver", url: "https://api.capsolver.com/getBalance" },
   ];
@@ -177,3 +196,5 @@ export async function solveCaptcha(kind: CaptchaKind): Promise<string | null> {
     throw firstErr;
   }
 }
+
+export { isTransientNetworkError };
