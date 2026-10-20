@@ -180,7 +180,7 @@ async function handleCommand(
     const account = findAccountByNickname(nick);
     if (!account) return `No account named **${nick}**. Use \`/accounts\` for nicknames.`;
     if (name === "rain_toggle") {
-      updateAccount(account.id, { join_rain: enabled ? 1 : 0 });
+      updateAccount(account.id, { join_rain: enabled ? 1 : 0 }, { allowJoinRainChange: true });
     } else {
       updateAccount(account.id, { auto_open_cases: enabled ? 1 : 0 });
     }

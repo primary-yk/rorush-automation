@@ -81,6 +81,9 @@ function migrateAccounts(db: Database.Database): void {
       LIMBO_MIN_MULTIPLIER,
     );
   }
+  if (cols.has("join_rain")) {
+    db.prepare("UPDATE accounts SET join_rain = 1 WHERE join_rain IS NULL").run();
+  }
 }
 
 function migrateSettings(db: Database.Database): void {

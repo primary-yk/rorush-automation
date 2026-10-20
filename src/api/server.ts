@@ -214,7 +214,9 @@ export function createApiServer() {
       patch.api_key_enc = body.apiKey ? encryptField(body.apiKey) : null;
     }
 
-    const updated = updateAccount(id, patch as Parameters<typeof updateAccount>[1]);
+    const updated = updateAccount(id, patch as Parameters<typeof updateAccount>[1], {
+      allowJoinRainChange: body.joinRain !== undefined,
+    });
     if (!updated) {
       res.status(404).json({ error: "Not found" });
       return;
@@ -345,7 +347,7 @@ function publicAccount(a: ReturnType<typeof listAccounts>[number]) {
     hasPassword: !!a.password_enc,
     hasSession: !!a.session_jwt_enc,
     proxyUrl: a.proxy_url,
-    joinRain: !!a.join_rain,
+    joinRain: Number(a.join_rain) !== 0,
     minRainAmount: a.min_rain_amount,
     autoOpenCases: !!a.auto_open_cases,
     autoRedeemCodes: !!a.auto_redeem_codes,

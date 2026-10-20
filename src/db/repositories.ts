@@ -117,13 +117,30 @@ export function insertAccount(input: {
   return getAccount(Number(info.lastInsertRowid))!;
 }
 
+export type UpdateAccountOptions = {
+  /** Only dashboard PATCH, Discord /rain, and backup import may change join_rain. */
+  allowJoinRainChange?: boolean;
+};
+
 export function updateAccount(
   id: number,
   patch: Partial<Omit<AccountRow, "id" | "created_at">>,
+  opts?: UpdateAccountOptions,
 ): AccountRow | undefined {
   const current = getAccount(id);
   if (!current) return undefined;
-  const next = { ...current, ...patch, updated_at: new Date().toISOString() };
+
+  const cleanPatch = { ...patch };
+  for (const key of Object.keys(cleanPatch) as (keyof typeof cleanPatch)[]) {
+    if (cleanPatch[key] === undefined) delete cleanPatch[key];
+  }
+  if (!opts?.allowJoinRainChange && "join_rain" in cleanPatch) {
+    delete cleanPatch.join_rain;
+  }
+
+  const next = { ...current, ...cleanPatch, updated_at: new Date().toISOString() };
+  next.join_rain = Number(next.join_rain) !== 0 ? 1 : 0;
+  next.pre_wager_before_rain = Number(next.pre_wager_before_rain) !== 0 ? 1 : 0;
   getDb()
     .prepare(
       `UPDATE accounts SET nickname = ?, owner_discord_id = ?, username = ?, password_enc = ?, session_jwt_enc = ?, api_key_enc = ?,

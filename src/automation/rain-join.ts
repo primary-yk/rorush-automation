@@ -160,8 +160,9 @@ export function isRetryableRainFailure(message: string): boolean {
 }
 
 function accountStatusForRainFailure(message: string): { status: "idle" | "error"; last_error: string } {
+  const captchaish = /captcha|hcaptcha|2captcha|token missing/i.test(message);
   return {
-    status: isRetryableRainFailure(message) ? "idle" : "error",
+    status: isRetryableRainFailure(message) || captchaish ? "idle" : "error",
     last_error: message,
   };
 }

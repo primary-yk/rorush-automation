@@ -110,17 +110,21 @@ export function importPilotBackup(file: PilotBackupFile): ImportPilotBackupResul
       api_key_enc: row.apiKeyEnc,
       proxy_url: row.proxyUrl,
     });
-    updateAccount(created.id, {
-      join_rain: row.joinRain ? 1 : 0,
-      min_rain_amount: row.minRainAmount,
-      auto_open_cases: row.autoOpenCases ? 1 : 0,
-      auto_redeem_codes: row.autoRedeemCodes ? 1 : 0,
-      min_code_level: row.minCodeLevel,
-      limbo_wager_enabled: row.limboWagerEnabled ? 1 : 0,
-      limbo_multiplier: row.limboMultiplier,
-      limbo_bet_coins: row.limboBetCoins,
-      pre_wager_before_rain: row.preWagerBeforeRain ? 1 : 0,
-    });
+    updateAccount(
+      created.id,
+      {
+        join_rain: row.joinRain ? 1 : 0,
+        min_rain_amount: row.minRainAmount,
+        auto_open_cases: row.autoOpenCases ? 1 : 0,
+        auto_redeem_codes: row.autoRedeemCodes ? 1 : 0,
+        min_code_level: row.minCodeLevel,
+        limbo_wager_enabled: row.limboWagerEnabled ? 1 : 0,
+        limbo_multiplier: row.limboMultiplier,
+        limbo_bet_coins: row.limboBetCoins,
+        pre_wager_before_rain: row.preWagerBeforeRain ? 1 : 0,
+      },
+      { allowJoinRainChange: true },
+    );
     existing.add(row.nickname.toLowerCase());
     imported += 1;
   }

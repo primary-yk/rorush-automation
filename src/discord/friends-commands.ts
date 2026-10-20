@@ -83,7 +83,11 @@ export async function setToggle(
 ): Promise<string> {
   const account = findOwnedAccount(discordUserId, nickname);
   if (!account) return `No account **${nickname}** linked to you.`;
-  updateAccount(account.id, { [field]: enabled ? 1 : 0 });
+  updateAccount(
+    account.id,
+    { [field]: enabled ? 1 : 0 },
+    { allowJoinRainChange: field === "join_rain" },
+  );
   await engine.reloadAccounts();
   const label = field === "join_rain" ? "Join rain" : "Auto cases";
   return `**${account.nickname}** · ${label} **${enabled ? "ON" : "OFF"}**`;
