@@ -31,6 +31,8 @@ export const SIGNALR = {
     receiveCreated: "ReceiveRainCreated",
     receiveFailure: "ReceiveRainFailure",
     receiveJoinSuccess: "ReceiveJoinRainSuccess",
+    /** Broadcast when any player joins (not the same as success ack). */
+    receiveJoinRain: "ReceiveJoinRain",
     receiveFinished: "ReceiveRainFinished",
     receiveJoinStageStart: "ReceiveRainJoinStageStart",
     receiveAmountUpdated: "ReceiveRainAmountUpdated",

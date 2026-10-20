@@ -5,6 +5,7 @@ import {
   listAccounts,
   updateAccount,
 } from "../db/repositories.js";
+import { prewarmRainCaptcha } from "../automation/rain-captcha.js";
 import {
   isWagerRejection,
   joinRainForAccount,
@@ -31,6 +32,8 @@ export class AutomationEngine {
   private readonly accountHubs = new HubRegistry();
   private activeRain: RainState | null = null;
   private rainJoinLastAttempt = new Map<string, number>();
+  /** One active join pipeline per rain (captcha + hub invoke can take >90s if overlapped). */
+  private rainJoinInFlight = new Set<string>();
   private caseTimer: NodeJS.Timeout | null = null;
   private discordTimer: NodeJS.Timeout | null = null;
   private statusTimer: NodeJS.Timeout | null = null;
@@ -142,6 +145,7 @@ export class AutomationEngine {
           message: "Rain created",
           detail: `${rain.rainId} · pool ${rain.amount ?? "?"} coins`,
         });
+        prewarmRainCaptcha(rain.rainId);
       }
     });
     this.sharedRainHub.on(SIGNALR.rain.receiveJoinStageStart, (payload) => {
@@ -154,6 +158,7 @@ export class AutomationEngine {
           message: "Rain join stage started",
           detail: `${rain.rainId} · window ${rainJoinWindowOpen(rain) ? "open" : "closed"}`,
         });
+        prewarmRainCaptcha(rain.rainId);
         this.scheduleRainJoinAttempt(rain, "join_stage");
       }
     });
@@ -213,8 +218,9 @@ export class AutomationEngine {
   }
 
   private scheduleRainJoinAttempt(rain: RainState, trigger: string): void {
+    if (this.rainJoinInFlight.has(rain.rainId)) return;
     const last = this.rainJoinLastAttempt.get(rain.rainId) ?? 0;
-    if (Date.now() - last < 8_000) return;
+    if (Date.now() - last < 12_000) return;
     this.rainJoinLastAttempt.set(rain.rainId, Date.now());
     void this.onRainMaybeJoin(rain, trigger);
   }
@@ -254,13 +260,17 @@ export class AutomationEngine {
       return;
     }
 
+    if (this.rainJoinInFlight.has(rain.rainId)) return;
+
     appendLog({
       category: "rain",
       message: "Attempting rain join",
       detail: `${rain.rainId} · ${accounts.length} account(s) · ${trigger}`,
     });
 
-    for (const account of accounts) {
+    this.rainJoinInFlight.add(rain.rainId);
+    try {
+      for (const account of accounts) {
       try {
         const hub = await this.accountHubs.ensure(account.id, { rain: true, cases: true });
         const result = await joinRainForAccount({ accountId: account.id, rain, hub });
@@ -281,6 +291,9 @@ export class AutomationEngine {
           detail: err instanceof Error ? err.message : String(err),
         });
       }
+      }
+    } finally {
+      this.rainJoinInFlight.delete(rain.rainId);
     }
   }
 

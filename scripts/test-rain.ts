@@ -12,7 +12,7 @@ import { ensureAuthenticated } from "../src/accounts/session-manager.js";
 import { joinRainForAccount, parseRain, rainJoinWindowOpen } from "../src/automation/rain-join.js";
 import { RoRushHub } from "../src/rorush/signalr-hub.js";
 import { SIGNALR } from "../src/rorush/endpoints.js";
-import { loadConfig, projectRoot } from "../src/config.js";
+import { captchaApiKey, loadConfig, projectRoot } from "../src/config.js";
 
 const attemptJoin = process.argv.includes("--join");
 const useAnyAccount = process.argv.includes("--any");
@@ -53,8 +53,8 @@ async function main() {
   }
   console.log(`Using account #${account.id} (${account.nickname})`);
 
-  if (attemptJoin && !cfg.CAPMONSTER_API_KEY) {
-    console.error("Set CAPMONSTER_API_KEY in .env before using --join");
+  if (attemptJoin && !captchaApiKey(cfg)) {
+    console.error("Set CAPTCHA_API_KEY (+ CAPTCHA_PROVIDER=2captcha) in .env before using --join");
     process.exit(1);
   }
 

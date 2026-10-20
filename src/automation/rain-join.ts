@@ -1,5 +1,6 @@
 import { v4 as uuid } from "uuid";
 import { solveCaptcha } from "../captcha/capmonster.js";
+import { clearRainCaptcha, takeRainCaptchaToken } from "./rain-captcha.js";
 import { loadConfig } from "../config.js";
 import { appendLog, recordRainJoin, updateAccount } from "../db/repositories.js";
 import { SIGNALR } from "../rorush/endpoints.js";
@@ -45,7 +46,7 @@ export async function joinRainForAccount(input: {
           message:
             "Rain join timed out (no success/failure from RoRush — often captcha or joining too late in the window)",
         });
-      }, 30_000);
+      }, 45_000);
 
       const onSuccess = (payload: unknown) => {
         if (!matchesJoinReqId(payload, reqId)) return;
@@ -54,7 +55,7 @@ export async function joinRainForAccount(input: {
       };
       const onFailure = (payload: unknown) => {
         const p = payload as { reqId?: string; message?: string };
-        if (p.reqId && p.reqId !== reqId) return;
+        if (!p.reqId || p.reqId !== reqId) return;
         cleanup();
         resolve({ ok: false, message: p.message ?? "Rain join failed" });
       };
@@ -70,20 +71,26 @@ export async function joinRainForAccount(input: {
     });
 
   try {
-    appendLog({
-      accountId,
-      category: "rain",
-      message: "Sending rain join",
-      detail: `${rain.rainId} · pool ${rainAmount} coins`,
-    });
     if (!captchaToken) {
-      captchaToken = await solveCaptcha("hcaptcha");
+      appendLog({
+        accountId,
+        category: "rain",
+        message: "Solving rain captcha",
+        detail: rain.rainId,
+      });
+      captchaToken = await takeRainCaptchaToken(rain.rainId);
     }
     if (!captchaToken) {
       throw new Error(
         "Captcha token missing — set CAPTCHA_API_KEY (2Captcha/CapSolver for hCaptcha rain) and CAPTCHA_PROVIDER",
       );
     }
+    appendLog({
+      accountId,
+      category: "rain",
+      message: "Sending rain join",
+      detail: `${rain.rainId} · pool ${rainAmount} coins`,
+    });
     const outcomePromise = waitForOutcome();
     await hub.joinRain({ reqId, rainId: rain.rainId, captchaToken });
     let outcome = await outcomePromise;
@@ -161,9 +168,11 @@ export async function joinRainForAccount(input: {
       poolCoins: rainAmount,
     });
 
+    if (outcome.ok) clearRainCaptcha(rain.rainId);
     return { success: outcome.ok, reason: outcome.message };
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
+    clearRainCaptcha(rain.rainId);
     recordRainJoin({ accountId, rainId: rain.rainId, amount: rainAmount, success: false, reason });
     updateAccount(accountId, { status: "error", last_error: reason });
     appendLog({ accountId, category: "rain", message: "Rain join error", detail: reason });
@@ -197,7 +206,7 @@ async function joinOnce(
     });
     const offFail = hub.on(SIGNALR.rain.receiveFailure, (p) => {
       const payload = p as { reqId?: string; message?: string };
-      if (payload.reqId && payload.reqId !== reqId) return;
+      if (!payload.reqId || payload.reqId !== reqId) return;
       finish({ ok: false, message: payload.message ?? "Retry failed" });
     });
     void hub.joinRain({ reqId, rainId, captchaToken }).catch((err) => {
