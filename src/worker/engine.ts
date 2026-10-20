@@ -22,6 +22,7 @@ import { ensureAuthenticated } from "../accounts/session-manager.js";
 import { SIGNALR } from "../rorush/endpoints.js";
 import { RoRushHub } from "../rorush/signalr-hub.js";
 import type { RainState } from "../rorush/types.js";
+import { parseBalanceCents, parseLevel } from "../rorush/balance-level.js";
 import { HubRegistry } from "./hub-registry.js";
 
 export class AutomationEngine {
@@ -55,7 +56,13 @@ export class AutomationEngine {
     }, 45_000);
     this.statusTimer = setInterval(() => {
       void this.safeRun(this.refreshAccountStats());
-    }, 120_000);
+    }, 60_000);
+    void this.safeRun(this.refreshAccountStats());
+  }
+
+  /** Refresh balance/level for all accounts (dashboard + logs). */
+  async refreshAccountStatsNow(): Promise<void> {
+    await this.refreshAccountStats();
   }
 
   async stop(): Promise<void> {
@@ -281,15 +288,15 @@ export class AutomationEngine {
     for (const account of listAccounts()) {
       try {
         const { client } = await ensureAuthenticated(account.id);
-        const [balance, level] = await Promise.all([
+        const [balanceRaw, levelRaw] = await Promise.all([
           client.getBalance(),
           client.getLevel(),
         ]);
-        const patch: Parameters<typeof updateAccount>[1] = {
-          balance: typeof balance.balance === "number" ? balance.balance / 100 : null,
-          level: level.level ?? null,
-          status: "idle",
-        };
+        const balanceCents = parseBalanceCents(balanceRaw);
+        const level = parseLevel(levelRaw);
+        const patch: Parameters<typeof updateAccount>[1] = { status: "idle" };
+        if (balanceCents != null) patch.balance = balanceCents / 100;
+        if (level != null) patch.level = level;
         const row = listAccounts().find((a) => a.id === account.id);
         if (row?.last_error && isIgnorableCaseError(row.last_error)) {
           patch.last_error = null;
@@ -309,6 +316,7 @@ export class AutomationEngine {
     this.activeRain = null;
     this.rainJoinLastAttempt.clear();
     await this.ensureSharedRainListener();
+    void this.safeRun(this.refreshAccountStats());
   }
 
   async disconnectAccountHub(accountId: number): Promise<void> {

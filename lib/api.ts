@@ -86,6 +86,8 @@ export const dashboardApi = {
   getDiscordRelayStatus: () =>
     api<{ relayConfigured: boolean; connected: boolean }>("/api/discord/relay-status"),
   listAccounts: () => api<Account[]>("/api/rush-accounts"),
+  refreshAccountStats: () =>
+    api<{ ok: true; accounts: Account[] }>("/api/rush-accounts/refresh-stats", { method: "POST" }),
   createAccount: (body: Record<string, unknown>) =>
     api<Account>("/api/rush-accounts", { method: "POST", body: JSON.stringify(body) }),
   patchAccount: (id: number, body: Record<string, unknown>) =>

@@ -107,11 +107,13 @@ export class RoRushHttpClient {
     return this.request(RORUSH_PATHS.auth.status);
   }
 
-  async getBalance(): Promise<{ balance?: number; funBalance?: number }> {
-    return this.request(RORUSH_PATHS.user.balance);
+  /** RoRush requires `?currency=crypto|robux`; response is usually a numeric balance in cents. */
+  async getBalance(currency: "crypto" | "robux" = "crypto"): Promise<unknown> {
+    const q = encodeURIComponent(currency);
+    return this.request(`${RORUSH_PATHS.user.balance}?currency=${q}`);
   }
 
-  async getLevel(): Promise<{ level?: number }> {
+  async getLevel(): Promise<unknown> {
     return this.request(RORUSH_PATHS.user.level);
   }
 

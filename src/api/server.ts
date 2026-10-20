@@ -117,6 +117,15 @@ export function createApiServer() {
     res.json(listAccounts().map(publicAccount));
   });
 
+  app.post("/api/rush-accounts/refresh-stats", async (_req, res) => {
+    try {
+      await engine.refreshAccountStatsNow();
+      res.json({ ok: true as const, accounts: listAccounts().map(publicAccount) });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
   app.post("/api/rush-accounts", async (req, res) => {
     try {
       const body = req.body as {

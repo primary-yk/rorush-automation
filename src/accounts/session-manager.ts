@@ -45,11 +45,13 @@ export async function resolveCredentials(account: AccountRow): Promise<RoRushCre
     throw new Error(login.message ?? "Login failed");
   }
   const apiKey = login.userInfo?.apiKey ?? null;
+  const level = login.userInfo?.level;
   updateAccount(account.id, {
     session_jwt_enc: encryptField(jwt),
     api_key_enc: encryptField(apiKey),
     last_error: null,
     status: "idle",
+    ...(typeof level === "number" && Number.isFinite(level) ? { level: Math.trunc(level) } : {}),
   });
   return { jwt, apiKey };
 }

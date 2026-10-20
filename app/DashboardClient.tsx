@@ -65,12 +65,14 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
       setLoading(false);
     }
     try {
-      const [a, l, relay] = await Promise.all([
+      const statsRefresh = dashboardApi.refreshAccountStats().catch(() => null);
+      const [a, l, relay, stats] = await Promise.all([
         dashboardApi.listAccounts(),
         dashboardApi.listLogs(),
         dashboardApi.getDiscordRelayStatus().catch(() => ({ relayConfigured: false, connected: false })),
+        statsRefresh,
       ]);
-      setAccounts(a);
+      setAccounts(stats?.accounts?.length ? stats.accounts : a);
       setLogs(l);
       setRelayConnected(relay.connected);
     } catch (e) {
