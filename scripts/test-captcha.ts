@@ -7,6 +7,7 @@ import "../src/bootstrap-env.js";
 import { captchaApiKey, loadConfig, projectRoot } from "../src/config.js";
 import {
   captchaKeyFingerprint,
+  captchaTaskSummary,
   detectCaptchaProvider,
   resolveCaptchaProvider,
   solveCaptcha,
@@ -54,8 +55,20 @@ async function main() {
     detected ? `(detected via balance: ${detected})` : "(from CAPTCHA_PROVIDER)",
   );
 
+  const task = captchaTaskSummary("hcaptcha");
+  console.log("Task type:", task.taskType);
+  console.log("Page URL:", task.websiteURL);
+  console.log("Site key:", task.websiteKey);
   console.log(
-    "Requesting one hCaptcha token (often 30–120s; set CAPTCHA_VERBOSE=1 to see wait progress)…",
+    "Poll tuning:",
+    `CAPTCHA_POLL_MS=${process.env.CAPTCHA_POLL_MS ?? "1000 (default)"}`,
+    `CAPTCHA_MAX_POLLS=${process.env.CAPTCHA_MAX_POLLS ?? "180 (default)"}`,
+    `CAPTCHA_TASK_ATTEMPTS=${process.env.CAPTCHA_TASK_ATTEMPTS ?? "2 (default)"}`,
+    `CAPTCHA_CANCEL_AFTER_MS=${process.env.CAPTCHA_CANCEL_AFTER_MS ?? "110000 (default)"}`,
+  );
+
+  console.log(
+    "Requesting one hCaptcha token (often 30–120s; set CAPTCHA_VERBOSE=1 to see each poll)…",
   );
   const started = Date.now();
   const token = await solveCaptcha("hcaptcha");
@@ -75,5 +88,9 @@ async function main() {
 
 main().catch((e) => {
   console.error("\nFailed:", e instanceof Error ? e.message : String(e));
+  console.error(
+    "\nTips: CAPTCHA_VERBOSE=1 · CAPTCHA_PROVIDER=auto (try CapSolver if you have a key) ·",
+    "off-peak hours · open 2Captcha ticket if RoRush hCaptcha stays unsolvable.",
+  );
   process.exit(1);
 });

@@ -1,4 +1,8 @@
-import { isTransientNetworkError, solveCaptcha } from "../captcha/solve.js";
+import {
+  isCaptchaRetryableTaskError,
+  isTransientNetworkError,
+  solveCaptcha,
+} from "../captcha/solve.js";
 import {
   rainTelemetryAccountCaptchaReady,
   rainTelemetryAccountCaptchaSolving,
@@ -94,9 +98,15 @@ async function solveHcaptchaWithRetry(): Promise<string | null> {
       lastErr = err;
       const retry =
         attempt < maxAttempts &&
-        (isTransientNetworkError(err) || isWorkerUnsolvableError(err));
+        (isCaptchaRetryableTaskError(err) ||
+          isTransientNetworkError(err) ||
+          isWorkerUnsolvableError(err));
       if (!retry) throw err;
-      const why = isWorkerUnsolvableError(err) ? "2Captcha workers failed" : "network";
+      const why = isWorkerUnsolvableError(err)
+        ? "2Captcha workers failed"
+        : /timed out|processing stall/i.test(err instanceof Error ? err.message : String(err))
+          ? "captcha queue stall"
+          : "network";
       console.warn(`[rain-captcha] retry ${attempt + 1}/${maxAttempts} after ${why}…`);
       await new Promise((r) => setTimeout(r, 2_000));
     }

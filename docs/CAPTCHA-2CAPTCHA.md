@@ -10,7 +10,7 @@ Use this if support asks how you integrate.
 | **Task type** | **`HCaptchaTaskProxyless`** (no proxy) |
 | **Proxy?** | **No** — proxyless only |
 | **Site key / page URL** | `websiteKey`: RoRush hCaptcha sitekey (env `RORUSH_HCAPTCHA_SITEKEY` or built-in default). `websiteURL`: `https://rorush.com/` (env `RORUSH_SITE_URL`) |
-| **What “timeout” means here** | Usually **our poll limit** (`Captcha solve timed out after ~Xs`) while 2Captcha status stays `processing` — not necessarily ERROR from 2Captcha. Less often: **`fetch failed`** (WSL/network). RoRush join timeout is separate (60s waiting for SignalR after token is sent). |
+| **What “timeout” means here** | Usually **2Captcha stuck in `processing`** — we cancel after ~110s (`CAPTCHA_CANCEL_AFTER_MS`) and submit a **second task** (`CAPTCHA_TASK_ATTEMPTS=2`). Full poll exhaustion still possible on a very slow queue. Less often: **`fetch failed`** (WSL/network). RoRush join timeout is separate (60s waiting for SignalR after token is sent). |
 | **Token age** | We cache one token per rain; at join, if cached token is **>90s old** we discard and solve again (`CAPTCHA_TOKEN_MAX_AGE_MS`). |
 
 ## Task JSON we send (v2)
@@ -40,7 +40,8 @@ CAPTCHA_VERBOSE=1
 ## Verify locally
 
 ```bash
-npm run test-captcha
+npm run discover-captcha   # confirm sitekey still matches RoRush
+npm run test-captcha       # one paid solve (~30–120s)
 ```
 
 Successful run prints balance, then `OK — captcha solve works` (often 30–180s depending on queue).

@@ -168,11 +168,143 @@ function providerHint(provider: CaptchaProvider): string {
     : "2captcha.com API key → CAPTCHA_PROVIDER=2captcha in .env";
 }
 
-async function createAndPoll(
+function cancelUrl(provider: CaptchaProvider): string {
+  return provider === "capsolver"
+    ? "https://api.capsolver.com/cancelTask"
+    : "https://api.2captcha.com/cancelTask";
+}
+
+async function cancelCaptchaTask(
+  provider: CaptchaProvider,
+  clientKey: string,
+  taskId: number | string,
+): Promise<void> {
+  try {
+    await postJson(cancelUrl(provider), { clientKey: clientKey.trim(), taskId });
+  } catch {
+    /* best-effort — stale tasks may already be gone */
+  }
+}
+
+/** Failures where submitting a fresh task often helps (queue stall or worker miss). */
+export function isCaptchaRetryableTaskError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return (
+    /timed out|processing stall|workers could not solve|could not solve the captcha|unsolvable|ERROR_CAPTCHA_UNSOLVABLE/i.test(
+      msg,
+    ) || isTransientNetworkError(err)
+  );
+}
+
+export function captchaTaskSummary(kind: CaptchaKind = "hcaptcha"): {
+  provider: CaptchaProvider | "auto";
+  websiteURL: string;
+  websiteKey: string;
+  taskType: string;
+} {
+  const forced = providerFromEnv();
+  const provider: CaptchaProvider | "auto" = forced === "auto" ? "auto" : forced;
+  const p: CaptchaProvider = provider === "auto" ? "2captcha" : provider;
+  const websiteKey = siteKey(kind);
+  const task = buildTask(p, kind, websiteKey);
+  return {
+    provider,
+    websiteURL: PAGE_URL,
+    websiteKey,
+    taskType: String((task as { type?: string }).type ?? "unknown"),
+  };
+}
+
+function pollFailureMessage(resultJson: PollResult): string | null {
+  if (resultJson.errorId != null && resultJson.errorId !== 0) {
+    return resultJson.errorDescription ?? resultJson.errorCode ?? "getTaskResult failed";
+  }
+  const code = resultJson.errorCode?.trim();
+  if (code && !/^(OK|PROCESSING)$/i.test(code)) {
+    return resultJson.errorDescription ?? code;
+  }
+  if (resultJson.errorDescription && !/processing/i.test(resultJson.errorDescription)) {
+    return resultJson.errorDescription;
+  }
+  return null;
+}
+
+async function pollTaskUntilReady(
+  provider: CaptchaProvider,
+  clientKey: string,
+  taskId: number | string,
+  opts: { attempt: number; attempts: number },
+): Promise<string> {
+  const pollMs = Math.max(800, Number(process.env.CAPTCHA_POLL_MS ?? 1000) || 1000);
+  const maxPolls = Math.max(20, Number(process.env.CAPTCHA_MAX_POLLS ?? 180) || 180);
+  const cancelAfterMs = Math.max(
+    45_000,
+    Number(process.env.CAPTCHA_CANCEL_AFTER_MS ?? 110_000) || 110_000,
+  );
+  const verbose = /^(1|true|yes|on)$/i.test(process.env.CAPTCHA_VERBOSE?.trim() ?? "");
+  const started = Date.now();
+  let lastStatus = "processing";
+
+  for (let i = 0; i < maxPolls; i++) {
+    if (i > 0) {
+      await new Promise((r) => setTimeout(r, pollMs));
+    }
+    const resultJson = (await postJson(resultUrl(provider), {
+      clientKey,
+      taskId,
+    })) as PollResult;
+
+    const failMsg = pollFailureMessage(resultJson);
+    if (failMsg) {
+      throw new Error(failMsg);
+    }
+
+    lastStatus = resultJson.status ?? lastStatus;
+    if (resultJson.status === "ready") {
+      const token =
+        resultJson.solution?.gRecaptchaResponse ?? resultJson.solution?.token ?? null;
+      if (!token) {
+        throw new Error("Captcha status ready but solution token missing — check sitekey/pageurl");
+      }
+      return token;
+    }
+
+    const elapsed = Date.now() - started;
+    if (
+      elapsed >= cancelAfterMs &&
+      (resultJson.status === "processing" || resultJson.status == null)
+    ) {
+      await cancelCaptchaTask(provider, clientKey, taskId);
+      throw new Error(
+        `Captcha processing stall ~${Math.round(elapsed / 1000)}s (status ${lastStatus}) — task cancelled`,
+      );
+    }
+
+    if (verbose && (i === 0 || i % 5 === 0)) {
+      const sec = (elapsed / 1000).toFixed(0);
+      console.log(
+        `[captcha] poll ${i + 1}/${maxPolls} · ${sec}s · status=${lastStatus} · task ${String(taskId).slice(0, 8)}…` +
+          (opts.attempts > 1 ? ` · try ${opts.attempt}/${opts.attempts}` : ""),
+      );
+    }
+  }
+
+  await cancelCaptchaTask(provider, clientKey, taskId);
+  const waitedSec = ((Date.now() - started) / 1000).toFixed(0);
+  throw new Error(
+    `Captcha solve timed out after ~${waitedSec}s (${maxPolls} polls, last status ${lastStatus}). ` +
+      "2Captcha queue may be slow — try CAPTCHA_PROVIDER=auto or capsolver, CAPTCHA_VERBOSE=1, or off-peak. " +
+      "Keep npm run dev up during tip stage for prewarm.",
+  );
+}
+
+async function createAndPollOnce(
   provider: CaptchaProvider,
   clientKey: string,
   kind: CaptchaKind,
-): Promise<string | null> {
+  attempt: number,
+  attempts: number,
+): Promise<string> {
   const websiteKey = siteKey(kind);
   const task = buildTask(provider, kind, websiteKey);
   const clientKeyClean = clientKey.trim();
@@ -202,46 +334,38 @@ async function createAndPoll(
     throw new Error(`${desc}\n\nUse ${providerHint(provider)}`);
   }
 
-  const pollMs = Math.max(800, Number(process.env.CAPTCHA_POLL_MS ?? 1000) || 1000);
-  const maxPolls = Math.max(20, Number(process.env.CAPTCHA_MAX_POLLS ?? 180) || 180);
-  const verbose = /^(1|true|yes|on)$/i.test(process.env.CAPTCHA_VERBOSE?.trim() ?? "");
-  const started = Date.now();
-  const taskId = createJson.taskId;
+  if (attempt === 1 || /^(1|true|yes|on)$/i.test(process.env.CAPTCHA_VERBOSE?.trim() ?? "")) {
+    console.log(
+      `[captcha] task created (${provider}) · ${String((task as { type?: string }).type)} · key ${websiteKey.slice(0, 8)}… · url ${PAGE_URL}` +
+        (attempts > 1 ? ` · attempt ${attempt}/${attempts}` : ""),
+    );
+  }
 
-  for (let i = 0; i < maxPolls; i++) {
-    if (i > 0) {
-      await new Promise((r) => setTimeout(r, pollMs));
-    }
-    const resultJson = (await postJson(resultUrl(provider), {
-      clientKey: clientKeyClean,
-      taskId,
-    })) as PollResult;
-    if (resultJson.errorId != null && resultJson.errorId !== 0) {
-      const msg = resultJson.errorDescription ?? resultJson.errorCode ?? "getTaskResult failed";
-      throw new Error(msg);
-    }
-    if (resultJson.status === "ready") {
-      const token =
-        resultJson.solution?.gRecaptchaResponse ?? resultJson.solution?.token ?? null;
-      if (!token) {
-        throw new Error("2Captcha status ready but solution token missing — check sitekey/pageurl");
+  return pollTaskUntilReady(provider, clientKeyClean, createJson.taskId, { attempt, attempts });
+}
+
+async function createAndPoll(
+  provider: CaptchaProvider,
+  clientKey: string,
+  kind: CaptchaKind,
+): Promise<string | null> {
+  const attempts = Math.max(1, Number(process.env.CAPTCHA_TASK_ATTEMPTS ?? 2) || 2);
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await createAndPollOnce(provider, clientKey, kind, attempt, attempts);
+    } catch (err) {
+      lastErr = err;
+      if (attempt < attempts && isCaptchaRetryableTaskError(err)) {
+        const why = err instanceof Error ? err.message.split("\n")[0] : String(err);
+        console.warn(`[captcha] retrying with new task (${attempt + 1}/${attempts}) after: ${why.slice(0, 100)}`);
+        await new Promise((r) => setTimeout(r, 1_500));
+        continue;
       }
-      return token;
-    }
-    if (resultJson.errorDescription) {
-      throw new Error(resultJson.errorDescription);
-    }
-    if (verbose && i > 0 && i % 10 === 0) {
-      const sec = ((Date.now() - started) / 1000).toFixed(0);
-      console.log(`[captcha] still waiting… ${sec}s (task ${String(taskId).slice(0, 8)}…)`);
+      throw err;
     }
   }
-  const waitedSec = ((Date.now() - started) / 1000).toFixed(0);
-  throw new Error(
-    `Captcha solve timed out after ~${waitedSec}s (${maxPolls} polls). ` +
-      "2Captcha queue may be slow — raise CAPTCHA_MAX_POLLS or CAPTCHA_POLL_MS in .env, " +
-      "try off-peak, or set CAPTCHA_PROVIDER=capsolver. Keep npm run dev up during tip stage for prewarm.",
-  );
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
 }
 
 export async function verify2CaptchaKey(clientKey: string): Promise<{
