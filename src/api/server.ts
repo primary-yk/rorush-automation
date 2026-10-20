@@ -2,6 +2,7 @@ import express from "express";
 import { captchaApiKey, LIMBO_MIN_MULTIPLIER, loadConfig, projectRoot } from "../config.js";
 import {
   deleteAccount,
+  getPilotStats,
   getSettings,
   insertAccount,
   getAccount,
@@ -293,6 +294,14 @@ export function createApiServer() {
   app.get("/api/logs", (req, res) => {
     const limit = Number(req.query.limit ?? 200);
     res.json(listLogs(limit));
+  });
+
+  app.get("/api/stats/summary", (_req, res) => {
+    res.json(getPilotStats());
+  });
+
+  app.get("/api/rain/live", (_req, res) => {
+    res.json(engine.getRainLiveStatus());
   });
 
   return app;

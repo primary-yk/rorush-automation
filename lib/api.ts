@@ -52,6 +52,31 @@ export type ActivityLog = {
   created_at: string;
 };
 
+export type PilotStats = {
+  rainJoins7d: number;
+  rainJoinsOk7d: number;
+  rainJoinsFail7d: number;
+  avgCaptchaSec7d: number | null;
+  lifetimeRainCoins: number;
+  lastRainJoinAt: string | null;
+};
+
+export type RainLiveStatus = {
+  active: boolean;
+  rainId: string | null;
+  poolCoins: number | null;
+  joinWindowOpen: boolean;
+  joinWindowRemainingSec: number;
+  captchaReady: boolean;
+  captchaSolveSec: number | null;
+  captchaWaitingSec: number | null;
+  joinAttempts: number;
+  joinedNicknames: string[];
+  listenerConnected: boolean;
+  telemetry: unknown;
+  lastSummary: string | null;
+};
+
 function clientApiUrl(path: string): string {
   // Browser: always same-origin (Next on 43123 → rewrite to automation API).
   // Direct :43124 often fails from Windows → WSL; curl in Ubuntu still uses the API process.
@@ -107,4 +132,6 @@ export const dashboardApi = {
       signal: AbortSignal.timeout(60_000),
     }),
   listLogs: () => api<ActivityLog[]>("/api/logs"),
+  getStatsSummary: () => api<PilotStats>("/api/stats/summary"),
+  getRainLive: () => api<RainLiveStatus>("/api/rain/live"),
 };

@@ -4,12 +4,21 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AccountCard } from "@/components/AccountCard";
 import { ActivityFeed } from "@/components/ActivityFeed";
 import { AppShell, type DashboardTab } from "@/components/AppShell";
+import { LiveRainStrip } from "@/components/LiveRainStrip";
+import { PilotStatsGrid } from "@/components/PilotStatsGrid";
 import { SetupGuide } from "@/components/SetupGuide";
 import { Toggle } from "@/components/Toggle";
 import { Button, Card, Input, MetricCard, SectionTitle } from "@/components/ui";
 import { useToast } from "@/components/Toast";
 import { IconBolt, IconBox, IconRain } from "@/components/icons";
-import { dashboardApi, type Account, type ActivityLog, type Settings } from "@/lib/api";
+import {
+  dashboardApi,
+  type Account,
+  type ActivityLog,
+  type PilotStats,
+  type RainLiveStatus,
+  type Settings,
+} from "@/lib/api";
 
 export type DashboardBootstrap = {
   settings: Settings | null;
@@ -37,6 +46,9 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
   const [discordReportSaving, setDiscordReportSaving] = useState(false);
   const [relayConnected, setRelayConnected] = useState<boolean | null>(null);
   const [savingAccount, setSavingAccount] = useState(false);
+  const [liveRain, setLiveRain] = useState<RainLiveStatus | null>(null);
+  const [pilotStats, setPilotStats] = useState<PilotStats | null>(null);
+  const [activitySearch, setActivitySearch] = useState("");
 
   const apiOk = !error && settings != null;
 
@@ -47,6 +59,16 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
   const captchaMissing = apiOk && rainEnabled > 0 && captchaOk === false;
 
   const accountsById = useMemo(() => new Map(accounts.map((a) => [a.id, a.nickname])), [accounts]);
+
+  const sortedAccounts = useMemo(() => {
+    return [...accounts].sort((a, b) => {
+      const errA = a.status === "error" ? 0 : 1;
+      const errB = b.status === "error" ? 0 : 1;
+      if (errA !== errB) return errA - errB;
+      if (a.joinRain !== b.joinRain) return a.joinRain ? -1 : 1;
+      return a.nickname.localeCompare(b.nickname);
+    });
+  }, [accounts]);
 
   const mergeAccount = useCallback((updated: Account) => {
     setAccounts((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
@@ -69,15 +91,19 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
     }
     try {
       const statsRefresh = dashboardApi.refreshAccountStats().catch(() => null);
-      const [a, l, relay, stats] = await Promise.all([
+      const [a, l, relay, stats, live, summary] = await Promise.all([
         dashboardApi.listAccounts(),
         dashboardApi.listLogs(),
         dashboardApi.getDiscordRelayStatus().catch(() => ({ relayConfigured: false, connected: false })),
         statsRefresh,
+        dashboardApi.getRainLive().catch(() => null),
+        dashboardApi.getStatsSummary().catch(() => null),
       ]);
       setAccounts(stats?.accounts?.length ? stats.accounts : a);
       setLogs(l);
       setRelayConnected(relay.connected);
+      if (live) setLiveRain(live);
+      if (summary) setPilotStats(summary);
     } catch (e) {
       setError((prev) => prev ?? (e instanceof Error ? e.message : String(e)));
     }
@@ -172,6 +198,8 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
 
   return (
     <AppShell tab={tab} onTab={setTab} engineOnline={apiOk} headerExtra={pauseToggle}>
+      {apiOk && liveRain && <LiveRainStrip status={liveRain} />}
+
       {captchaMissing && (
         <Card className="mb-8 border-amber-500/35 bg-amber-500/[0.08]" glow="none">
           <p className="text-sm font-semibold text-amber-100">Captcha API key missing — rain join will fail</p>
@@ -217,25 +245,55 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
             </p>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {pilotStats ? (
+            <PilotStatsGrid stats={pilotStats} />
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <MetricCard
+                label="Lifetime earnings"
+                value={totalEarnings.toFixed(2)}
+                sub="Rain + cases + codes"
+                trend="up"
+                icon={<IconBolt className="h-5 w-5" />}
+              />
+              <MetricCard
+                label="Accounts"
+                value={String(accounts.length)}
+                sub="RoRush logins"
+                icon={<IconRain className="h-5 w-5" />}
+              />
+              <MetricCard
+                label="Rain join"
+                value={String(rainEnabled)}
+                sub={`of ${accounts.length} enabled`}
+                icon={<IconRain className="h-5 w-5" />}
+              />
+              <MetricCard
+                label="Auto cases"
+                value={String(casesEnabled)}
+                sub="Daily / weekly / monthly"
+                icon={<IconBox className="h-5 w-5" />}
+              />
+            </div>
+          )}
+
+          <div className="grid gap-4 sm:grid-cols-3">
             <MetricCard
-              label="Lifetime earnings"
-              value={totalEarnings.toFixed(2)}
-              sub="Rain + cases + codes"
-              trend="up"
-              icon={<IconBolt className="h-5 w-5" />}
-            />
-            <MetricCard label="Accounts" value={String(accounts.length)} sub="RoRush logins" icon={<IconRain className="h-5 w-5" />} />
-            <MetricCard
-              label="Rain join"
-              value={String(rainEnabled)}
-              sub={`of ${accounts.length} enabled`}
+              label="Accounts"
+              value={String(accounts.length)}
+              sub={`${rainEnabled} rain · ${casesEnabled} cases`}
               icon={<IconRain className="h-5 w-5" />}
             />
             <MetricCard
-              label="Auto cases"
-              value={String(casesEnabled)}
-              sub="Daily / weekly / monthly"
+              label="All-time tracked"
+              value={totalEarnings.toFixed(2)}
+              sub="Rain + cases + codes"
+              icon={<IconBolt className="h-5 w-5" />}
+            />
+            <MetricCard
+              label="Engine"
+              value={apiOk ? "Online" : "Offline"}
+              sub={settings?.globalPause ? "Paused" : "Running"}
               icon={<IconBox className="h-5 w-5" />}
             />
           </div>
@@ -322,7 +380,7 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
                   <p className="text-slate-400">No accounts yet — add one on the left.</p>
                 </Card>
               ) : (
-                accounts.map((a) => (
+                sortedAccounts.map((a) => (
                   <AccountCard
                     key={a.id}
                     account={a}
@@ -344,7 +402,14 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
             description="Rain attempts, case opens, limbo wagers, and system messages. Secrets never appear here."
           />
           <Card padding="lg">
-            <ActivityFeed logs={logs} accountsById={accountsById} />
+            <div className="mb-4">
+              <Input
+                placeholder="Search activity — rain, limbo, account name…"
+                value={activitySearch}
+                onChange={(e) => setActivitySearch(e.target.value)}
+              />
+            </div>
+            <ActivityFeed logs={logs} accountsById={accountsById} search={activitySearch} />
           </Card>
         </div>
       )}

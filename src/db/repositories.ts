@@ -418,6 +418,59 @@ export function markDiscordCodeSeen(code: string): boolean {
   }
 }
 
+export function getPilotStats(): {
+  rainJoins7d: number;
+  rainJoinsOk7d: number;
+  rainJoinsFail7d: number;
+  avgCaptchaSec7d: number | null;
+  lifetimeRainCoins: number;
+  lastRainJoinAt: string | null;
+} {
+  const db = getDb();
+  const week = db
+    .prepare(
+      `SELECT
+         COUNT(*) AS total,
+         SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) AS ok,
+         SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) AS fail,
+         MAX(created_at) AS last_at
+       FROM rain_joins
+       WHERE created_at >= datetime('now', '-7 days')`,
+    )
+    .get() as { total: number; ok: number | null; fail: number | null; last_at: string | null };
+
+  const captchaRows = db
+    .prepare(
+      `SELECT detail FROM activity_log
+       WHERE message = 'Rain captcha ready' AND created_at >= datetime('now', '-7 days')
+       ORDER BY id DESC LIMIT 40`,
+    )
+    .all() as Array<{ detail: string | null }>;
+
+  const captchaSecs: number[] = [];
+  for (const row of captchaRows) {
+    const m = row.detail?.match(/·\s*([\d.]+)s\s*$/);
+    if (m) captchaSecs.push(parseFloat(m[1]!));
+  }
+  const avgCaptchaSec7d =
+    captchaSecs.length > 0
+      ? captchaSecs.reduce((a, b) => a + b, 0) / captchaSecs.length
+      : null;
+
+  const lifetime = db
+    .prepare("SELECT COALESCE(SUM(lifetime_rain), 0) AS n FROM accounts")
+    .get() as { n: number };
+
+  return {
+    rainJoins7d: week.total ?? 0,
+    rainJoinsOk7d: week.ok ?? 0,
+    rainJoinsFail7d: week.fail ?? 0,
+    avgCaptchaSec7d,
+    lifetimeRainCoins: lifetime.n ?? 0,
+    lastRainJoinAt: week.last_at,
+  };
+}
+
 export function listRecentRainJoins(accountId: number, limit = 20) {
   return getDb()
     .prepare("SELECT * FROM rain_joins WHERE account_id = ? ORDER BY id DESC LIMIT ?")

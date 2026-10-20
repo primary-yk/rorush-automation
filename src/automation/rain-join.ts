@@ -815,7 +815,7 @@ export function parseRain(payload: unknown): RainState | null {
 
 const DEFAULT_JOIN_STAGE_MS = 90_000;
 
-function rainJoinStageBounds(
+export function rainJoinStageBounds(
   rain: RainState,
   now = Date.now(),
 ): { joinStart: number; joinEnd: number } | null {

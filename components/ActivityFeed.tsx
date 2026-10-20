@@ -28,11 +28,13 @@ export function ActivityFeed({
   accountsById,
   compact,
   maxHeight,
+  search,
 }: {
   logs: ActivityLog[];
   accountsById?: Map<number, string>;
   compact?: boolean;
   maxHeight?: string;
+  search?: string;
 }) {
   const [filter, setFilter] = useState<string>("all");
 
@@ -41,7 +43,16 @@ export function ActivityFeed({
     return ["all", ...Array.from(set).sort()];
   }, [logs]);
 
-  const filtered = filter === "all" ? logs : logs.filter((l) => l.category === filter);
+  const q = search?.trim().toLowerCase() ?? "";
+  const filtered = logs.filter((l) => {
+    if (filter !== "all" && l.category !== filter) return false;
+    if (!q) return true;
+    return (
+      l.message.toLowerCase().includes(q) ||
+      (l.detail?.toLowerCase().includes(q) ?? false) ||
+      (l.account_id != null && accountsById?.get(l.account_id)?.toLowerCase().includes(q))
+    );
+  });
 
   return (
     <div>
@@ -75,7 +86,10 @@ export function ActivityFeed({
           </li>
         )}
         {filtered.map((log, i) => {
-          const meta = categoryMeta(log.category);
+          const isSummary = log.message === "Rain join summary";
+          const meta = isSummary
+            ? { dot: "bg-emerald-400", label: "Summary", border: "border-l-emerald-400/80" }
+            : categoryMeta(log.category);
           const accountName =
             log.account_id != null ? accountsById?.get(log.account_id) : undefined;
           return (
@@ -93,6 +107,7 @@ export function ActivityFeed({
                 className={clsx(
                   "min-w-0 flex-1 rounded-2xl border border-white/[0.06] border-l-[3px] bg-gradient-to-r from-white/[0.04] to-white/[0.01] px-4 py-3 transition hover:border-white/10 hover:from-white/[0.06]",
                   meta.border,
+                  isSummary && "from-emerald-500/10 ring-1 ring-emerald-500/20",
                 )}
               >
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">

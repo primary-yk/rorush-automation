@@ -35,6 +35,16 @@ import { SIGNALR } from "../rorush/endpoints.js";
 import { RoRushHub } from "../rorush/signalr-hub.js";
 import type { RainState } from "../rorush/types.js";
 import { parseBalanceCents, parseLevel } from "../rorush/balance-level.js";
+import {
+  buildRainLiveStatus,
+  formatRainJoinSummary,
+  rainTelemetryAccountFailed,
+  rainTelemetryAccountJoined,
+  rainTelemetryFinish,
+  rainTelemetryJoinAttempt,
+  rainTelemetryOnCreated,
+  rainTelemetryUpdateWindow,
+} from "../automation/rain-telemetry.js";
 import { HubRegistry } from "./hub-registry.js";
 
 export class AutomationEngine {
@@ -154,6 +164,8 @@ export class AutomationEngine {
       const rain = parseRain(payload);
       if (rain) {
         this.activeRain = rain;
+        rainTelemetryOnCreated(rain);
+        rainTelemetryUpdateWindow(rain);
         this.logRainLifecycleOnce("created", rain.rainId, () =>
           appendLog({
             category: "rain",
@@ -169,6 +181,7 @@ export class AutomationEngine {
       const rain = partial ? this.mergeRainState(partial) : this.activeRain;
       if (rain) {
         this.activeRain = rain;
+        rainTelemetryUpdateWindow(rain);
         this.logRainLifecycleOnce("join_stage", rain.rainId, () =>
           appendLog({
             category: "rain",
@@ -186,6 +199,7 @@ export class AutomationEngine {
         const rain = parseRain(item);
         if (!rain) continue;
         this.activeRain = this.mergeRainState(rain);
+        rainTelemetryUpdateWindow(this.activeRain);
         if (rainCaptchaPrewarmWindow(this.activeRain)) {
           prewarmRainCaptcha(this.activeRain.rainId);
         }
@@ -212,6 +226,7 @@ export class AutomationEngine {
         this.activeRain = partial;
       }
       if (this.activeRain) {
+        rainTelemetryUpdateWindow(this.activeRain);
         if (rainCaptchaPrewarmWindow(this.activeRain)) {
           prewarmRainCaptcha(this.activeRain.rainId);
         }
@@ -234,6 +249,15 @@ export class AutomationEngine {
         appendLog({ category: "rain", message: "Rain finished", detail: p.rainId }),
       );
       clearActivityDedupeForRain(p.rainId);
+      const tel = rainTelemetryFinish(p.rainId);
+      if (tel) {
+        appendLog({
+          category: "rain",
+          message: "Rain join summary",
+          detail: formatRainJoinSummary(tel),
+          force: true,
+        });
+      }
       clearRainJoinStateForRain(p.rainId);
       clearRainCaptcha(p.rainId);
       void settleRainForAllJoiners({
@@ -334,6 +358,10 @@ export class AutomationEngine {
         );
         if (pending.length === 0) break;
 
+        rainTelemetryJoinAttempt(
+          live.rainId,
+          pending.map((a) => a.nickname),
+        );
         prewarmRainCaptcha(live.rainId);
 
         let sharedCaptcha: string | null = null;
@@ -371,9 +399,11 @@ export class AutomationEngine {
               captchaToken: sharedCaptcha,
             });
             if (result.success) {
+              rainTelemetryAccountJoined(live.rainId, account.nickname);
               sharedCaptcha = null;
               continue;
             }
+            rainTelemetryAccountFailed(live.rainId, account.nickname, result.reason);
             if (shouldInvalidateRainCaptcha(result.reason)) {
               clearRainCaptcha(live.rainId);
               sharedCaptcha = null;
@@ -483,6 +513,13 @@ export class AutomationEngine {
       betCoins,
       multiplier,
       hubs: this.accountHubs,
+    });
+  }
+
+  getRainLiveStatus() {
+    return buildRainLiveStatus({
+      rain: this.activeRain,
+      listenerConnected: this.sharedRainHub != null,
     });
   }
 }

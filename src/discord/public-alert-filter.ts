@@ -21,7 +21,7 @@ export function redactForDiscord(text: string): string {
 const RAIN_FAIL =
   /join failed|join error|pipeline error|captcha|timeout|timed out|fail|error|wager required|wager requirement|limbo wager is off/i;
 
-const RAIN_OK = /^joined rain$/i;
+const RAIN_OK = /^joined rain$|^rain join summary$/i;
 
 const RAIN_WAGER =
   /wager requirement|placing limbo|still need wager|limbo wager|limbo hit|limbo miss|limbo skipped after rain/i;
