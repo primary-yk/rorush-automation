@@ -65,6 +65,13 @@ export class AutomationEngine {
   private rainListenerRecovering = false;
   private lastListenerDisconnectLogMs = 0;
 
+  /** Join-enabled accounts all marked joined for this rain — ignore further join triggers. */
+  private joinEnabledAllInRain(rainId: string): boolean {
+    const joinEnabled = listAccounts().filter((a) => Number(a.join_rain) !== 0);
+    if (joinEnabled.length === 0) return false;
+    return joinEnabled.every((a) => isRainJoined(a.id, rainId));
+  }
+
   async start(): Promise<void> {
     if (this.running) return;
     this.running = true;
@@ -328,6 +335,7 @@ export class AutomationEngine {
 
   private scheduleRainJoinAttempt(rain: RainState, trigger: string): void {
     if (this.rainJoinInFlight.has(rain.rainId)) return;
+    if (this.joinEnabledAllInRain(rain.rainId)) return;
     const last = this.rainJoinLastAttempt.get(rain.rainId) ?? 0;
     if (Date.now() - last < 12_000) return;
     this.rainJoinLastAttempt.set(rain.rainId, Date.now());
@@ -365,11 +373,6 @@ export class AutomationEngine {
       return;
     }
     if (accounts.length === 0) {
-      appendLog({
-        category: "rain",
-        message: "Rain join skipped (every account already joined this rain)",
-        detail: rain.rainId,
-      });
       return;
     }
 

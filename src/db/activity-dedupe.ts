@@ -15,7 +15,7 @@ function dedupeKey(input: {
 function dedupeWindowMs(input: { category: string; accountId?: number | null; message: string }): number {
   if (input.category === "rain" && input.accountId == null) return 8_000;
   if (/^Limbo skipped after rain$/i.test(input.message)) return 60_000;
-  if (/^Rain join skipped/i.test(input.message)) return 45_000;
+  if (/^Rain join skipped/i.test(input.message)) return 120_000;
   return 3_000;
 }
 
