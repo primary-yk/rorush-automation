@@ -1,5 +1,5 @@
-import crypto from "node:crypto";
 import dotenv from "dotenv";
+import { issueLicenseKey } from "../src/license/issue.js";
 
 dotenv.config();
 
@@ -20,19 +20,14 @@ if (!privPem) {
   process.exit(1);
 }
 
-const exp = Math.floor(Date.now() / 1000) + days * 86400;
-const payload = {
-  v: 1 as const,
+const { key, exp, id: outId, plan: outPlan } = issueLicenseKey({
+  privateKeyPem: privPem,
   id,
   plan,
-  exp,
-  ...(discordUserId ? { discordUserId } : {}),
-};
-const payloadB64 = Buffer.from(JSON.stringify(payload)).toString("base64url");
-const data = Buffer.from(`RP1.${payloadB64}`);
-const sig = crypto.sign(null, data, crypto.createPrivateKey(privPem)).toString("base64url");
-const key = `RP1.${payloadB64}.${sig}`;
+  days,
+  discordUserId,
+});
 
 console.log("License key (give to customer):\n");
 console.log(key);
-console.log(`\nExpires: ${new Date(exp * 1000).toISOString()} · Plan: ${plan} · Id: ${id}`);
+console.log(`\nExpires: ${new Date(exp * 1000).toISOString()} · Plan: ${outPlan} · Id: ${outId}`);

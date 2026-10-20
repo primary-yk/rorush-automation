@@ -4,6 +4,7 @@ import { startApiServer } from "./api/server.js";
 import { engine } from "./worker/engine.js";
 import { captchaApiKey, loadConfig, projectRoot } from "./config.js";
 import { listAccounts } from "./db/repositories.js";
+import { activateLicense } from "./license/service.js";
 import { startFriendsDiscordBot, stopFriendsDiscordBot } from "./discord/friends-bot.js";
 import { startPilotRelayClient, stopPilotRelayClient } from "./relay/pilot-client.js";
 
@@ -17,6 +18,15 @@ process.on("unhandledRejection", (err) => {
 
 async function main() {
   getDb();
+  const envLicense = process.env.RUSH_PILOT_LICENSE?.trim();
+  if (envLicense) {
+    try {
+      activateLicense(envLicense);
+      console.log("License loaded from RUSH_PILOT_LICENSE in .env");
+    } catch (err) {
+      console.warn("RUSH_PILOT_LICENSE invalid:", err instanceof Error ? err.message : String(err));
+    }
+  }
   const cfg = loadConfig();
   await startApiServer();
   console.log(`Automation API listening on http://${cfg.AUTOMATION_API_HOST}:${cfg.AUTOMATION_API_PORT}`);

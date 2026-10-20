@@ -8,6 +8,8 @@ import {
   type ChatInputCommandInteraction,
 } from "discord.js";
 import { updateSettings } from "../db/repositories.js";
+import { activateLicense, getLicenseStatus } from "../license/service.js";
+import { issueLicenseKey } from "../license/issue.js";
 import {
   addAccountForDiscordUser,
   engineStatusText,
@@ -59,6 +61,27 @@ const COMMANDS = [
     .addNumberOption((o) => o.setName("bet").setDescription("Fallback bet in coins if pool unknown")),
   new SlashCommandBuilder().setName("pause").setDescription("Pause all automation (host)"),
   new SlashCommandBuilder().setName("resume").setDescription("Resume automation (host)"),
+  new SlashCommandBuilder()
+    .setName("license")
+    .setDescription("Activate Rush Pilot on the host PC (only you see the key)")
+    .addStringOption((o) => o.setName("key").setDescription("RP1… license key").setRequired(true)),
+  new SlashCommandBuilder()
+    .setName("admin")
+    .setDescription("Host: create license keys from Discord")
+    .addSubcommand((sub) =>
+      sub
+        .setName("issue")
+        .setDescription("Generate a new RP1 license key")
+        .addUserOption((o) => o.setName("for").setDescription("Lock key to this Discord user (optional)"))
+        .addIntegerOption((o) => o.setName("days").setDescription("Valid days (default 365)").setMinValue(1))
+        .addStringOption((o) =>
+          o.setName("plan").setDescription("Plan label").addChoices(
+            { name: "standard", value: "standard" },
+            { name: "pro", value: "pro" },
+          ),
+        ),
+    )
+    .addSubcommand((sub) => sub.setName("status").setDescription("License on this host PC")),
 ].map((c) => c.toJSON());
 
 const SETUP_TEXT = [
@@ -71,6 +94,7 @@ const SETUP_TEXT = [
   "3. `/limbo account:Main on:true multiplier:1.1` — if rain needs a wager",
   "4. `/cases account:Main on:true` — optional",
   "",
+  "If you sell access with keys: `/license key:RP1…` on the host PC (no website).",
   "Rain, errors, and limbo results post in the log channel when configured.",
 ].join("\n");
 
@@ -191,6 +215,73 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
       });
       await interaction.editReply(text);
       return;
+    }
+
+    if (interaction.commandName === "license") {
+      await interaction.deferReply({ ephemeral: true });
+      const key = interaction.options.getString("key", true).trim();
+      try {
+        const status = activateLicense(key);
+        if (!status.active) {
+          await interaction.editReply(status.message ?? "Invalid or expired license.");
+          return;
+        }
+        await interaction.editReply(
+          `License active on **this PC** · plan **${status.plan}** · id \`${status.licenseId}\`\nExpires: ${status.expiresAt ?? "—"}`,
+        );
+      } catch (err) {
+        await interaction.editReply(err instanceof Error ? err.message : String(err));
+      }
+      return;
+    }
+
+    if (interaction.commandName === "admin") {
+      if (!isHost(userId)) {
+        await interaction.reply({ ephemeral: true, content: "Host-only command." });
+        return;
+      }
+      const sub = interaction.options.getSubcommand();
+      if (sub === "status") {
+        const s = getLicenseStatus();
+        await interaction.reply({
+          ephemeral: true,
+          content: s.active
+            ? `Active · plan **${s.plan}** · ${s.licenseId} · expires ${s.expiresAt ?? "—"}`
+            : `Not active${s.message ? `: ${s.message}` : ""}`,
+        });
+        return;
+      }
+      if (sub === "issue") {
+        const pem = process.env.LICENSE_PRIVATE_KEY?.trim();
+        if (!pem) {
+          await interaction.reply({
+            ephemeral: true,
+            content: "Set `LICENSE_PRIVATE_KEY` in the host `.env` to mint keys (see `npm run license:keygen`).",
+          });
+          return;
+        }
+        await interaction.deferReply({ ephemeral: true });
+        const forUser = interaction.options.getUser("for");
+        const days = interaction.options.getInteger("days") ?? 365;
+        const plan = interaction.options.getString("plan") ?? "standard";
+        const { key, exp, id } = issueLicenseKey({
+          privateKeyPem: pem,
+          days,
+          plan,
+          discordUserId: forUser?.id,
+        });
+        await interaction.editReply(
+          [
+            `**New license** · \`${id}\` · **${plan}** · ${days} days`,
+            `Expires: ${new Date(exp * 1000).toISOString()}`,
+            forUser ? `Locked to Discord user \`${forUser.id}\`` : "Not locked to a Discord user",
+            "",
+            "Give this key to your customer (DM). They run `/license` in Discord — **no website**:",
+            `\`\`\`\n${key}\n\`\`\``,
+          ].join("\n"),
+        );
+        return;
+      }
     }
 
     if (interaction.commandName === "pause" || interaction.commandName === "resume") {

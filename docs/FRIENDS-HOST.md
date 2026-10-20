@@ -36,6 +36,19 @@ They **cannot** see or change each other’s accounts.
 Discord Developer Portal → Bot → **Privileged**: none required.  
 OAuth2 → URL with scopes `bot`, `applications.commands` → permissions: Send Messages, Use Slash Commands, Embed Links.
 
-## No license
+## Licenses without the website
 
-Friends mode skips the vendor relay and license flow. Do not set `DISCORD_BOT_RELAY_URL` unless you switch to the commercial bot later.
+**Yes — Discord only.**
+
+| Who | Command |
+|-----|---------|
+| **You (seller)** | `/admin issue` — needs `LICENSE_PRIVATE_KEY` in your `.env` (ephemeral reply with RP1 key) |
+| **Customer / host** | `/license key:RP1…` — saves license on the PC running `npm run dev` (ephemeral) |
+
+Optional: put the key in `.env` as `RUSH_PILOT_LICENSE=RP1…` before starting (no slash command).
+
+Friends mode skips the vendor relay. Do not set `DISCORD_BOT_RELAY_URL` unless you switch to the hosted commercial bot later.
+
+### Vendor relay mode (customers on their own PC)
+
+Same idea: customer runs `npm run dev`, then **`/license`** in Discord (vendor bot) while Pilot is online — or `RUSH_PILOT_LICENSE` / `npm run activate-license` once. **`/activate`** links their Discord to the key for the private thread.
