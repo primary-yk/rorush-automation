@@ -249,10 +249,11 @@ export function recordRainJoin(input: {
   amount: number | null;
   success: boolean;
   reason: string | null;
+  balanceBeforeCoins?: number | null;
 }): void {
   getDb()
     .prepare(
-      "INSERT INTO rain_joins (account_id, rain_id, amount, success, reason, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+      "INSERT INTO rain_joins (account_id, rain_id, amount, success, reason, balance_before_coins, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
     )
     .run(
       input.accountId,
@@ -260,8 +261,38 @@ export function recordRainJoin(input: {
       input.amount,
       input.success ? 1 : 0,
       input.reason,
+      input.balanceBeforeCoins ?? null,
       new Date().toISOString(),
     );
+}
+
+/** Balance right after a successful join — used for post-rain limbo (survives dev restarts). */
+export function getRainJoinBalanceBefore(accountId: number, rainId: string): number | null {
+  const row = getDb()
+    .prepare(
+      `SELECT balance_before_coins AS bal FROM rain_joins
+       WHERE account_id = ? AND rain_id = ? AND success = 1 AND balance_before_coins IS NOT NULL
+       ORDER BY id DESC LIMIT 1`,
+    )
+    .get(accountId, rainId) as { bal: number } | undefined;
+  return row?.bal ?? null;
+}
+
+export function patchRainJoinBalanceBefore(
+  accountId: number,
+  rainId: string,
+  balanceBeforeCoins: number,
+): void {
+  getDb()
+    .prepare(
+      `UPDATE rain_joins SET balance_before_coins = ?
+       WHERE id = (
+         SELECT id FROM rain_joins
+         WHERE account_id = ? AND rain_id = ? AND success = 1
+         ORDER BY id DESC LIMIT 1
+       )`,
+    )
+    .run(balanceBeforeCoins, accountId, rainId);
 }
 
 export function recordCaseOpen(input: {

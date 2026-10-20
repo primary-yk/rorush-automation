@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS rain_joins (
   amount REAL,
   success INTEGER NOT NULL,
   reason TEXT,
+  balance_before_coins REAL,
   created_at TEXT NOT NULL,
   FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
 );

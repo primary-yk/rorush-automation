@@ -17,9 +17,19 @@ export function getDb(): Database.Database {
     db.exec(SCHEMA_SQL);
     migrateSettings(db);
     migrateAccounts(db);
+    migrateRainJoins(db);
     migrateDiscordSeats(db);
   }
   return db;
+}
+
+function migrateRainJoins(db: Database.Database): void {
+  const cols = new Set(
+    (db.prepare("PRAGMA table_info(rain_joins)").all() as Array<{ name: string }>).map((c) => c.name),
+  );
+  if (!cols.has("balance_before_coins")) {
+    db.exec("ALTER TABLE rain_joins ADD COLUMN balance_before_coins REAL");
+  }
 }
 
 function migrateDiscordSeats(db: Database.Database): void {

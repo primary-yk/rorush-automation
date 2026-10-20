@@ -1,6 +1,10 @@
 import { v4 as uuid } from "uuid";
 import { isTransientNetworkError } from "../captcha/solve.js";
-import { clearRainCaptcha, takeRainCaptchaToken } from "./rain-captcha.js";
+import {
+  clearRainCaptcha,
+  shouldInvalidateRainCaptcha,
+  takeRainCaptchaToken,
+} from "./rain-captcha.js";
 import { LIMBO_MIN_MULTIPLIER, loadConfig } from "../config.js";
 import {
   isRainJoined,
@@ -9,6 +13,8 @@ import {
 } from "./rain-join-state.js";
 import {
   appendLog,
+  getRainJoinBalanceBefore,
+  patchRainJoinBalanceBefore,
   recordRainJoin,
   updateAccount,
   accountIdsWithSuccessfulRainJoin,
@@ -207,7 +213,7 @@ async function joinRainForAccountOnce(input: {
           message:
             "Rain join timed out (no success/failure from RoRush — often captcha or joining too late in the window)",
         });
-      }, 60_000);
+      }, Math.max(30_000, Number(process.env.RAIN_JOIN_OUTCOME_MS ?? 90_000) || 90_000));
 
       const onSuccess = (payload: unknown) => {
         if (!matchesJoinReqId(payload, reqId)) return;
@@ -296,25 +302,34 @@ async function joinRainForAccountOnce(input: {
       });
     }
 
-    recordRainJoin({
-      accountId,
-      rainId: rain.rainId,
-      amount: rainAmount,
-      success: outcome.ok,
-      reason: outcome.message,
-    });
-
+    let balanceBeforeCoins: number | null = null;
     if (outcome.ok) {
       markRainJoined(accountId, rain.rainId);
       const balKey = rainBalanceKey(accountId, rain.rainId);
       for (let i = 0; i < 4; i++) {
         try {
           const bal = await readBalanceCoins(client);
+          balanceBeforeCoins = bal;
           rainBalanceBeforeJoin.set(balKey, bal);
           break;
         } catch {
           await new Promise((r) => setTimeout(r, 400));
         }
+      }
+    }
+
+    recordRainJoin({
+      accountId,
+      rainId: rain.rainId,
+      amount: rainAmount,
+      success: outcome.ok,
+      reason: outcome.message,
+      balanceBeforeCoins,
+    });
+
+    if (outcome.ok) {
+      if (balanceBeforeCoins != null) {
+        patchRainJoinBalanceBefore(accountId, rain.rainId, balanceBeforeCoins);
       }
       updateAccount(accountId, {
         status: "idle",
@@ -342,7 +357,11 @@ async function joinRainForAccountOnce(input: {
     return { success: outcome.ok, reason: outcome.message };
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
-    if (!isTransientNetworkError(err)) {
+    if (
+      !isTransientNetworkError(err) &&
+      shouldInvalidateRainCaptcha(reason) &&
+      !/timed out|join timed out/i.test(reason)
+    ) {
       clearRainCaptcha(rain.rainId);
     }
     recordRainJoin({ accountId, rainId: rain.rainId, amount: rainAmount, success: false, reason });
@@ -612,7 +631,8 @@ export async function settleRainForAccount(input: {
   }
 
   const key = rainBalanceKey(accountId, rainId);
-  const before = rainBalanceBeforeJoin.get(key) ?? null;
+  const before =
+    rainBalanceBeforeJoin.get(key) ?? getRainJoinBalanceBefore(accountId, rainId);
   await new Promise((r) => setTimeout(r, 1_500));
   const { after, earned } = await measureRainPayoutCoins(client, before);
   rainBalanceBeforeJoin.delete(key);
@@ -812,6 +832,13 @@ export function rainJoinWindowOpen(rain: RainState, now = Date.now()): boolean {
   const bounds = rainJoinStageBounds(rain, now);
   if (!bounds) return false;
   return now >= bounds.joinStart && now <= bounds.joinEnd;
+}
+
+export function rainJoinWindowRemainingMs(rain: RainState, now = Date.now()): number {
+  const bounds = rainJoinStageBounds(rain, now);
+  if (!bounds || now > bounds.joinEnd) return 0;
+  if (now < bounds.joinStart) return bounds.joinEnd - bounds.joinStart;
+  return Math.max(0, bounds.joinEnd - now);
 }
 
 /** Tip stage or join window — start captcha early so 2Captcha finishes before join opens. */

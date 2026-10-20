@@ -6,7 +6,12 @@ import {
   listAccounts,
   updateAccount,
 } from "../db/repositories.js";
-import { clearRainCaptcha, prewarmRainCaptcha, takeRainCaptchaToken } from "../automation/rain-captcha.js";
+import {
+  clearRainCaptcha,
+  prewarmRainCaptcha,
+  shouldInvalidateRainCaptcha,
+  takeRainCaptchaToken,
+} from "../automation/rain-captcha.js";
 import { clearRainJoinStateForRain, isRainJoined } from "../automation/rain-join-state.js";
 import {
   isRetryableRainFailure,
@@ -14,6 +19,7 @@ import {
   parseRain,
   rainCaptchaPrewarmWindow,
   rainJoinWindowOpen,
+  rainJoinWindowRemainingMs,
   runTestLimboBet,
   settleRainForAllJoiners,
 } from "../automation/rain-join.js";
@@ -315,40 +321,89 @@ export class AutomationEngine {
     });
 
     this.rainJoinInFlight.add(rain.rainId);
-    let sharedCaptcha: string | null = await takeRainCaptchaToken(rain.rainId, {
-      forRainJoin: true,
-    }).catch(() => null);
+    const retryMs = Math.max(8_000, Number(process.env.RAIN_JOIN_RETRY_MS ?? 12_000) || 12_000);
+    let loggedCaptchaWait = false;
     try {
-      for (const account of accounts) {
+      while (true) {
+        const live =
+          this.activeRain?.rainId === rain.rainId ? this.activeRain : rain;
+        if (!rainJoinWindowOpen(live)) break;
+
+        const pending = listAccounts().filter(
+          (a) => Number(a.join_rain) !== 0 && !isRainJoined(a.id, live.rainId),
+        );
+        if (pending.length === 0) break;
+
+        prewarmRainCaptcha(live.rainId);
+
+        let sharedCaptcha: string | null = null;
         try {
-          const hub = await this.accountHubs.ensure(account.id, { rain: true, cases: true });
-          const result = await joinRainForAccount({
-            accountId: account.id,
-            rain,
-            hub,
-            captchaToken: sharedCaptcha,
-          });
-          if (result.success) sharedCaptcha = null;
-          if (!result.success && /captcha|token/i.test(result.reason)) {
-            sharedCaptcha = null;
-            prewarmRainCaptcha(rain.rainId);
+          if (!loggedCaptchaWait) {
+            loggedCaptchaWait = true;
+            const secLeft = Math.round(rainJoinWindowRemainingMs(live) / 1000);
+            appendLog({
+              category: "rain",
+              message: "Waiting for rain captcha (one solve per rain batch)",
+              detail: `${live.rainId} · ~${secLeft}s left in join window`,
+            });
           }
-          // Only retry wager blocks — captcha/timeouts used to re-queue and spam "Rain join error".
-          const retryable =
-            !result.success && rainJoinWindowOpen(rain) && isRetryableRainFailure(result.reason);
-          if (retryable) {
-            this.rainJoinLastAttempt.delete(rain.rainId);
-            prewarmRainCaptcha(rain.rainId);
-            this.scheduleRainJoinAttempt(rain, "retry_after_fail");
-          }
-        } catch (err) {
-          appendLog({
-            accountId: account.id,
-            category: "rain",
-            message: "Rain join pipeline error",
-            detail: err instanceof Error ? err.message : String(err),
-          });
+          sharedCaptcha = await takeRainCaptchaToken(live.rainId, { forRainJoin: true });
+        } catch {
+          sharedCaptcha = null;
         }
+
+        if (!sharedCaptcha) {
+          if (!rainJoinWindowOpen(live)) break;
+          await new Promise((r) => setTimeout(r, 5_000));
+          continue;
+        }
+
+        if (!rainJoinWindowOpen(live)) break;
+
+        let anyRetryableFail = false;
+        for (const account of pending) {
+          try {
+            const hub = await this.accountHubs.ensure(account.id, { rain: true, cases: true });
+            const result = await joinRainForAccount({
+              accountId: account.id,
+              rain: live,
+              hub,
+              captchaToken: sharedCaptcha,
+            });
+            if (result.success) {
+              sharedCaptcha = null;
+              continue;
+            }
+            if (shouldInvalidateRainCaptcha(result.reason)) {
+              clearRainCaptcha(live.rainId);
+              sharedCaptcha = null;
+              prewarmRainCaptcha(live.rainId);
+              break;
+            }
+            if (isRetryableRainFailure(result.reason)) {
+              anyRetryableFail = true;
+            }
+          } catch (err) {
+            appendLog({
+              accountId: account.id,
+              category: "rain",
+              message: "Rain join pipeline error",
+              detail: err instanceof Error ? err.message : String(err),
+            });
+            anyRetryableFail = true;
+          }
+        }
+
+        const stillPending = listAccounts().filter(
+          (a) => Number(a.join_rain) !== 0 && !isRainJoined(a.id, live.rainId),
+        );
+        if (stillPending.length === 0) break;
+        if (!rainJoinWindowOpen(live)) break;
+        if (!anyRetryableFail && sharedCaptcha == null) break;
+
+        const wait = Math.min(retryMs, rainJoinWindowRemainingMs(live));
+        if (wait < 2_000) break;
+        await new Promise((r) => setTimeout(r, wait));
       }
     } finally {
       this.rainJoinInFlight.delete(rain.rainId);

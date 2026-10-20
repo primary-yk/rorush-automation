@@ -107,3 +107,14 @@ export function clearRainCaptcha(rainId: string): void {
   cache.delete(cacheKey(rainId));
   inflight.delete(cacheKey(rainId));
 }
+
+export function rainCaptchaInflight(rainId: string): boolean {
+  return inflight.has(cacheKey(rainId));
+}
+
+/** RoRush rejected the token — safe to request a fresh solve. */
+export function shouldInvalidateRainCaptcha(reason: string): boolean {
+  return /captcha.*invalid|invalid.*captcha|token.*expired|reject.*captcha|wrong.*captcha|hcaptcha/i.test(
+    reason,
+  );
+}
