@@ -17,6 +17,7 @@
     "test-captcha": "tsx scripts/test-captcha.ts",
     "preflight": "tsx scripts/preflight.ts",
     "show-urls": "tsx scripts/show-dashboard-url.ts",
+    "setup-discord-webhook": "tsx scripts/setup-discord-webhook.ts",
     "build": "next build && tsc -p tsconfig.server.json",
     "start": "NODE_ENV=production concurrently -k \"node dist/main.js\" \"next start -p 43123 -H 0.0.0.0\"",
     "test": "vitest run",

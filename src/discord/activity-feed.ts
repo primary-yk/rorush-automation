@@ -3,6 +3,7 @@ import { decryptField } from "../accounts/session-manager.js";
 import { loadConfig } from "../config.js";
 import { getSettings, listAccounts } from "../db/repositories.js";
 import { isRelayConnected, sendPilotEvent } from "../relay/pilot-client.js";
+import { resolveDiscordReportWebhookUrl } from "./report-webhook.js";
 
 export type ActivityLogRow = {
   account_id: number | null;
@@ -24,11 +25,7 @@ const queue: ActivityLogRow[] = [];
 let flushTimer: NodeJS.Timeout | null = null;
 
 function webhookUrl(): string | null {
-  const s = getSettings();
-  if (!s.discord_report_enabled || !s.discord_report_webhook_enc) return null;
-  const url = decryptField(s.discord_report_webhook_enc);
-  if (!url?.includes("discord.com/api/webhooks/")) return null;
-  return url;
+  return resolveDiscordReportWebhookUrl();
 }
 
 function activityFeedEnabled(): boolean {

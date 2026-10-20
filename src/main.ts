@@ -5,6 +5,7 @@ import { engine } from "./worker/engine.js";
 import { captchaApiKey, loadConfig, projectRoot } from "./config.js";
 import { listAccounts } from "./db/repositories.js";
 import { activateLicense } from "./license/service.js";
+import { applyDiscordWebhookFromEnv } from "./discord/report-webhook.js";
 import { startFriendsDiscordBot, stopFriendsDiscordBot } from "./discord/friends-bot.js";
 import { startPilotRelayClient, stopPilotRelayClient } from "./relay/pilot-client.js";
 
@@ -18,6 +19,7 @@ process.on("unhandledRejection", (err) => {
 
 async function main() {
   getDb();
+  applyDiscordWebhookFromEnv();
   const envLicense = process.env.RUSH_PILOT_LICENSE?.trim();
   if (envLicense) {
     try {

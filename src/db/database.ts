@@ -17,8 +17,23 @@ export function getDb(): Database.Database {
     db.exec(SCHEMA_SQL);
     migrateSettings(db);
     migrateAccounts(db);
+    migrateDiscordSeats(db);
   }
   return db;
+}
+
+function migrateDiscordSeats(db: Database.Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS discord_user_licenses (
+      discord_user_id TEXT PRIMARY KEY,
+      license_id TEXT NOT NULL,
+      plan TEXT NOT NULL,
+      exp INTEGER NOT NULL,
+      license_key_enc TEXT NOT NULL,
+      license_payload_json TEXT NOT NULL,
+      activated_at TEXT NOT NULL
+    );
+  `);
 }
 
 function migrateAccounts(db: Database.Database): void {

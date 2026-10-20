@@ -2,6 +2,7 @@ import { fetch } from "undici";
 import { decryptField } from "../accounts/session-manager.js";
 import { getSettings, listAccounts } from "../db/repositories.js";
 import { isRelayConnected, sendPilotEvent } from "../relay/pilot-client.js";
+import { resolveDiscordReportWebhookUrl } from "./report-webhook.js";
 
 type Embed = {
   title: string;
@@ -17,11 +18,7 @@ const COLOR_INFO = 0x8b_5c_f6;
 const COLOR_WARN = 0xf5_9e_0b;
 
 function webhookConfigured(): string | null {
-  const s = getSettings();
-  if (!s.discord_report_enabled || !s.discord_report_webhook_enc) return null;
-  const url = decryptField(s.discord_report_webhook_enc);
-  if (!url?.includes("discord.com/api/webhooks/")) return null;
-  return url;
+  return resolveDiscordReportWebhookUrl();
 }
 
 async function deliverEmbed(embed: Embed): Promise<void> {

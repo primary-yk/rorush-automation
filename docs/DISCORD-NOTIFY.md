@@ -6,12 +6,25 @@ Mirror **rain**, **limbo wagers**, **case opens**, **captcha errors**, and **joi
 
 1. Discord → your server → pick a channel (e.g. `#rush-pilot-logs`).
 2. Edit channel → **Integrations** → **Webhooks** → **New webhook** → copy URL.
-3. Dashboard → **Settings** → **Discord notifications**:
-   - Turn on **Send to Discord**
-   - Paste webhook URL → **Save webhook** → **Send test**
+3. **Do not share the URL in chat** — anyone with it can spam your channel.
+
+**Path 1 — `.env` (recommended if you hate the dashboard):**
+
+```env
+DISCORD_REPORT_WEBHOOK=https://discord.com/api/webhooks/...
+```
+
+```bash
+npm run setup-discord-webhook   # saves + sends one test message
+```
+
+When you later run `npm run dev`, rain/errors auto-post to that channel.
+
+**Path 2 — dashboard:** Settings → **Discord notifications** → **Send to Discord** → paste URL → **Save webhook** → **Send test**.
+
 4. Optional: **Full activity feed** posts more system lines (noisier).
 
-Rain and errors are always sent when **Send to Discord** is on, even without full feed.
+Rain and errors are always sent when a webhook is configured, even without full feed.
 
 ## Option B — Your bot posts to a channel
 
