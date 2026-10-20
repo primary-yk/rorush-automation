@@ -1,6 +1,16 @@
-# Rush Pilot (self-hosted)
+# Rush Pilot
 
-Node.js + TypeScript automation module for [RoRush](https://rorush.com) with a small Next.js dashboard. It uses the same public web API and SignalR hub as the site (`https://api.rorush.com`), including:
+Node.js + TypeScript automation for [RoRush](https://rorush.com) with an operator dashboard. It uses the same public web API and SignalR hub as the site (`https://api.rorush.com`).
+
+## How you run it
+
+| Goal | You | Customers / friends |
+|------|-----|---------------------|
+| **Sell access** | VPS + `HOSTED_SAAS=true` — [docs/HOSTED-SAAS.md](docs/HOSTED-SAAS.md) | Discord only (`/license redeem`, `/account add`, …) — **no install** |
+| **Free friends** | Your PC/VPS + [docs/FRIENDS-HOST.md](docs/FRIENDS-HOST.md) | Discord only |
+| **Solo on your machine** | [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) | — |
+
+Do **not** use `DISCORD_BOT_RELAY_URL` for sales; that path expects each user to run Pilot locally (legacy self-host).
 
 - `POST /api/v1/auth/login-email` and session JWT auth
 - SignalR hub `/hub` — `SubscribeRain`, `JoinRain`, `PlayLimboGame`, `PlayCaseUnboxing`

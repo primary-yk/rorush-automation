@@ -36,19 +36,20 @@ They **cannot** see or change each other’s accounts.
 Discord Developer Portal → Bot → **Privileged**: none required.  
 OAuth2 → URL with scopes `bot`, `applications.commands` → permissions: Send Messages, Use Slash Commands, Embed Links.
 
-## Licenses without the website
+## Selling access (customers never install)
 
-**Yes — Discord only.**
+If you charge for Pilot, use **hosted SaaS** — you run one server 24/7; buyers only use Discord. Full guide: **[HOSTED-SAAS.md](./HOSTED-SAAS.md)**.
 
 | Who | Command |
 |-----|---------|
-| **You (seller)** | `/admin issue` — needs `LICENSE_PRIVATE_KEY` in your `.env` (ephemeral reply with RP1 key) |
-| **Customer / host** | `/license key:RP1…` — saves license on the PC running `npm run dev` (ephemeral) |
+| **You (host)** | Set `HOSTED_SAAS=true`, keep `npm run start` on your VPS |
+| **You (seller)** | `/admin issue for:@buyer days:30` → DM the RP1 key |
+| **Buyer** | `/license redeem key:RP1…` → `/account add` → `/rain` |
 
-Optional: put the key in `.env` as `RUSH_PILOT_LICENSE=RP1…` before starting (no slash command).
+Do **not** tell customers to run `npm run dev`, WSL, or a local dashboard.
 
-Friends mode skips the vendor relay. Do not set `DISCORD_BOT_RELAY_URL` unless you switch to the hosted commercial bot later.
+Free friends on your machine: leave `HOSTED_SAAS` unset — no license required.
 
-### Vendor relay mode (customers on their own PC)
+## Legacy: vendor relay (not for sales)
 
-Same idea: customer runs `npm run dev`, then **`/license`** in Discord (vendor bot) while Pilot is online — or `RUSH_PILOT_LICENSE` / `npm run activate-license` once. **`/activate`** links their Discord to the key for the private thread.
+`DISCORD_BOT_RELAY_URL` + separate `npm run discord-bot` was an older model where **each customer ran Pilot on their own PC**. It still exists in the repo for self-host power users, but it is **not** what you want when selling — use hosted SaaS instead. See [DISCORD-BOT.md](./DISCORD-BOT.md) only if you intentionally self-host on your own hardware.
