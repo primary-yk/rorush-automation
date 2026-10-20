@@ -308,7 +308,7 @@ async function joinOnce(
   return outcomePromise;
 }
 
-function parseLimboResult(payload: unknown): { hit: boolean; crashMultiplier: number | null } {
+export function parseLimboResult(payload: unknown): { hit: boolean; crashMultiplier: number | null } {
   if (!payload || typeof payload !== "object") return { hit: false, crashMultiplier: null };
   const p = payload as Record<string, unknown>;
   const hit = p.isWin === true || p.isWin === 1;
