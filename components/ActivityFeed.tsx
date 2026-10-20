@@ -74,6 +74,8 @@ function isHighlightLog(log: ActivityLog): boolean {
   if (log.message === "Joined rain") return true;
   if (log.message === "Attempting rain join") return true;
   if (log.message === "Rain join batch finished") return true;
+  if (log.message === "Rain join batch finished (no joins)") return true;
+  if (log.message.includes("captcha")) return true;
   if (log.message === "Rain payout recorded") return true;
   if (log.message.startsWith("Rain join")) return true;
   if (log.category === "system") return log.message.includes("started") || log.message.includes("stopped");

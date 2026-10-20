@@ -87,7 +87,11 @@ async function solveHcaptchaWithRetry(): Promise<string | null> {
   }
 }
 
-function startSolveForSlot(rainId: string, accountId?: number | null): void {
+function startSolveForSlot(
+  rainId: string,
+  accountId?: number | null,
+  opts?: { bypassCooldown?: boolean },
+): void {
   const key = slotKey(rainId, accountId);
   if (isRainCaptchaFinished(rainId)) return;
   if (readCachedKey(key)) return;
@@ -95,7 +99,10 @@ function startSolveForSlot(rainId: string, accountId?: number | null): void {
 
   const blockKey = accountId != null ? `${rainId}:${accountId}` : rainId;
   const blocked = prewarmBlockedUntil.get(blockKey);
-  if (blocked != null && Date.now() < blocked) return;
+  if (blocked != null && Date.now() < blocked) {
+    if (!opts?.bypassCooldown) return;
+    prewarmBlockedUntil.delete(blockKey);
+  }
 
   const started = Date.now();
   console.log(
@@ -117,7 +124,14 @@ function startSolveForSlot(rainId: string, accountId?: number | null): void {
     .catch((err) => {
       const msg = err instanceof Error ? err.message : String(err);
       console.warn(`[rain-captcha] solve failed ${rainId.slice(0, 8)}…: ${msg}`);
-      prewarmBlockedUntil.set(blockKey, Date.now() + prewarmFailureCooldownMs());
+      const cooldown = prewarmFailureCooldownMs();
+      prewarmBlockedUntil.set(blockKey, Date.now() + cooldown);
+      appendLog({
+        accountId: accountId ?? undefined,
+        category: "rain",
+        message: "Rain captcha solve failed",
+        detail: `${rainId.slice(0, 8)}… · ${msg.slice(0, 200)} · retry in ~${Math.round(cooldown / 1000)}s`,
+      });
       return null;
     })
     .finally(() => {
@@ -195,10 +209,24 @@ export async function takeRainCaptchaToken(
 
   let p = inflight.get(key);
   if (!p) {
-    startSolveForSlot(rainId, opts?.accountId ?? null);
+    startSolveForSlot(rainId, opts?.accountId ?? null, {
+      bypassCooldown: !!opts?.forRainJoin,
+    });
     p = inflight.get(key);
   }
-  if (!p) return null;
+  if (!p) {
+    if (opts?.forRainJoin) {
+      const acctId = opts?.accountId;
+      const who = acctId != null ? getAccount(acctId)?.nickname ?? `#${acctId}` : "shared";
+      appendLog({
+        accountId: acctId ?? undefined,
+        category: "rain",
+        message: "Rain captcha not started",
+        detail: `${who} · ${rainId.slice(0, 8)}… · check CAPTCHA_API_KEY / 2Captcha balance / prior solve cooldown`,
+      });
+    }
+    return null;
+  }
   return p;
 }
 
