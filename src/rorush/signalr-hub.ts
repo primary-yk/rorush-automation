@@ -111,6 +111,21 @@ export class RoRushHub {
     this.bindEvent(SIGNALR.caseUnboxing.receiveFailure, (p) =>
       this.handlers.onCaseFailure?.(p as { message?: string }),
     );
+    // RoRush chat hub noise — ignore but register so SignalR does not warn every ~15s.
+    for (const chatEvent of [
+      "ping",
+      "Ping",
+      "updateglobalstate",
+      "UpdateGlobalState",
+      "receivechatmessage",
+      "ReceiveChatMessage",
+      "receivechathistory",
+      "ReceiveChatHistory",
+      "receiveuserdata",
+      "ReceiveUserData",
+    ]) {
+      this.bindEvent(chatEvent);
+    }
   }
 
   /** Register a server push event once; fan out to optional handler + hub.on() listeners. */
