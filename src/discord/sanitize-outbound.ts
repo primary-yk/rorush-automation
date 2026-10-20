@@ -1,4 +1,7 @@
-/** Keep Discord replies free of site URLs, dashboard links, and install instructions. */
+/**
+ * Keep Discord replies free of site URLs, dashboard links, and install instructions.
+ * Tracked in docs/PRIORITIES-STATUS.md (2026-10-20 agent promise — DONE).
+ */
 export function sanitizeDiscordOutbound(text: string): string {
   return text
     .replace(/https?:\/\/[^\s<>)]+/gi, "")

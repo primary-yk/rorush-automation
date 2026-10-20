@@ -1,5 +1,7 @@
 # Friends mode (you host, they use Discord only)
 
+**Priority checklist (duplicate captcha, limbo mult, no URL leaks):** [PRIORITIES-STATUS.md](./PRIORITIES-STATUS.md)
+
 **3–4 friends, no sales:** keep **`HOSTED_SAAS` unset**, leave **`RUSH_PILOT_LICENSE` empty**, and **do not** set `DISCORD_BOT_RELAY_URL`. Friends never see `/license` — they go straight to `/account add`.
 
 Minimal `.env` (you):
