@@ -619,16 +619,34 @@ export function parseRain(payload: unknown): RainState | null {
 
 const DEFAULT_JOIN_STAGE_MS = 90_000;
 
-export function rainJoinWindowOpen(rain: RainState, now = Date.now()): boolean {
+function rainJoinStageBounds(
+  rain: RainState,
+  now = Date.now(),
+): { joinStart: number; joinEnd: number } | null {
   const joinDur = rain.joinStageDuration ?? DEFAULT_JOIN_STAGE_MS;
   let joinStart = rain.joinStageStartTimestamp ?? null;
   if (joinStart == null && rain.createdTimestamp != null && rain.tipStageDuration != null) {
     joinStart = rain.createdTimestamp + rain.tipStageDuration;
   }
-  if (joinStart != null) {
-    const end = joinStart + joinDur;
-    return now >= joinStart && now <= end;
+  if (joinStart == null) return null;
+  return { joinStart, joinEnd: joinStart + joinDur };
+}
+
+export function rainJoinWindowOpen(rain: RainState, now = Date.now()): boolean {
+  const bounds = rainJoinStageBounds(rain, now);
+  if (!bounds) return false;
+  return now >= bounds.joinStart && now <= bounds.joinEnd;
+}
+
+/** Tip stage or join window — start captcha early so 2Captcha finishes before join opens. */
+export function rainCaptchaPrewarmWindow(rain: RainState, now = Date.now()): boolean {
+  const bounds = rainJoinStageBounds(rain, now);
+  if (!bounds) {
+    return !!(rain.createdTimestamp && rain.tipStageDuration && now >= rain.createdTimestamp);
   }
+  if (now > bounds.joinEnd) return false;
+  if (now >= bounds.joinStart) return true;
+  if (rain.createdTimestamp != null && now >= rain.createdTimestamp) return true;
   return false;
 }
 

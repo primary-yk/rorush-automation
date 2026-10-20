@@ -11,6 +11,7 @@ import {
   isWagerRejection,
   joinRainForAccount,
   parseRain,
+  rainCaptchaPrewarmWindow,
   rainJoinWindowOpen,
   runTestLimboBet,
   settleRainForAllJoiners,
@@ -171,8 +172,10 @@ export class AutomationEngine {
         const rain = parseRain(item);
         if (!rain) continue;
         this.activeRain = this.mergeRainState(rain);
-        if (rainJoinWindowOpen(this.activeRain)) {
+        if (rainCaptchaPrewarmWindow(this.activeRain)) {
           prewarmRainCaptcha(this.activeRain.rainId);
+        }
+        if (rainJoinWindowOpen(this.activeRain)) {
           this.scheduleRainJoinAttempt(this.activeRain, "current_rains");
         }
       }
@@ -194,8 +197,13 @@ export class AutomationEngine {
       } else {
         this.activeRain = partial;
       }
-      if (this.activeRain && rainJoinWindowOpen(this.activeRain)) {
-        this.scheduleRainJoinAttempt(this.activeRain, "amount_updated");
+      if (this.activeRain) {
+        if (rainCaptchaPrewarmWindow(this.activeRain)) {
+          prewarmRainCaptcha(this.activeRain.rainId);
+        }
+        if (rainJoinWindowOpen(this.activeRain)) {
+          this.scheduleRainJoinAttempt(this.activeRain, "amount_updated");
+        }
       }
     });
 

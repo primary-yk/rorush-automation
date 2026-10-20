@@ -3,6 +3,7 @@ import {
   isWagerRejection,
   matchesJoinReqId,
   parseRain,
+  rainCaptchaPrewarmWindow,
   rainJoinWindowOpen,
 } from "../src/automation/rain-join.js";
 import type { RainState } from "../src/rorush/types.js";
@@ -40,6 +41,19 @@ describe("rainJoinWindowOpen", () => {
     };
     expect(rainJoinWindowOpen(rain, 10_500)).toBe(true);
     expect(rainJoinWindowOpen(rain, 12_500)).toBe(false);
+  });
+});
+
+describe("rainCaptchaPrewarmWindow", () => {
+  it("includes tip stage before join opens", () => {
+    const rain: RainState = {
+      rainId: "1",
+      createdTimestamp: 1_000,
+      tipStageDuration: 500,
+      joinStageDuration: 2_000,
+    };
+    expect(rainCaptchaPrewarmWindow(rain, 1_200)).toBe(true);
+    expect(rainJoinWindowOpen(rain, 1_200)).toBe(false);
   });
 });
 
