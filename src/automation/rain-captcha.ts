@@ -77,14 +77,31 @@ function logSolveDone(
   }
 }
 
+function isWorkerUnsolvableError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /workers could not solve|could not solve the captcha|unsolvable|ERROR_CAPTCHA_UNSOLVABLE/i.test(
+    msg,
+  );
+}
+
 async function solveHcaptchaWithRetry(): Promise<string | null> {
-  try {
-    return await solveCaptcha("hcaptcha");
-  } catch (err) {
-    if (!isTransientNetworkError(err)) throw err;
-    console.warn("[rain-captcha] retry after network error…");
-    return solveCaptcha("hcaptcha");
+  const maxAttempts = Math.max(1, Number(process.env.RAIN_CAPTCHA_WORKER_RETRIES ?? 3) || 3);
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await solveCaptcha("hcaptcha");
+    } catch (err) {
+      lastErr = err;
+      const retry =
+        attempt < maxAttempts &&
+        (isTransientNetworkError(err) || isWorkerUnsolvableError(err));
+      if (!retry) throw err;
+      const why = isWorkerUnsolvableError(err) ? "2Captcha workers failed" : "network";
+      console.warn(`[rain-captcha] retry ${attempt + 1}/${maxAttempts} after ${why}…`);
+      await new Promise((r) => setTimeout(r, 2_000));
+    }
   }
+  throw lastErr;
 }
 
 function startSolveForSlot(
@@ -124,13 +141,18 @@ function startSolveForSlot(
     .catch((err) => {
       const msg = err instanceof Error ? err.message : String(err);
       console.warn(`[rain-captcha] solve failed ${rainId.slice(0, 8)}…: ${msg}`);
-      const cooldown = prewarmFailureCooldownMs();
+      const workerFail = isWorkerUnsolvableError(err);
+      const cooldown = workerFail
+        ? Math.max(8_000, Number(process.env.RAIN_CAPTCHA_WORKER_FAIL_COOLDOWN_MS ?? 20_000) || 20_000)
+        : prewarmFailureCooldownMs();
       prewarmBlockedUntil.set(blockKey, Date.now() + cooldown);
       appendLog({
         accountId: accountId ?? undefined,
         category: "rain",
-        message: "Rain captcha solve failed",
-        detail: `${rainId.slice(0, 8)}… · ${msg.slice(0, 200)} · retry in ~${Math.round(cooldown / 1000)}s`,
+        message: workerFail ? "Rain captcha unsolvable (2Captcha)" : "Rain captcha solve failed",
+        detail: workerFail
+          ? `${rainId.slice(0, 8)}… · 2Captcha workers could not solve — auto-retrying (${msg.slice(0, 120)})`
+          : `${rainId.slice(0, 8)}… · ${msg.slice(0, 200)} · retry in ~${Math.round(cooldown / 1000)}s`,
       });
       return null;
     })
