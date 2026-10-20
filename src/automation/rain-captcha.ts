@@ -132,6 +132,7 @@ export function prewarmRainCaptchasParallel(rainId: string, accountIds: number[]
   for (const id of unique) startSolveForSlot(rainId, id);
 }
 
+/** Wait until all account tokens exist (legacy / tests). Rain join uses per-account join-as-ready instead. */
 export async function waitForRainCaptchasParallel(
   rainId: string,
   accountIds: number[],
