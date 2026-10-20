@@ -40,6 +40,11 @@ async function main() {
   const account = getAccount(id);
   if (!account) {
     console.error(`Account #${id} not found.`);
+    console.error(
+      "Accounts in this database:",
+      all.map((a) => `#${a.id} ${a.nickname}`).join(", ") || "(none)",
+    );
+    console.error("Run: npm run accounts   or   npm run test-login   (no --id uses the first account)");
     process.exit(1);
   }
 
