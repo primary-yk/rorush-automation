@@ -18,6 +18,7 @@ export type AccountRow = {
   limbo_wager_enabled: number;
   limbo_multiplier: number;
   limbo_bet_coins: number;
+  pre_wager_before_rain: number;
   status: string;
   last_error: string | null;
   balance: number | null;
@@ -128,6 +129,7 @@ export function updateAccount(
       `UPDATE accounts SET nickname = ?, owner_discord_id = ?, username = ?, password_enc = ?, session_jwt_enc = ?, api_key_enc = ?,
        proxy_url = ?, join_rain = ?, min_rain_amount = ?, auto_open_cases = ?, auto_redeem_codes = ?,
        min_code_level = ?, limbo_wager_enabled = ?, limbo_multiplier = ?, limbo_bet_coins = ?,
+       pre_wager_before_rain = ?,
        status = ?, last_error = ?, balance = ?, level = ?,
        lifetime_rain = ?, lifetime_cases = ?, lifetime_codes = ?, updated_at = ?
        WHERE id = ?`,
@@ -148,6 +150,7 @@ export function updateAccount(
       next.limbo_wager_enabled,
       next.limbo_multiplier,
       next.limbo_bet_coins,
+      next.pre_wager_before_rain ?? 0,
       next.status,
       next.last_error,
       next.balance,
@@ -425,6 +428,8 @@ export function getPilotStats(): {
   avgCaptchaSec7d: number | null;
   lifetimeRainCoins: number;
   lastRainJoinAt: string | null;
+  estimatedCaptchaSpendUsd7d: number;
+  captchaSolvesEstimate7d: number;
 } {
   const db = getDb();
   const week = db
@@ -461,6 +466,9 @@ export function getPilotStats(): {
     .prepare("SELECT COALESCE(SUM(lifetime_rain), 0) AS n FROM accounts")
     .get() as { n: number };
 
+  const solveEstimate = (week.total ?? 0) + Math.round((week.fail ?? 0) * 0.5);
+  const spendPerSolve = Number(process.env.CAPTCHA_ESTIMATE_USD ?? 0.00299) || 0.00299;
+
   return {
     rainJoins7d: week.total ?? 0,
     rainJoinsOk7d: week.ok ?? 0,
@@ -468,6 +476,8 @@ export function getPilotStats(): {
     avgCaptchaSec7d,
     lifetimeRainCoins: lifetime.n ?? 0,
     lastRainJoinAt: week.last_at,
+    captchaSolvesEstimate7d: solveEstimate,
+    estimatedCaptchaSpendUsd7d: Math.round(solveEstimate * spendPerSolve * 100) / 100,
   };
 }
 

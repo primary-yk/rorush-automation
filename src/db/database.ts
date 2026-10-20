@@ -68,6 +68,7 @@ function migrateAccounts(db: Database.Database): void {
     ["limbo_wager_enabled", "INTEGER NOT NULL DEFAULT 1"],
     ["limbo_multiplier", "REAL NOT NULL DEFAULT 1.3"],
     ["limbo_bet_coins", "REAL NOT NULL DEFAULT 1"],
+    ["pre_wager_before_rain", "INTEGER NOT NULL DEFAULT 0"],
   ];
   for (const [name, type] of add) {
     if (!cols.has(name)) {

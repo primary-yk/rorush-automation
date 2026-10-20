@@ -16,6 +16,7 @@ import {
 } from "../db/repositories.js";
 import { encryptField, setSessionToken } from "../accounts/session-manager.js";
 import { isIgnorableCaseError } from "../automation/case-errors.js";
+import { buildPilotBackup, importPilotBackup, type PilotBackupFile } from "../backup/pilot-backup.js";
 import { reportAccountSnapshot, sendTestReport } from "../discord/reporter.js";
 import { isRelayConnected } from "../relay/pilot-client.js";
 import { engine } from "../worker/engine.js";
@@ -178,6 +179,7 @@ export function createApiServer() {
       limboWagerEnabled: boolean;
       limboMultiplier: number;
       limboBetCoins: number;
+      preWagerBeforeRain: boolean;
       clearError?: boolean;
       password: string;
       sessionToken: string;
@@ -197,6 +199,9 @@ export function createApiServer() {
       patch.limbo_multiplier = Math.max(LIMBO_MIN_MULTIPLIER, body.limboMultiplier);
     }
     if (body.limboBetCoins !== undefined) patch.limbo_bet_coins = body.limboBetCoins;
+    if (body.preWagerBeforeRain !== undefined) {
+      patch.pre_wager_before_rain = body.preWagerBeforeRain ? 1 : 0;
+    }
     if (body.clearError) {
       patch.last_error = null;
       patch.status = "idle";
@@ -304,6 +309,30 @@ export function createApiServer() {
     res.json(engine.getRainLiveStatus());
   });
 
+  app.get("/api/captcha/status", async (_req, res) => {
+    try {
+      const snap = await engine.getCaptchaBalanceStatus();
+      res.json(snap);
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  app.get("/api/backup/export", (_req, res) => {
+    res.json(buildPilotBackup());
+  });
+
+  app.post("/api/backup/import", async (req, res) => {
+    try {
+      const file = req.body as PilotBackupFile;
+      const result = importPilotBackup(file);
+      await engine.reloadAccounts();
+      res.json({ ok: true as const, ...result });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
   return app;
 }
 
@@ -324,6 +353,7 @@ function publicAccount(a: ReturnType<typeof listAccounts>[number]) {
     limboWagerEnabled: !!a.limbo_wager_enabled,
     limboMultiplier: a.limbo_multiplier,
     limboBetCoins: a.limbo_bet_coins,
+    preWagerBeforeRain: !!a.pre_wager_before_rain,
     status: a.status,
     lastError: a.last_error,
     balance: a.balance,

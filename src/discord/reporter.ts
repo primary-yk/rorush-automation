@@ -185,6 +185,44 @@ export async function reportLimboSkipped(input: {
   });
 }
 
+export async function reportCaptchaBalanceLow(input: {
+  balanceUsd: number;
+  thresholdUsd: number;
+  provider: string;
+}): Promise<void> {
+  await deliverEmbed({
+    title: "Captcha balance low",
+    description: `Add funds to **${input.provider}** so rain joins do not fail mid-window.`,
+    color: COLORS.rainFail,
+    fields: [
+      { name: "Balance", value: `$${input.balanceUsd.toFixed(2)}`, inline: true },
+      { name: "Alert below", value: `$${input.thresholdUsd.toFixed(2)}`, inline: true },
+    ],
+    footer: { text: "2Captcha / CapSolver" },
+  });
+}
+
+export async function reportRainJoinWindowOpen(input: {
+  rainId: string;
+  poolCoins: number | null;
+  captchaReady: number;
+  captchaTotal: number;
+  windowSec: number;
+}): Promise<void> {
+  await deliverEmbed({
+    title: "Rain — Join window open",
+    description: "Join stage is live. Pilots join as each captcha token is ready.",
+    color: COLORS.rainOk,
+    fields: [
+      { name: "Pool", value: input.poolCoins != null ? formatCoins(input.poolCoins) : "—", inline: true },
+      { name: "Captchas", value: `${input.captchaReady}/${input.captchaTotal} ready`, inline: true },
+      { name: "Window", value: `~${input.windowSec}s`, inline: true },
+      { name: "Rain", value: shortRainId(input.rainId), inline: false },
+    ],
+    footer: { text: "Rain join" },
+  });
+}
+
 export async function reportRainAlert(input: {
   nickname: string | null;
   title: string;

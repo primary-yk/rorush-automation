@@ -190,6 +190,19 @@ export function AccountCard({
               void applyPatch("limboWagerEnabled", { limboWagerEnabled: v }, { limboWagerEnabled: v })
             }
           />
+          <Toggle
+            label="Pre-rain wager"
+            description="Small limbo right before join (uses fallback bet)"
+            checked={local.preWagerBeforeRain}
+            pending={pending === "preWagerBeforeRain"}
+            onChange={(v) =>
+              void applyPatch(
+                "preWagerBeforeRain",
+                { preWagerBeforeRain: v },
+                { preWagerBeforeRain: v },
+              )
+            }
+          />
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm text-slate-400">
               Multiplier (min 1.3×)
@@ -276,7 +289,8 @@ export function AccountCard({
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm text-slate-400">
-              Min rain (coins)
+              Min rain pool (coins)
+              <p className="mt-0.5 text-[11px] text-slate-600">Skip join if pool is below this — logged on Timeline.</p>
               <Input
                 type="number"
                 step="0.01"

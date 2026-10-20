@@ -8,6 +8,13 @@ function fmtPool(coins: number | null): string {
   return coins >= 1000 ? `${(coins / 1000).toFixed(1)}k` : coins.toFixed(0);
 }
 
+function fmtCountdown(totalSec: number): string {
+  const s = Math.max(0, totalSec);
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}:${r.toString().padStart(2, "0")}`;
+}
+
 export function LiveRainStrip({ status }: { status: RainLiveStatus }) {
   const show =
     status.active ||
@@ -17,19 +24,32 @@ export function LiveRainStrip({ status }: { status: RainLiveStatus }) {
 
   if (!show && !status.lastSummary) return null;
 
+  const readyCount = status.accountStatuses.filter(
+    (s) => s.phase === "ready" || s.phase === "joined",
+  ).length;
+  const totalPilots = status.accountStatuses.filter((s) => s.phase !== "skipped").length;
+
   const captchaLabel = status.captchaReady
     ? status.captchaSolveSec != null
       ? `Captcha ready · ${status.captchaSolveSec.toFixed(0)}s`
-      : "Captcha ready"
+      : `Captchas ${readyCount}/${totalPilots || "?"} ready`
     : status.captchaWaitingSec != null
       ? `Waiting captcha · ${status.captchaWaitingSec}s`
       : "Captcha idle";
 
-  const windowLabel = status.active
-    ? status.joinWindowOpen
-      ? `Join window · ${status.joinWindowRemainingSec}s left`
-      : "Tip / pre-join stage"
-    : "No active rain";
+  let windowLabel = "No active rain";
+  let countdownLabel: string | null = null;
+  if (status.active) {
+    if (status.joinWindowOpen) {
+      windowLabel = "Join window open";
+      countdownLabel = `${fmtCountdown(status.joinWindowRemainingSec)} left`;
+    } else if (status.joinOpensInSec > 0) {
+      windowLabel = "Join opens in";
+      countdownLabel = fmtCountdown(status.joinOpensInSec);
+    } else {
+      windowLabel = "Tip / pre-join stage";
+    }
+  }
 
   return (
     <div className="mb-8 space-y-3">
@@ -51,8 +71,14 @@ export function LiveRainStrip({ status }: { status: RainLiveStatus }) {
             <p className="mt-1 font-display text-xl font-bold text-white sm:text-2xl">
               {status.active ? `${fmtPool(status.poolCoins)} coin pool` : "Listening for rain"}
             </p>
+            {countdownLabel && (
+              <p className="mt-2 font-mono text-2xl font-bold tabular-nums text-violet-100 sm:text-3xl">
+                {countdownLabel}
+              </p>
+            )}
+            <p className="mt-1 text-xs text-slate-500">{windowLabel}</p>
             {status.rainId && (
-              <p className="mt-1 font-mono text-xs text-slate-500">{status.rainId.slice(0, 8)}…</p>
+              <p className="mt-1 font-mono text-xs text-slate-600">{status.rainId.slice(0, 8)}…</p>
             )}
           </div>
           <div className="flex flex-wrap gap-2 text-xs">
@@ -64,8 +90,12 @@ export function LiveRainStrip({ status }: { status: RainLiveStatus }) {
             >
               SignalR {status.listenerConnected ? "on" : "off"}
             </span>
-            <span className="rounded-full bg-white/10 px-3 py-1 text-slate-200">{windowLabel}</span>
             <span className="rounded-full bg-white/10 px-3 py-1 text-slate-200">{captchaLabel}</span>
+            {status.joinWindowTotalSec > 0 && status.joinWindowOpen && (
+              <span className="rounded-full bg-white/10 px-3 py-1 text-slate-200">
+                Window · {status.joinWindowTotalSec}s total
+              </span>
+            )}
             {status.joinAttempts > 0 && (
               <span className="rounded-full bg-white/10 px-3 py-1 text-slate-200">
                 Join tries · {status.joinAttempts}

@@ -116,7 +116,7 @@ export function AppShell({
                 type="button"
                 onClick={() => onTab(id)}
                 className={clsx(
-                  "flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition",
+                  "flex min-h-[44px] shrink-0 touch-manipulation items-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold transition",
                   tab === id
                     ? "bg-gradient-to-r from-violet-600/50 to-fuchsia-600/30 text-white ring-1 ring-violet-400/35"
                     : "text-slate-500 hover:text-violet-200",

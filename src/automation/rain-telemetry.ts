@@ -1,5 +1,26 @@
 import type { RainState } from "../rorush/types.js";
-import { rainJoinStageBounds, rainJoinWindowOpen, rainJoinWindowRemainingMs } from "./rain-join.js";
+import {
+  rainJoinOpensInMs,
+  rainJoinStageBounds,
+  rainJoinWindowOpen,
+  rainJoinWindowRemainingMs,
+} from "./rain-join.js";
+
+export type RainAccountPhase =
+  | "idle"
+  | "solving"
+  | "ready"
+  | "joining"
+  | "joined"
+  | "failed"
+  | "skipped";
+
+export type RainAccountStatus = {
+  accountId: number;
+  nickname: string;
+  phase: RainAccountPhase;
+  detail?: string;
+};
 
 export type RainTelemetryRow = {
   rainId: string;
@@ -13,6 +34,7 @@ export type RainTelemetryRow = {
   joinedNicknames: string[];
   pendingNicknames: string[];
   lastErrors: string[];
+  accountStatuses: RainAccountStatus[];
   finishedAtMs?: number;
 };
 
@@ -29,10 +51,21 @@ function row(rainId: string): RainTelemetryRow {
       joinedNicknames: [],
       pendingNicknames: [],
       lastErrors: [],
+      accountStatuses: [],
     };
     active.set(rainId, r);
   }
   return r;
+}
+
+function upsertAccountStatus(rainId: string, status: RainAccountStatus): void {
+  const r = row(rainId);
+  const idx = r.accountStatuses.findIndex((s) => s.accountId === status.accountId);
+  if (idx >= 0) {
+    r.accountStatuses[idx] = { ...r.accountStatuses[idx], ...status };
+  } else {
+    r.accountStatuses.push(status);
+  }
 }
 
 export function rainTelemetryOnCreated(rain: RainState): void {
@@ -50,10 +83,50 @@ export function rainTelemetryUpdateWindow(rain: RainState, now = Date.now()): vo
   r.poolCoins = rain.amount ?? r.poolCoins;
 }
 
+export function rainTelemetrySyncJoinAccounts(
+  rainId: string,
+  accounts: Array<{ id: number; nickname: string }>,
+): void {
+  for (const a of accounts) {
+    upsertAccountStatus(rainId, {
+      accountId: a.id,
+      nickname: a.nickname,
+      phase: "idle",
+    });
+  }
+}
+
+export function rainTelemetryAccountPhase(
+  rainId: string,
+  accountId: number,
+  nickname: string,
+  phase: RainAccountPhase,
+  detail?: string,
+): void {
+  upsertAccountStatus(rainId, { accountId, nickname, phase, detail });
+}
+
 export function rainTelemetryCaptchaReady(rainId: string, solveSec: number): void {
   const r = row(rainId);
   r.captchaReadyAtMs = Date.now();
   r.captchaSolveSec = solveSec;
+}
+
+export function rainTelemetryAccountCaptchaReady(
+  rainId: string,
+  accountId: number,
+  nickname: string,
+  solveSec: number,
+): void {
+  rainTelemetryAccountPhase(rainId, accountId, nickname, "ready", `${solveSec.toFixed(0)}s`);
+}
+
+export function rainTelemetryAccountCaptchaSolving(
+  rainId: string,
+  accountId: number,
+  nickname: string,
+): void {
+  rainTelemetryAccountPhase(rainId, accountId, nickname, "solving");
 }
 
 export function rainTelemetryJoinAttempt(rainId: string, pendingNicknames: string[]): void {
@@ -66,19 +139,38 @@ export function rainTelemetryAccountJoined(rainId: string, nickname: string): vo
   const r = row(rainId);
   if (!r.joinedNicknames.includes(nickname)) r.joinedNicknames.push(nickname);
   r.pendingNicknames = r.pendingNicknames.filter((n) => n !== nickname);
+  const st = r.accountStatuses.find((s) => s.nickname === nickname);
+  if (st) {
+    st.phase = "joined";
+    st.detail = undefined;
+  }
 }
 
 export function rainTelemetryAccountFailed(rainId: string, nickname: string, reason: string): void {
   const r = row(rainId);
   const line = `${nickname}: ${reason.slice(0, 100)}`;
   r.lastErrors = [line, ...r.lastErrors].slice(0, 5);
+  const st = r.accountStatuses.find((s) => s.nickname === nickname);
+  if (st) {
+    st.phase = "failed";
+    st.detail = reason.slice(0, 80);
+  }
+}
+
+export function rainTelemetryAccountSkipped(
+  rainId: string,
+  accountId: number,
+  nickname: string,
+  reason: string,
+): void {
+  rainTelemetryAccountPhase(rainId, accountId, nickname, "skipped", reason);
 }
 
 export function rainTelemetryFinish(rainId: string): RainTelemetryRow | null {
   const r = active.get(rainId);
   if (!r) return null;
   r.finishedAtMs = Date.now();
-  lastFinished = { ...r };
+  lastFinished = { ...r, accountStatuses: [...r.accountStatuses] };
   active.delete(rainId);
   return lastFinished;
 }
@@ -122,12 +214,15 @@ export type RainLiveStatus = {
   rainId: string | null;
   poolCoins: number | null;
   joinWindowOpen: boolean;
+  joinOpensInSec: number;
   joinWindowRemainingSec: number;
+  joinWindowTotalSec: number;
   captchaReady: boolean;
   captchaSolveSec: number | null;
   captchaWaitingSec: number | null;
   joinAttempts: number;
   joinedNicknames: string[];
+  accountStatuses: RainAccountStatus[];
   listenerConnected: boolean;
   telemetry: RainTelemetryRow | null;
   lastSummary: string | null;
@@ -143,11 +238,23 @@ export function buildRainLiveStatus(input: {
   const now = Date.now();
   const joinOpen = rain ? rainJoinWindowOpen(rain, now) : false;
   const remaining = rain ? Math.round(rainJoinWindowRemainingMs(rain, now) / 1000) : 0;
+  const opensIn = rain ? Math.round(rainJoinOpensInMs(rain, now) / 1000) : 0;
+  const bounds = rain ? rainJoinStageBounds(rain, now) : null;
+  const joinTotalSec =
+    bounds != null ? Math.max(0, Math.round((bounds.joinEnd - bounds.joinStart) / 1000)) : 0;
 
   let captchaWaitingSec: number | null = null;
   if (tel && !tel.captchaReadyAtMs) {
     captchaWaitingSec = Math.round((now - tel.createdAtMs) / 1000);
   }
+
+  const readyCount =
+    tel?.accountStatuses.filter((s) => s.phase === "ready" || s.phase === "joined").length ?? 0;
+  const captchaReady =
+    !!tel?.captchaReadyAtMs ||
+    (tel != null &&
+      tel.accountStatuses.length > 0 &&
+      readyCount >= tel.accountStatuses.filter((s) => s.phase !== "skipped").length);
 
   const last = rainTelemetryLastFinished();
 
@@ -156,12 +263,15 @@ export function buildRainLiveStatus(input: {
     rainId,
     poolCoins: rain?.amount ?? tel?.poolCoins ?? null,
     joinWindowOpen: joinOpen,
+    joinOpensInSec: opensIn,
     joinWindowRemainingSec: remaining,
-    captchaReady: !!tel?.captchaReadyAtMs,
+    joinWindowTotalSec: joinTotalSec,
+    captchaReady,
     captchaSolveSec: tel?.captchaSolveSec ?? null,
     captchaWaitingSec,
     joinAttempts: tel?.joinAttempts ?? 0,
     joinedNicknames: tel?.joinedNicknames ?? [],
+    accountStatuses: tel?.accountStatuses ?? [],
     listenerConnected: input.listenerConnected,
     telemetry: tel ?? null,
     lastSummary: last != null ? formatRainJoinSummary(last) : null,

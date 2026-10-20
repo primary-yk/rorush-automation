@@ -21,11 +21,18 @@ import {
   joinRainForAccount,
   parseRain,
   rainCaptchaPrewarmWindow,
+  rainCaptchaSolveWindow,
   rainJoinWindowOpen,
   rainJoinWindowRemainingMs,
+  runPreRainWagerIfEnabled,
   runTestLimboBet,
   settleRainForAllJoiners,
 } from "../automation/rain-join.js";
+import { fetchCaptchaBalanceSnapshot } from "../captcha/balance-cache.js";
+import {
+  reportCaptchaBalanceLow,
+  reportRainJoinWindowOpen,
+} from "../discord/reporter.js";
 import {
   msUntilNextCaseUnlock,
   openDueCases,
@@ -44,8 +51,12 @@ import {
   rainTelemetryAccountFailed,
   rainTelemetryAccountJoined,
   rainTelemetryFinish,
+  rainTelemetryAccountPhase,
+  rainTelemetryAccountSkipped,
   rainTelemetryJoinAttempt,
   rainTelemetryOnCreated,
+  rainTelemetryGet,
+  rainTelemetrySyncJoinAccounts,
   rainTelemetryUpdateWindow,
 } from "../automation/rain-telemetry.js";
 import { HubRegistry } from "./hub-registry.js";
@@ -69,6 +80,11 @@ export class AutomationEngine {
   private rainListenerRecovering = false;
   private lastListenerDisconnectLogMs = 0;
   private rainPrepLogged = new Set<string>();
+  private rainSkipLogged = new Set<string>();
+  private rainJoinWindowDiscordLogged = new Set<string>();
+  private preWagerDoneForRain = new Set<string>();
+  private captchaLowBalanceAlerted = false;
+  private captchaBalanceTimer: NodeJS.Timeout | null = null;
 
   /** Join-enabled accounts all marked joined for this rain — ignore further join triggers. */
   private joinEnabledAllInRain(rainId: string): boolean {
@@ -105,7 +121,11 @@ export class AutomationEngine {
     this.rainPrepTimer = setInterval(() => {
       void this.safeRun(this.maintainActiveRainPrep());
     }, 15_000);
+    this.captchaBalanceTimer = setInterval(() => {
+      void this.safeRun(this.checkCaptchaBalance());
+    }, 300_000);
     void this.safeRun(this.refreshAccountStats());
+    void this.safeRun(this.checkCaptchaBalance());
   }
 
   /** Refresh balance/level for all accounts (dashboard + logs). */
@@ -120,6 +140,7 @@ export class AutomationEngine {
     if (this.statusTimer) clearInterval(this.statusTimer);
     if (this.hubHealthTimer) clearInterval(this.hubHealthTimer);
     if (this.rainPrepTimer) clearInterval(this.rainPrepTimer);
+    if (this.captchaBalanceTimer) clearInterval(this.captchaBalanceTimer);
     await this.sharedRainHub?.disconnect();
     this.sharedRainHub = null;
     await this.accountHubs.disconnectAll();
@@ -151,29 +172,128 @@ export class AutomationEngine {
     void tick();
   }
 
-  private joinRainEnabledIds(): number[] {
-    return listAccounts()
-      .filter((a) => Number(a.join_rain) !== 0)
-      .map((a) => a.id);
+  private joinRainEnabledAccounts(): AccountRow[] {
+    return listAccounts().filter((a) => Number(a.join_rain) !== 0);
   }
 
-  /** Parallel captcha + SignalR warm-up for every join-enabled account (safe to call repeatedly). */
+  private joinRainEligibleAccounts(rain: RainState): AccountRow[] {
+    const pool = rain.amount ?? 0;
+    return this.joinRainEnabledAccounts().filter(
+      (a) => !isRainJoined(a.id, rain.rainId) && pool >= a.min_rain_amount,
+    );
+  }
+
+  private logRainMinPoolSkips(rain: RainState): void {
+    const pool = rain.amount ?? 0;
+    for (const a of this.joinRainEnabledAccounts()) {
+      if (isRainJoined(a.id, rain.rainId)) continue;
+      if (pool >= a.min_rain_amount) continue;
+      const key = `${rain.rainId}:${a.id}`;
+      if (this.rainSkipLogged.has(key)) continue;
+      this.rainSkipLogged.add(key);
+      appendLog({
+        accountId: a.id,
+        category: "rain",
+        message: "Rain join skipped (pool below minimum)",
+        detail: `pool ${pool.toFixed(2)} · min ${a.min_rain_amount.toFixed(2)} coins`,
+      });
+      rainTelemetryAccountSkipped(
+        rain.rainId,
+        a.id,
+        a.nickname,
+        `Pool ${pool.toFixed(0)} < min ${a.min_rain_amount.toFixed(0)}`,
+      );
+    }
+  }
+
+  /** Hub warm-up early; paid captcha only in the solve window (tokens stay fresh). */
   private kickoffRainJoinPrep(rain: RainState): void {
     if (!rain.rainId || isRainCaptchaFinished(rain.rainId)) return;
-    const joinIds = this.joinRainEnabledIds();
+    this.logRainMinPoolSkips(rain);
+    const eligible = this.joinRainEligibleAccounts(rain);
+    const joinIds = eligible.map((a) => a.id);
     if (joinIds.length === 0) return;
+
+    if (rainCaptchaPrewarmWindow(rain)) {
+      void this.safeRun(this.preconnectJoinRainHubs(joinIds));
+    }
+
+    const solveWindow = rainCaptchaSolveWindow(rain) || rainJoinWindowOpen(rain);
+    if (!solveWindow) return;
 
     if (!this.rainPrepLogged.has(rain.rainId)) {
       this.rainPrepLogged.add(rain.rainId);
       appendLog({
         category: "rain",
         message: "Rain join prep",
-        detail: `${rain.rainId.slice(0, 8)}… · ${joinIds.length} account(s) · parallel captcha + hub warm-up`,
+        detail: `${rain.rainId.slice(0, 8)}… · ${joinIds.length} account(s) · captcha + hubs`,
       });
     }
 
+    rainTelemetrySyncJoinAccounts(
+      rain.rainId,
+      eligible.map((a) => ({ id: a.id, nickname: a.nickname })),
+    );
     prewarmRainCaptchasParallel(rain.rainId, joinIds);
-    void this.safeRun(this.preconnectJoinRainHubs(joinIds));
+    void this.safeRun(this.runPreWagersForRain(rain, eligible));
+  }
+
+  private async runPreWagersForRain(rain: RainState, accounts: AccountRow[]): Promise<void> {
+    await Promise.all(
+      accounts.map(async (account) => {
+        const key = `${rain.rainId}:${account.id}`;
+        if (this.preWagerDoneForRain.has(key)) return;
+        if (!account.pre_wager_before_rain) return;
+        this.preWagerDoneForRain.add(key);
+        try {
+          await runPreRainWagerIfEnabled({ accountId: account.id, rain, hubs: this.accountHubs });
+        } catch (err) {
+          appendLog({
+            accountId: account.id,
+            category: "limbo",
+            message: "Pre-rain wager failed",
+            detail: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }),
+    );
+  }
+
+  private async checkCaptchaBalance(): Promise<void> {
+    if (!captchaApiKey()) return;
+    const snap = await fetchCaptchaBalanceSnapshot();
+    if (snap.balanceUsd == null) return;
+    if (snap.lowBalance && !this.captchaLowBalanceAlerted) {
+      appendLog({
+        category: "system",
+        message: "Captcha balance low",
+        detail: `$${snap.balanceUsd.toFixed(2)} · add funds to ${snap.provider ?? "2captcha"}`,
+      });
+      this.captchaLowBalanceAlerted = true;
+      void reportCaptchaBalanceLow({
+        balanceUsd: snap.balanceUsd,
+        thresholdUsd: snap.lowBalanceThresholdUsd,
+        provider: snap.provider ?? "2captcha",
+      });
+    }
+    if (!snap.lowBalance) this.captchaLowBalanceAlerted = false;
+  }
+
+  private maybeDiscordJoinWindowOpen(rain: RainState): void {
+    if (!rainJoinWindowOpen(rain)) return;
+    if (this.rainJoinWindowDiscordLogged.has(rain.rainId)) return;
+    this.rainJoinWindowDiscordLogged.add(rain.rainId);
+    const eligible = this.joinRainEligibleAccounts(rain);
+    const tel = rainTelemetryGet(rain.rainId);
+    const ready =
+      tel?.accountStatuses.filter((s) => s.phase === "ready" || s.phase === "joined").length ?? 0;
+    void reportRainJoinWindowOpen({
+      rainId: rain.rainId,
+      poolCoins: rain.amount ?? null,
+      captchaReady: ready,
+      captchaTotal: eligible.length,
+      windowSec: Math.round(rainJoinWindowRemainingMs(rain) / 1000),
+    });
   }
 
   private async preconnectJoinRainHubs(accountIds: number[]): Promise<void> {
@@ -201,6 +321,7 @@ export class AutomationEngine {
     if (!rainCaptchaPrewarmWindow(rain) && !rainJoinWindowOpen(rain)) return;
     this.kickoffRainJoinPrep(rain);
     if (rainJoinWindowOpen(rain)) {
+      this.maybeDiscordJoinWindowOpen(rain);
       this.scheduleRainJoinAttempt(rain, "prep_tick");
     }
   }
@@ -302,6 +423,7 @@ export class AutomationEngine {
           }),
         );
         this.kickoffRainJoinPrep(rain);
+        this.maybeDiscordJoinWindowOpen(rain);
         this.scheduleRainJoinAttempt(rain, "join_stage");
       }
     });
@@ -371,6 +493,14 @@ export class AutomationEngine {
       clearRainJoinStateForRain(p.rainId);
       markRainCaptchaFinished(p.rainId);
       this.rainPrepLogged.delete(p.rainId);
+      this.rainSkipLogged.delete(`${p.rainId}`);
+      for (const key of [...this.rainSkipLogged]) {
+        if (key.startsWith(`${p.rainId}:`)) this.rainSkipLogged.delete(key);
+      }
+      this.rainJoinWindowDiscordLogged.delete(p.rainId);
+      for (const key of [...this.preWagerDoneForRain]) {
+        if (key.startsWith(`${p.rainId}:`)) this.preWagerDoneForRain.delete(key);
+      }
       void settleRainForAllJoiners({
         rainId: p.rainId,
         poolCoins: pool,
@@ -443,6 +573,7 @@ export class AutomationEngine {
     }
 
     try {
+      rainTelemetryAccountPhase(live.rainId, account.id, account.nickname, "joining");
       const hub = await this.accountHubs.ensure(account.id, { rain: true, cases: true });
       const result = await joinRainForAccount({
         accountId: account.id,
@@ -535,9 +666,7 @@ export class AutomationEngine {
           this.activeRain?.rainId === rain.rainId ? this.activeRain : rain;
         if (!rainJoinWindowOpen(live)) break;
 
-        const pending = listAccounts().filter(
-          (a) => Number(a.join_rain) !== 0 && !isRainJoined(a.id, live.rainId),
-        );
+        const pending = this.joinRainEligibleAccounts(live);
         if (pending.length === 0) break;
 
         rainTelemetryJoinAttempt(
@@ -573,9 +702,7 @@ export class AutomationEngine {
 
         if (!rainJoinWindowOpen(live)) break;
 
-        const stillPending = listAccounts().filter(
-          (a) => Number(a.join_rain) !== 0 && !isRainJoined(a.id, live.rainId),
-        );
+        const stillPending = this.joinRainEligibleAccounts(live);
         if (stillPending.length === 0) break;
         if (!rainJoinWindowOpen(live)) break;
         if (!anyRetryableFail) break;
@@ -668,8 +795,12 @@ export class AutomationEngine {
   getRainLiveStatus() {
     return buildRainLiveStatus({
       rain: this.activeRain,
-      listenerConnected: this.sharedRainHub != null,
+      listenerConnected: this.sharedRainHub?.isConnected() ?? false,
     });
+  }
+
+  async getCaptchaBalanceStatus() {
+    return fetchCaptchaBalanceSnapshot();
   }
 }
 

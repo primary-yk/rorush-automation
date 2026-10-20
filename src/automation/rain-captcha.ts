@@ -1,6 +1,10 @@
 import { isTransientNetworkError, solveCaptcha } from "../captcha/solve.js";
-import { rainTelemetryCaptchaReady } from "./rain-telemetry.js";
-import { appendLog } from "../db/repositories.js";
+import {
+  rainTelemetryAccountCaptchaReady,
+  rainTelemetryAccountCaptchaSolving,
+  rainTelemetryCaptchaReady,
+} from "./rain-telemetry.js";
+import { appendLog, getAccount } from "../db/repositories.js";
 
 /** Drop cached token after this (ms). hCaptcha/RoRush often reject tokens older than ~2 min. */
 function tokenTtlMs(): number {
@@ -65,7 +69,10 @@ function logSolveDone(
   const sec = ((Date.now() - started) / 1000).toFixed(1);
   const who = accountId != null ? ` acct ${accountId}` : "";
   console.log(`[rain-captcha] ${rainId.slice(0, 8)}…${who} ${token ? "ready" : "failed"} in ${sec}s`);
-  if (token && accountId == null) {
+  if (token && accountId != null) {
+    const nick = getAccount(accountId)?.nickname ?? `#${accountId}`;
+    rainTelemetryAccountCaptchaReady(rainId, accountId, nick, parseFloat(sec));
+  } else if (token && accountId == null) {
     rainTelemetryCaptchaReady(rainId, parseFloat(sec));
   }
 }
@@ -94,6 +101,10 @@ function startSolveForSlot(rainId: string, accountId?: number | null): void {
   console.log(
     `[rain-captcha] solve start ${rainId.slice(0, 8)}…${accountId != null ? ` acct ${accountId}` : " shared"}`,
   );
+  if (accountId != null) {
+    const nick = getAccount(accountId)?.nickname ?? `#${accountId}`;
+    rainTelemetryAccountCaptchaSolving(rainId, accountId, nick);
+  }
   const p = solveHcaptchaWithRetry()
     .then((token) => {
       logSolveDone(rainId, started, token, accountId);

@@ -28,7 +28,7 @@ export function PilotStatsGrid({ stats }: { stats: PilotStats }) {
       <MetricCard
         label="Lifetime rain"
         value={stats.lifetimeRainCoins.toFixed(2)}
-        sub="All accounts · tracked payouts"
+        sub={`Est. captcha ~$${stats.estimatedCaptchaSpendUsd7d.toFixed(2)} (7d)`}
         trend="up"
         icon={<IconBolt className="h-5 w-5" />}
       />

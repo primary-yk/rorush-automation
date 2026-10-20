@@ -22,6 +22,7 @@ const mono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "Rush Pilot — RoRush Automation",
   description: "Self-hosted rain, cases, and promo automation for RoRush",
+  viewport: { width: "device-width", initialScale: 1, viewportFit: "cover" },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

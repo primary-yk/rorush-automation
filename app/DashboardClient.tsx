@@ -4,8 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AccountCard } from "@/components/AccountCard";
 import { ActivityFeed } from "@/components/ActivityFeed";
 import { AppShell, type DashboardTab } from "@/components/AppShell";
+import { BackupRestoreCard } from "@/components/BackupRestoreCard";
+import { CaptchaBalanceBanner } from "@/components/CaptchaBalanceBanner";
 import { LiveRainStrip } from "@/components/LiveRainStrip";
 import { PilotStatsGrid } from "@/components/PilotStatsGrid";
+import { RainPilotStatus } from "@/components/RainPilotStatus";
 import { PrivacyEmailToggle, usePrivacyBlur } from "@/components/PrivacyBlur";
 import { Toggle } from "@/components/Toggle";
 import { SetupGuide } from "@/components/SetupGuide";
@@ -17,6 +20,7 @@ import {
   type Account,
   type ActivityLog,
   type PilotStats,
+  type CaptchaBalanceStatus,
   type RainLiveStatus,
   type Settings,
 } from "@/lib/api";
@@ -48,6 +52,7 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
   const [relayConnected, setRelayConnected] = useState<boolean | null>(null);
   const [savingAccount, setSavingAccount] = useState(false);
   const [liveRain, setLiveRain] = useState<RainLiveStatus | null>(null);
+  const [captchaStatus, setCaptchaStatus] = useState<CaptchaBalanceStatus | null>(null);
   const [pilotStats, setPilotStats] = useState<PilotStats | null>(null);
   const [activitySearch, setActivitySearch] = useState("");
   const { blurEmails, setBlurEmails } = usePrivacyBlur();
@@ -93,19 +98,21 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
     }
     try {
       const statsRefresh = dashboardApi.refreshAccountStats().catch(() => null);
-      const [a, l, relay, stats, live, summary] = await Promise.all([
+      const [a, l, relay, stats, live, summary, captcha] = await Promise.all([
         dashboardApi.listAccounts(),
         dashboardApi.listLogs(),
         dashboardApi.getDiscordRelayStatus().catch(() => ({ relayConfigured: false, connected: false })),
         statsRefresh,
         dashboardApi.getRainLive().catch(() => null),
         dashboardApi.getStatsSummary().catch(() => null),
+        dashboardApi.getCaptchaStatus().catch(() => null),
       ]);
       setAccounts(stats?.accounts?.length ? stats.accounts : a);
       setLogs(l);
       setRelayConnected(relay.connected);
       if (live) setLiveRain(live);
       if (summary) setPilotStats(summary);
+      if (captcha) setCaptchaStatus(captcha);
     } catch (e) {
       setError((prev) => prev ?? (e instanceof Error ? e.message : String(e)));
     }
@@ -115,9 +122,13 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
     const force = window.setTimeout(() => setLoading(false), 5000);
     void refresh();
     const t = setInterval(() => void refresh(), 15_000);
+    const fastRain = setInterval(() => {
+      void dashboardApi.getRainLive().then(setLiveRain).catch(() => undefined);
+    }, 5_000);
     return () => {
       window.clearTimeout(force);
       clearInterval(t);
+      clearInterval(fastRain);
     };
   }, [refresh]);
 
@@ -200,7 +211,9 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
 
   return (
     <AppShell tab={tab} onTab={setTab} engineOnline={apiOk} headerExtra={pauseToggle}>
+      {apiOk && captchaStatus && <CaptchaBalanceBanner status={captchaStatus} />}
       {apiOk && liveRain && <LiveRainStrip status={liveRain} />}
+      {apiOk && liveRain && <RainPilotStatus status={liveRain} />}
 
       {captchaMissing && (
         <Card className="mb-8 border-amber-500/35 bg-amber-500/[0.08]" glow="none">
@@ -436,6 +449,8 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
           />
 
           <SetupGuide apiOk={apiOk} hasAccounts={accounts.length > 0} />
+
+          <BackupRestoreCard />
 
           <Card glow="violet">
             <SectionTitle

@@ -14,6 +14,7 @@ export type Account = {
   limboWagerEnabled: boolean;
   limboMultiplier: number;
   limboBetCoins: number;
+  preWagerBeforeRain: boolean;
   status: string;
   lastError: string | null;
   balance: number | null;
@@ -59,6 +60,34 @@ export type PilotStats = {
   avgCaptchaSec7d: number | null;
   lifetimeRainCoins: number;
   lastRainJoinAt: string | null;
+  estimatedCaptchaSpendUsd7d: number;
+  captchaSolvesEstimate7d: number;
+};
+
+export type RainAccountStatus = {
+  accountId: number;
+  nickname: string;
+  phase: "idle" | "solving" | "ready" | "joining" | "joined" | "failed" | "skipped";
+  detail?: string;
+};
+
+export type CaptchaBalanceStatus = {
+  configured: boolean;
+  provider: string | null;
+  balanceUsd: number | null;
+  lowBalance: boolean;
+  lowBalanceThresholdUsd: number;
+  checkedAtMs: number | null;
+  error: string | null;
+};
+
+export type PilotBackupFile = {
+  formatVersion: number;
+  exportedAt: string;
+  readme: string;
+  accounts: unknown[];
+  settings: Record<string, unknown>;
+  envStillRequired: string[];
 };
 
 export type RainLiveStatus = {
@@ -66,12 +95,15 @@ export type RainLiveStatus = {
   rainId: string | null;
   poolCoins: number | null;
   joinWindowOpen: boolean;
+  joinOpensInSec: number;
   joinWindowRemainingSec: number;
+  joinWindowTotalSec: number;
   captchaReady: boolean;
   captchaSolveSec: number | null;
   captchaWaitingSec: number | null;
   joinAttempts: number;
   joinedNicknames: string[];
+  accountStatuses: RainAccountStatus[];
   listenerConnected: boolean;
   telemetry: unknown;
   lastSummary: string | null;
@@ -134,4 +166,11 @@ export const dashboardApi = {
   listLogs: () => api<ActivityLog[]>("/api/logs"),
   getStatsSummary: () => api<PilotStats>("/api/stats/summary"),
   getRainLive: () => api<RainLiveStatus>("/api/rain/live"),
+  getCaptchaStatus: () => api<CaptchaBalanceStatus>("/api/captcha/status"),
+  exportBackup: () => api<PilotBackupFile>("/api/backup/export"),
+  importBackup: (file: PilotBackupFile) =>
+    api<{ ok: true; importedAccounts: number; skippedDuplicates: number }>("/api/backup/import", {
+      method: "POST",
+      body: JSON.stringify(file),
+    }),
 };

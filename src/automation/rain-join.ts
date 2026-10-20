@@ -200,6 +200,12 @@ async function joinRainForAccountOnce(input: {
 
   const rainAmount = rain.amount ?? 0;
   if (rainAmount < account.min_rain_amount) {
+    appendLog({
+      accountId,
+      category: "rain",
+      message: "Rain join skipped (pool below minimum)",
+      detail: `pool ${rainAmount.toFixed(2)} coins · min ${account.min_rain_amount.toFixed(2)} · ${rain.rainId.slice(0, 8)}…`,
+    });
     return { success: false, reason: `Rain amount ${rainAmount} below filter` };
   }
 
@@ -610,6 +616,28 @@ async function placeLimboWagerBet(
   return { betCoins, hit };
 }
 
+/** Optional small limbo before join window to satisfy wager gates early. */
+export async function runPreRainWagerIfEnabled(input: {
+  accountId: number;
+  rain: RainState;
+  hubs: HubRegistry;
+}): Promise<void> {
+  const { accountId, rain, hubs } = input;
+  const { account, client } = await ensureAuthenticated(accountId);
+  if (!account.pre_wager_before_rain || !account.limbo_wager_enabled) return;
+  const bet = Math.max(0.01, account.limbo_bet_coins);
+  appendLog({
+    accountId,
+    category: "limbo",
+    message: "Pre-rain wager",
+    detail: `${bet.toFixed(2)} coins before join · ${rain.rainId.slice(0, 8)}…`,
+  });
+  await placeLimboWagerBet(accountId, client, await hubs.ensure(accountId, { rain: true, cases: true }), account, rain.amount ?? 0, account.nickname, rain.rainId, {
+    betCoinsOverride: bet,
+    reasonLabel: "Pre-rain wager (optional)",
+  });
+}
+
 /** Dashboard / manual test — does not use rain-only caps unless you pass balanceBeforeRain. */
 export async function runTestLimboBet(input: {
   accountId: number;
@@ -860,7 +888,26 @@ export function rainJoinWindowRemainingMs(rain: RainState, now = Date.now()): nu
   return Math.max(0, bounds.joinEnd - now);
 }
 
-/** Start captcha shortly before join opens — not on every pool tip during a long tip stage. */
+export function rainJoinOpensInMs(rain: RainState, now = Date.now()): number {
+  const bounds = rainJoinStageBounds(rain, now);
+  if (!bounds || now >= bounds.joinStart) return 0;
+  return Math.max(0, bounds.joinStart - now);
+}
+
+/** When to start paid 2Captcha tasks — shortly before join so tokens stay fresh. */
+export function rainCaptchaSolveWindow(rain: RainState, now = Date.now()): boolean {
+  if (rainJoinWindowOpen(rain, now)) return true;
+  const bounds = rainJoinStageBounds(rain, now);
+  if (!bounds || now > bounds.joinEnd) return false;
+  const leadMs = Math.max(
+    45_000,
+    Number(process.env.CAPTCHA_SOLVE_START_LEAD_MS ?? 95_000) || 95_000,
+  );
+  const msUntilJoin = bounds.joinStart - now;
+  return msUntilJoin > 0 && msUntilJoin <= leadMs;
+}
+
+/** Hub warm-up / listener prep — wider window than captcha solve. */
 export function rainCaptchaPrewarmWindow(rain: RainState, now = Date.now()): boolean {
   if (rainJoinWindowOpen(rain, now)) return true;
   const bounds = rainJoinStageBounds(rain, now);
