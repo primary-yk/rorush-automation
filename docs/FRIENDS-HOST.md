@@ -1,5 +1,18 @@
 # Friends mode (you host, they use Discord only)
 
+**3–4 friends, no sales:** keep **`HOSTED_SAAS` unset**, leave **`RUSH_PILOT_LICENSE` empty**, and **do not** set `DISCORD_BOT_RELAY_URL`. Friends never see `/license` — they go straight to `/account add`.
+
+Minimal `.env` (you):
+
+```env
+ENCRYPTION_KEY=...
+CAPTCHA_API_KEY=...
+CAPTCHA_PROVIDER=2captcha
+DISCORD_BOT_TOKEN=...
+DISCORD_GUILD_ID=...
+HOST_DISCORD_USER_ID=...
+```
+
 ## You (host)
 
 1. Windows: use WSL or native Node — run from project folder:

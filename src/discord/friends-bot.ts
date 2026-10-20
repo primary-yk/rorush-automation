@@ -8,8 +8,14 @@ import {
   type ChatInputCommandInteraction,
 } from "discord.js";
 import { updateSettings } from "../db/repositories.js";
-import { activateLicense, getLicenseStatus } from "../license/service.js";
+import {
+  activateDiscordSeat,
+  discordSeatStatus,
+  isDiscordSeatActive,
+  isHostedSaasMode,
+} from "../license/discord-seat.js";
 import { issueLicenseKey } from "../license/issue.js";
+import { getLicenseStatus } from "../license/service.js";
 import {
   addAccountForDiscordUser,
   engineStatusText,
@@ -21,7 +27,8 @@ import {
 
 let client: Client | null = null;
 
-const COMMANDS = [
+function buildSlashCommands() {
+  const core = [
   new SlashCommandBuilder().setName("setup").setDescription("How Rush Pilot works in this server"),
   new SlashCommandBuilder().setName("status").setDescription("Is the host engine running?"),
   new SlashCommandBuilder().setName("accounts").setDescription("Your linked RoRush accounts"),
@@ -61,42 +68,66 @@ const COMMANDS = [
     .addNumberOption((o) => o.setName("bet").setDescription("Fallback bet in coins if pool unknown")),
   new SlashCommandBuilder().setName("pause").setDescription("Pause all automation (host)"),
   new SlashCommandBuilder().setName("resume").setDescription("Resume automation (host)"),
-  new SlashCommandBuilder()
-    .setName("license")
-    .setDescription("Activate Rush Pilot on the host PC (only you see the key)")
-    .addStringOption((o) => o.setName("key").setDescription("RP1… license key").setRequired(true)),
-  new SlashCommandBuilder()
-    .setName("admin")
-    .setDescription("Host: create license keys from Discord")
-    .addSubcommand((sub) =>
-      sub
-        .setName("issue")
-        .setDescription("Generate a new RP1 license key")
-        .addUserOption((o) => o.setName("for").setDescription("Lock key to this Discord user (optional)"))
-        .addIntegerOption((o) => o.setName("days").setDescription("Valid days (default 365)").setMinValue(1))
-        .addStringOption((o) =>
-          o.setName("plan").setDescription("Plan label").addChoices(
-            { name: "standard", value: "standard" },
-            { name: "pro", value: "pro" },
-          ),
-        ),
-    )
-    .addSubcommand((sub) => sub.setName("status").setDescription("License on this host PC")),
-].map((c) => c.toJSON());
+  ];
 
-const SETUP_TEXT = [
-  "**Rush Pilot — friends mode**",
-  "",
-  "The **host** runs the engine on their PC (`npm run dev`). You only use Discord.",
-  "",
-  "1. `/account add` — your RoRush email/password (only you see it; stored encrypted on host PC)",
-  "2. `/rain account:Main on:true`",
-  "3. `/limbo account:Main on:true multiplier:1.1` — if rain needs a wager",
-  "4. `/cases account:Main on:true` — optional",
-  "",
-  "If you sell access with keys: `/license key:RP1…` on the host PC (no website).",
-  "Rain, errors, and limbo results post in the log channel when configured.",
-].join("\n");
+  if (isHostedSaasMode()) {
+    core.push(
+      new SlashCommandBuilder()
+        .setName("license")
+        .setDescription("Your subscription key (from the seller)")
+        .addSubcommand((sub) =>
+          sub
+            .setName("redeem")
+            .setDescription("Activate your key — only you see it")
+            .addStringOption((o) => o.setName("key").setDescription("RP1… key").setRequired(true)),
+        )
+        .addSubcommand((sub) => sub.setName("status").setDescription("Check your subscription")),
+      new SlashCommandBuilder()
+        .setName("admin")
+        .setDescription("Host: create license keys from Discord")
+        .addSubcommand((sub) =>
+          sub
+            .setName("issue")
+            .setDescription("Generate a new RP1 license key")
+            .addUserOption((o) => o.setName("for").setDescription("Lock key to this Discord user (optional)"))
+            .addIntegerOption((o) => o.setName("days").setDescription("Valid days (default 365)").setMinValue(1))
+            .addStringOption((o) =>
+              o.setName("plan").setDescription("Plan label").addChoices(
+                { name: "standard", value: "standard" },
+                { name: "pro", value: "pro" },
+              ),
+            ),
+        )
+        .addSubcommand((sub) => sub.setName("status").setDescription("License on this host PC")),
+    );
+  }
+
+  return core.map((c) => c.toJSON());
+}
+
+function setupText(): string {
+  if (isHostedSaasMode()) {
+    return [
+      "**Rush Pilot (hosted)**",
+      "",
+      "You do **not** install anything. Everything runs on the seller's server.",
+      "",
+      "1. `/license redeem` — paste the key from your purchase",
+      "2. `/account add` — RoRush login (only you see it)",
+      "3. `/rain` · `/limbo` · `/cases`",
+      "",
+      "Activity shows in your DMs/ephemeral replies and the server log channel.",
+    ].join("\n");
+  }
+  return [
+    "**Rush Pilot — friends mode**",
+    "",
+    "The host runs the engine on their machine. You only use Discord.",
+    "",
+    "1. `/account add` — RoRush email/password (only you see it)",
+    "2. `/rain` · `/limbo` · `/cases`",
+  ].join("\n");
+}
 
 function hostDiscordId(): string | null {
   return process.env.HOST_DISCORD_USER_ID?.trim() || null;
@@ -105,6 +136,11 @@ function hostDiscordId(): string | null {
 function isHost(userId: string): boolean {
   const h = hostDiscordId();
   return h != null && h === userId;
+}
+
+function requirePaidSeat(userId: string): string | null {
+  if (isDiscordSeatActive(userId, hostDiscordId())) return null;
+  return "No active license. Use `/license redeem` with your purchase key first.";
 }
 
 export async function startFriendsDiscordBot(): Promise<void> {
@@ -121,8 +157,9 @@ export async function startFriendsDiscordBot(): Promise<void> {
   client.once(Events.ClientReady, async (c) => {
     console.log(`[friends-bot] logged in as ${c.user.tag}`);
     const rest = new REST({ version: "10" }).setToken(token);
-    await rest.put(Routes.applicationGuildCommands(c.application.id, guildId), { body: COMMANDS });
-    console.log("[friends-bot] slash commands registered on guild", guildId);
+    const mode = isHostedSaasMode() ? "hosted SaaS (licenses on)" : "friends (no licenses)";
+    await rest.put(Routes.applicationGuildCommands(c.application.id, guildId), { body: buildSlashCommands() });
+    console.log(`[friends-bot] slash commands registered on guild ${guildId} — ${mode}`);
   });
 
   client.on(Events.InteractionCreate, (interaction) => {
@@ -143,7 +180,7 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
     const userId = interaction.user.id;
 
     if (interaction.commandName === "setup") {
-      await interaction.reply({ ephemeral: true, content: SETUP_TEXT });
+      await interaction.reply({ ephemeral: true, content: setupText() });
       return;
     }
 
@@ -153,11 +190,21 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
     }
 
     if (interaction.commandName === "accounts") {
+      const block = requirePaidSeat(userId);
+      if (block) {
+        await interaction.reply({ ephemeral: true, content: block });
+        return;
+      }
       await interaction.reply({ ephemeral: true, content: formatAccountList(userId) });
       return;
     }
 
     if (interaction.commandName === "account") {
+      const block = requirePaidSeat(userId);
+      if (block) {
+        await interaction.reply({ ephemeral: true, content: block });
+        return;
+      }
       const sub = interaction.options.getSubcommand();
       await interaction.deferReply({ ephemeral: true });
       if (sub === "add") {
@@ -181,6 +228,11 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
     }
 
     if (interaction.commandName === "rain") {
+      const block = requirePaidSeat(userId);
+      if (block) {
+        await interaction.reply({ ephemeral: true, content: block });
+        return;
+      }
       await interaction.deferReply({ ephemeral: true });
       const text = await setToggle(
         userId,
@@ -193,6 +245,11 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
     }
 
     if (interaction.commandName === "cases") {
+      const block = requirePaidSeat(userId);
+      if (block) {
+        await interaction.reply({ ephemeral: true, content: block });
+        return;
+      }
       await interaction.deferReply({ ephemeral: true });
       const text = await setToggle(
         userId,
@@ -205,6 +262,11 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
     }
 
     if (interaction.commandName === "limbo") {
+      const block = requirePaidSeat(userId);
+      if (block) {
+        await interaction.reply({ ephemeral: true, content: block });
+        return;
+      }
       await interaction.deferReply({ ephemeral: true });
       const mult = interaction.options.getNumber("multiplier") ?? undefined;
       const bet = interaction.options.getNumber("bet") ?? undefined;
@@ -218,21 +280,28 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
     }
 
     if (interaction.commandName === "license") {
-      await interaction.deferReply({ ephemeral: true });
-      const key = interaction.options.getString("key", true).trim();
-      try {
-        const status = activateLicense(key);
-        if (!status.active) {
-          await interaction.editReply(status.message ?? "Invalid or expired license.");
-          return;
-        }
-        await interaction.editReply(
-          `License active on **this PC** · plan **${status.plan}** · id \`${status.licenseId}\`\nExpires: ${status.expiresAt ?? "—"}`,
-        );
-      } catch (err) {
-        await interaction.editReply(err instanceof Error ? err.message : String(err));
+      const sub = interaction.options.getSubcommand();
+      if (sub === "status") {
+        await interaction.reply({ ephemeral: true, content: discordSeatStatus(userId) });
+        return;
       }
-      return;
+      if (sub === "redeem") {
+        await interaction.deferReply({ ephemeral: true });
+        const key = interaction.options.getString("key", true).trim();
+        try {
+          const result = activateDiscordSeat(userId, key);
+          if (!result.ok) {
+            await interaction.editReply(result.message);
+            return;
+          }
+          await interaction.editReply(
+            `You're in · plan **${result.plan}** · expires ${result.expiresAt ?? "—"}\nNext: \`/account add\``,
+          );
+        } catch (err) {
+          await interaction.editReply(err instanceof Error ? err.message : String(err));
+        }
+        return;
+      }
     }
 
     if (interaction.commandName === "admin") {
@@ -276,7 +345,7 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
             `Expires: ${new Date(exp * 1000).toISOString()}`,
             forUser ? `Locked to Discord user \`${forUser.id}\`` : "Not locked to a Discord user",
             "",
-            "Give this key to your customer (DM). They run `/license` in Discord — **no website**:",
+            "Give this key to your customer (DM). They run `/license redeem` — **nothing to install**:",
             `\`\`\`\n${key}\n\`\`\``,
           ].join("\n"),
         );

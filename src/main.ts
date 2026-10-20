@@ -41,6 +41,11 @@ async function main() {
     );
   }
   console.log(`Project root: ${projectRoot()}`);
+  if (process.env.HOSTED_SAAS?.trim()) {
+    console.log("HOSTED_SAAS=1 — customers use Discord only; you run this server 24/7.");
+  } else if (!process.env.DISCORD_BOT_RELAY_URL?.trim()) {
+    console.log("Friends mode — Discord bot only for your group; no license keys required.");
+  }
   await engine.start();
   if (process.env.DISCORD_BOT_RELAY_URL?.trim()) {
     startPilotRelayClient();
