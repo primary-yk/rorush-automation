@@ -133,7 +133,7 @@ export class AutomationEngine {
     appendLog({
       category: "rain",
       message: "Shared rain listener connected",
-      detail: listener.username ?? `account #${listener.id}`,
+      detail: listener.nickname,
     });
 
     this.sharedRainHub.on(SIGNALR.rain.receiveCreated, (payload) => {

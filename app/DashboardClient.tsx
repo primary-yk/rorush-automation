@@ -362,14 +362,14 @@ export function DashboardClient({ initial }: { initial: DashboardBootstrap }) {
           <Card glow="violet">
             <SectionTitle
               title="Discord notifications"
-              description="Rain, limbo wagers, errors, and joins — mirrored to your server. Easiest: channel webhook. Optional: your own bot token in .env."
+              description="Default: nickname + limbo wagers + rain joins/fails only (emails redacted). Turn on full feed for more lines."
             />
             <div className="grid max-w-xl gap-4">
               {settings && (
                 <>
                   <Toggle
                     label="Send to Discord"
-                    description="Rain, limbo, cases, captcha errors, and join results (batched every ~1s)"
+                    description="Post limbo wagers and rain joins/failures to Discord (no emails)"
                     checked={settings.discordReportEnabled}
                     onChange={async (v) => {
                       const s = await dashboardApi.patchSettings({ discordReportEnabled: v });

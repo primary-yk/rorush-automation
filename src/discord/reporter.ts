@@ -1,7 +1,7 @@
 import { fetch } from "undici";
-import { decryptField } from "../accounts/session-manager.js";
 import { getSettings, listAccounts } from "../db/repositories.js";
 import { isRelayConnected, sendPilotEvent } from "../relay/pilot-client.js";
+import { redactForDiscord } from "./public-alert-filter.js";
 import { resolveDiscordReportWebhookUrl } from "./report-webhook.js";
 
 type Embed = {
@@ -88,7 +88,7 @@ export async function reportRainOutcome(input: {
     fields: [
       { name: "Account", value: input.nickname, inline: true },
       { name: "Pool", value: input.poolCoins != null ? `${input.poolCoins.toFixed(2)} coins` : "—", inline: true },
-      { name: "Detail", value: input.message.slice(0, 900), inline: false },
+      { name: "Detail", value: redactForDiscord(input.message).slice(0, 900), inline: false },
       { name: "Rain ID", value: input.rainId, inline: false },
     ],
     footer: { text: "Rush Pilot · rain" },

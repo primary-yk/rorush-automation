@@ -24,7 +24,7 @@ When you later run `npm run dev`, rain/errors auto-post to that channel.
 
 4. Optional: **Full activity feed** posts more system lines (noisier).
 
-Rain and errors are always sent when a webhook is configured, even without full feed.
+**Default (full feed off):** only **account nickname**, **limbo wagers**, and **rain joins/failures** — emails and tokens are redacted. Turn on **Full activity feed** in the dashboard for noisier logs (still redacted, no system/balance lines).
 
 ## Option B — Your bot posts to a channel
 

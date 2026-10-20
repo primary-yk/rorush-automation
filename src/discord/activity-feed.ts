@@ -1,17 +1,16 @@
 import { fetch } from "undici";
-import { decryptField } from "../accounts/session-manager.js";
 import { loadConfig } from "../config.js";
 import { getSettings, listAccounts } from "../db/repositories.js";
 import { isRelayConnected, sendPilotEvent } from "../relay/pilot-client.js";
+import {
+  formatPublicDiscordLine,
+  redactForDiscord,
+  shouldPostPublicDiscordAlert,
+} from "./public-alert-filter.js";
 import { resolveDiscordReportWebhookUrl } from "./report-webhook.js";
 
-export type ActivityLogRow = {
-  account_id: number | null;
-  category: string;
-  message: string;
-  detail: string | null;
-  created_at: string;
-};
+export type { ActivityLogRow } from "./public-alert-filter.js";
+import type { ActivityLogRow } from "./public-alert-filter.js";
 
 const CATEGORY_COLOR: Record<string, number> = {
   rain: 0x38_bdf_8,
@@ -41,14 +40,11 @@ function envBotChannel(): { token: string; channelId: string } | null {
 }
 
 function shouldForward(log: ActivityLogRow): boolean {
-  if (isRelayConnected()) return true;
-  if (envBotChannel()) return true;
+  const full = activityFeedEnabled();
+  if (isRelayConnected()) return shouldPostPublicDiscordAlert(log, full);
+  if (envBotChannel()) return shouldPostPublicDiscordAlert(log, full);
   if (!webhookUrl()) return false;
-  if (activityFeedEnabled()) return true;
-  const text = `${log.message} ${log.detail ?? ""}`.toLowerCase();
-  if (log.category === "rain" || log.category === "limbo" || log.category === "case") return true;
-  if (/error|fail|joined|captcha|wager|timeout|paused|started/.test(text)) return true;
-  return false;
+  return shouldPostPublicDiscordAlert(log, full);
 }
 
 function accountNickname(accountId: number | null): string | null {
@@ -57,12 +53,8 @@ function accountNickname(accountId: number | null): string | null {
 }
 
 function formatLine(log: ActivityLogRow): string {
-  const t = log.created_at.slice(11, 19);
   const nick = accountNickname(log.account_id);
-  const who = nick ? ` **${nick}**` : "";
-  const detail = log.detail?.trim();
-  const extra = detail ? `\n> ${detail.split("\n").join("\n> ").slice(0, 500)}` : "";
-  return `\`${t}\` **${log.category}**${who} · ${log.message}${extra}`;
+  return formatPublicDiscordLine(log, nick, activityFeedEnabled());
 }
 
 async function postWebhook(content: string, embed?: { title: string; description: string; color: number }): Promise<void> {
@@ -113,7 +105,7 @@ async function flushQueue(): Promise<void> {
 
   const embed = {
     title: isRelayConnected() ? "Pilot activity" : "Rush Pilot",
-    description: lines.slice(0, 3900),
+    description: redactForDiscord(lines.slice(0, 3900)),
     color,
   };
 
