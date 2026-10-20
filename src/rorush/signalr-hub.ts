@@ -28,6 +28,18 @@ export function hubEventVariants(canonical: string): string[] {
 
 const HUB_EVENT_DEDUPE_MS = 2_000;
 
+function signalRTimeouts(): { serverTimeoutMs: number; keepAliveMs: number } {
+  const serverTimeoutMs = Math.max(
+    30_000,
+    Number(process.env.SIGNALR_SERVER_TIMEOUT_MS ?? 180_000) || 180_000,
+  );
+  const keepAliveMs = Math.max(
+    5_000,
+    Math.min(60_000, Number(process.env.SIGNALR_KEEPALIVE_MS ?? 15_000) || 15_000),
+  );
+  return { serverTimeoutMs, keepAliveMs };
+}
+
 export class RoRushHub {
   private connection: HubConnection | null = null;
   private readonly listeners = new Map<string, Set<(payload: unknown) => void>>();
@@ -52,9 +64,38 @@ export class RoRushHub {
     return `${cfg.RORUSH_API_BASE}${RORUSH_PATHS.hubPath}?x-sec-rush=${cfg.RORUSH_SEC_RUSH}${apiKeyQuery}`;
   }
 
+  isConnected(): boolean {
+    return this.connection?.state === HubConnectionState.Connected;
+  }
+
   async connect(): Promise<void> {
     if (this.connection?.state === HubConnectionState.Connected) return;
 
+    if (
+      this.connection &&
+      (this.connection.state === HubConnectionState.Connecting ||
+        this.connection.state === HubConnectionState.Reconnecting)
+    ) {
+      return;
+    }
+
+    if (this.connection?.state === HubConnectionState.Disconnected) {
+      try {
+        await this.connection.start();
+        await this.resubscribeAfterReconnect();
+        return;
+      } catch {
+        try {
+          await this.connection.stop();
+        } catch {
+          /* ignore */
+        }
+        this.connection = null;
+        this.boundEvents.clear();
+      }
+    }
+
+    const { serverTimeoutMs, keepAliveMs } = signalRTimeouts();
     const builder = new HubConnectionBuilder()
       .withUrl(this.hubUrl(), {
         accessTokenFactory: () => this.creds.jwt,
@@ -62,22 +103,19 @@ export class RoRushHub {
         skipNegotiation: true,
         transport: 1,
       })
-      .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
-      .configureLogging(LogLevel.Error);
+      .withAutomaticReconnect([0, 2000, 5000, 10_000, 30_000, 60_000])
+      .configureLogging(LogLevel.Warning);
 
     this.connection = builder.build();
+    this.connection.serverTimeoutInMilliseconds = serverTimeoutMs;
+    this.connection.keepAliveIntervalInMilliseconds = keepAliveMs;
     this.boundEvents.clear();
     this.connection.onreconnected(async () => {
-      this.rainSubscribed = false;
-      this.caseSubscribed = false;
-      try {
-        if (this.wantRain) await this.ensureRainSubscribed();
-        if (this.wantCases) await this.ensureCaseSubscribed();
-      } catch (err) {
-        console.warn(
-          "[signalr] re-subscribe after reconnect failed:",
-          err instanceof Error ? err.message : String(err),
-        );
+      await this.resubscribeAfterReconnect();
+    });
+    this.connection.onclose((err) => {
+      if (err) {
+        console.warn("[signalr] connection closed:", err.message);
       }
     });
     this.wireEvents();
@@ -85,6 +123,20 @@ export class RoRushHub {
       this.bindEvent(event);
     }
     await this.connection.start();
+  }
+
+  private async resubscribeAfterReconnect(): Promise<void> {
+    this.rainSubscribed = false;
+    this.caseSubscribed = false;
+    try {
+      if (this.wantRain) await this.ensureRainSubscribed();
+      if (this.wantCases) await this.ensureCaseSubscribed();
+    } catch (err) {
+      console.warn(
+        "[signalr] re-subscribe after reconnect failed:",
+        err instanceof Error ? err.message : String(err),
+      );
+    }
   }
 
   async disconnect(): Promise<void> {

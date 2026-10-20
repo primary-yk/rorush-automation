@@ -61,6 +61,9 @@ export class AutomationEngine {
   private caseTimer: NodeJS.Timeout | null = null;
   private discordTimer: NodeJS.Timeout | null = null;
   private statusTimer: NodeJS.Timeout | null = null;
+  private hubHealthTimer: NodeJS.Timeout | null = null;
+  private rainListenerRecovering = false;
+  private lastListenerDisconnectLogMs = 0;
 
   async start(): Promise<void> {
     if (this.running) return;
@@ -84,6 +87,9 @@ export class AutomationEngine {
     this.statusTimer = setInterval(() => {
       void this.safeRun(this.refreshAccountStats());
     }, 60_000);
+    this.hubHealthTimer = setInterval(() => {
+      void this.safeRun(this.maintainSharedRainListener());
+    }, 45_000);
     void this.safeRun(this.refreshAccountStats());
   }
 
@@ -97,6 +103,7 @@ export class AutomationEngine {
     if (this.caseTimer) clearTimeout(this.caseTimer);
     if (this.discordTimer) clearInterval(this.discordTimer);
     if (this.statusTimer) clearInterval(this.statusTimer);
+    if (this.hubHealthTimer) clearInterval(this.hubHealthTimer);
     await this.sharedRainHub?.disconnect();
     this.sharedRainHub = null;
     await this.accountHubs.disconnectAll();
@@ -139,6 +146,39 @@ export class AutomationEngine {
       }
     }
     return null;
+  }
+
+  /** Reconnect shared rain hub after idle SignalR drops (1006 / server timeout). */
+  private async maintainSharedRainListener(): Promise<void> {
+    if (!this.running || this.rainListenerRecovering) return;
+    if (!this.sharedRainHub) {
+      await this.ensureSharedRainListener();
+      return;
+    }
+    if (this.sharedRainHub.isConnected()) return;
+
+    this.rainListenerRecovering = true;
+    try {
+      const now = Date.now();
+      if (now - this.lastListenerDisconnectLogMs > 120_000) {
+        this.lastListenerDisconnectLogMs = now;
+        appendLog({
+          category: "rain",
+          message: "Rain listener reconnecting",
+          detail: "SignalR dropped (idle or network). Auto-recovery — rain joins resume when connected.",
+        });
+      }
+      await this.sharedRainHub.connect();
+      await this.sharedRainHub.ensureRainSubscribed();
+    } catch (err) {
+      appendLog({
+        category: "rain",
+        message: "Rain listener reconnect failed",
+        detail: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      this.rainListenerRecovering = false;
+    }
   }
 
   private async ensureSharedRainListener(): Promise<void> {
