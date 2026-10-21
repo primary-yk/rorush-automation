@@ -27,7 +27,7 @@ export async function ensureUserPrivateFeedThread(input: {
   const settings = getSettings();
   const parentId = settings.discord_thread_parent_id?.trim();
   if (!parentId) {
-    throw new Error("Server not configured yet. Ask the host to run **`/setup server`** first.");
+    throw new Error("Server not configured yet. Staff must run **`/server setup`** first.");
   }
 
   const { getDiscordUserThread } = await import("../db/repositories.js");
@@ -42,7 +42,7 @@ export async function ensureUserPrivateFeedThread(input: {
 
   const parent = (await input.guild.channels.fetch(parentId)) as TextChannel | null;
   if (!parent?.isTextBased() || parent.type !== ChannelType.GuildText) {
-    throw new Error("Feed hub channel missing — host should run **`/setup server`** again.");
+    throw new Error("Feed hub channel missing — staff should run **`/server setup`** again.");
   }
 
   const thread = await parent.threads.create({

@@ -29,8 +29,8 @@ After adding the webhook line: `npm run setup-discord-webhook` once to verify.
 3. Right-click **your user** → Copy ID → `HOST_DISCORD_USER_ID`
 4. OAuth2 URL Generator: scopes `bot` + `applications.commands`, permissions **Send Messages**, **Use Slash Commands**, **Embed Links**, **Manage Channels**, **Manage Roles**, **Manage Threads**
 5. `npm run discord-bot-doctor` then `npm run dev` — console must show **`[friends-bot] logged in`**
-6. In Discord (host): **`/setup server`** — creates roles, categories, channels, and permission overwrites (safe to re-run)
-7. **Optional** auto **Rain Member** when someone joins: Developer Portal → **Server Members Intent** ON, then `DISCORD_SERVER_MEMBERS_INTENT=1` in `.env` and restart. Without this, friends still get the role when they run **`/link link`**.
+6. In Discord (staff): **`/server setup`** — creates roles, categories, channels, and permission overwrites (safe to re-run)
+7. **Optional** auto **Rain Member** when someone joins: Developer Portal → **Server Members Intent** ON, then `DISCORD_SERVER_MEMBERS_INTENT=1` in `.env` and restart. Without this, friends still get the role when they run **`/connect`**.
 
 Friends only use `/` commands — bot replies never include dashboard or site links.
 
@@ -43,9 +43,9 @@ Friends only use `/` commands — bot replies never include dashboard or site li
 2. `.env` must include:
    - `ENCRYPTION_KEY`, `CAPTCHA_API_KEY`, `CAPTCHA_PROVIDER=2captcha`
    - `DISCORD_BOT_TOKEN`, `DISCORD_GUILD_ID`
-   - `HOST_DISCORD_USER_ID` (your Discord user id — `/setup server` + `/pause` `/resume`)
-   - After **`/setup server`**, captcha/join errors go to **`#host-log`** (not your DMs). Set `DISCORD_HOST_DM_ALERTS=1` only if you still want DMs.
-   - Optional legacy: `DISCORD_REPORT_WEBHOOK` if you skip `/setup server`
+   - `HOST_DISCORD_USER_ID` (your Discord user id — `/server setup` + `/pause` `/resume`)
+   - After **`/server setup`**, captcha/join errors go to **`#host-log`** (not your DMs). Set `DISCORD_HOST_DM_ALERTS=1` only if you still want DMs.
+   - Optional legacy: `DISCORD_REPORT_WEBHOOK` if you skip `/server setup`
 3. Open dashboard (`npm run show-urls`) to **add/remove any account**, inspect logs, global pause.
 
 Keep **`npm run dev` running** on your PC while friends use the bot.
@@ -56,12 +56,13 @@ No install. In your Discord server:
 
 | Command | What it does |
 |---------|----------------|
-| `/link link` | **Rain Member** role + private thread in `#rain-feeds` (rain/limbo updates) |
-| `/link guide` | Link guide (ephemeral) |
-| `/setup server` | **Host only** — full server layout (see below) |
+| `/connect` | **Rain Member** role + private thread in `#rain-feeds` |
+| `/guide` | Getting started (ephemeral) |
+| `/help` | Full command reference |
+| `/server setup` | **Staff only** — full server layout (see below) |
 | `/account add` | Save RoRush login (only they see it) |
 | `/account remove` | Remove their account |
-| `/accounts` | Balance, level, toggles |
+| `/account list` | Balance, level, toggles |
 | `/rain` / `/cases` | Turn automation on/off |
 | `/limbo set` | Wager on/off + multiplier + fallback bet |
 | `/limbo test` | One manual test bet (real balance) |
@@ -70,14 +71,14 @@ No install. In your Discord server:
 
 They **cannot** see or change each other’s accounts.
 
-## What `/setup server` creates (host)
+## What `/server setup` creates (staff)
 
 Re-run anytime to **repair roles and channel permissions** (does not delete friend threads).
 
 | Piece | Purpose |
 |--------|---------|
 | **Role `Rush Host`** | You — see `#host-log`, manage info channels |
-| **Role `Rain Member`** | Friends after `/link link` |
+| **Role `Rain Member`** | Friends after `/connect` |
 | **Category `RUSH PILOT · INFO`** | `#start-here` (read-only), `#commands` cheat sheet |
 | **Category `RUSH PILOT · FEEDS`** | `#rain-feeds` — parent for **private threads** (one per friend) |
 | **Category `RUSH PILOT · HOST`** | `#host-log` — captcha failures, join errors, engine issues |

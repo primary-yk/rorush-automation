@@ -72,53 +72,52 @@ let client: Client | null = null;
 function buildSlashCommands() {
   const core = [
   new SlashCommandBuilder()
-    .setName("link")
-    .setDescription("Link your private feed")
-    .addSubcommand((sub) =>
-      sub.setName("link").setDescription("Open your private rain & limbo thread"),
-    )
-    .addSubcommand((sub) => sub.setName("guide").setDescription("Link guide")),
+    .setName("connect")
+    .setDescription("Open your private rain & limbo feed thread"),
   new SlashCommandBuilder()
-    .setName("setup")
-    .setDescription("Host: server layout")
+    .setName("guide")
+    .setDescription("Getting started — connect, accounts, automation"),
+  new SlashCommandBuilder()
+    .setName("server")
+    .setDescription("Staff: Discord server layout")
     .addSubcommand((sub) =>
       sub
-        .setName("server")
-        .setDescription("Create roles, categories, channels, permissions"),
+        .setName("setup")
+        .setDescription("Create roles, channels, and permissions"),
     ),
-  new SlashCommandBuilder().setName("help").setDescription("Slash commands for friends"),
-  new SlashCommandBuilder().setName("status").setDescription("Is the host engine running?"),
-  new SlashCommandBuilder().setName("accounts").setDescription("Your linked RoRush accounts"),
+  new SlashCommandBuilder().setName("help").setDescription("Full command reference"),
+  new SlashCommandBuilder().setName("status").setDescription("Automation engine status"),
   new SlashCommandBuilder()
     .setName("account")
-    .setDescription("Add or remove your RoRush login (ephemeral — host stores it securely)")
+    .setDescription("Manage your RoRush login (ephemeral)")
     .addSubcommand((sub) =>
       sub
         .setName("add")
-        .setDescription("Save email + password (ephemeral — only you see it)")
-        .addStringOption((o) => o.setName("nickname").setDescription("Your label, e.g. Main").setRequired(true))
-        .addStringOption((o) => o.setName("email").setDescription("RoRush email").setRequired(true))
-        .addStringOption((o) => o.setName("password").setDescription("RoRush password").setRequired(true)),
+        .setDescription("Save email and password — only you see it")
+        .addStringOption((o) => o.setName("nickname").setDescription("Label, e.g. Main").setRequired(true))
+        .addStringOption((o) => o.setName("email").setDescription("Login email").setRequired(true))
+        .addStringOption((o) => o.setName("password").setDescription("Login password").setRequired(true)),
     )
     .addSubcommand((sub) =>
       sub
         .setName("remove")
-        .setDescription("Remove an account you added")
+        .setDescription("Remove a saved account")
         .addStringOption((o) => o.setName("nickname").setDescription("Nickname to remove").setRequired(true)),
-    ),
+    )
+    .addSubcommand((sub) => sub.setName("list").setDescription("Balances, levels, and toggles")),
   new SlashCommandBuilder()
     .setName("rain")
-    .setDescription("Toggle auto-join rain")
-    .addStringOption((o) => o.setName("account").setDescription("Your account nickname").setRequired(true))
-    .addBooleanOption((o) => o.setName("on").setDescription("true = on").setRequired(true)),
+    .setDescription("Turn auto rain join on or off")
+    .addStringOption((o) => o.setName("account").setDescription("Account nickname").setRequired(true))
+    .addBooleanOption((o) => o.setName("on").setDescription("On or off").setRequired(true)),
   new SlashCommandBuilder()
     .setName("cases")
-    .setDescription("Toggle auto-open reward cases")
-    .addStringOption((o) => o.setName("account").setDescription("Your account nickname").setRequired(true))
-    .addBooleanOption((o) => o.setName("on").setDescription("true = on").setRequired(true)),
+    .setDescription("Turn automatic case opens on or off")
+    .addStringOption((o) => o.setName("account").setDescription("Account nickname").setRequired(true))
+    .addBooleanOption((o) => o.setName("on").setDescription("On or off").setRequired(true)),
   new SlashCommandBuilder()
     .setName("limbo")
-    .setDescription("Limbo wager, test bet, and rain filters")
+    .setDescription("Limbo wagers, test bets, and rain filters")
     .addSubcommand((sub) =>
       sub
         .setName("set")
@@ -156,8 +155,8 @@ function buildSlashCommands() {
         .addNumberOption((o) => o.setName("min_rain").setDescription("Skip join if pool below this (coins)").setMinValue(0))
         .addBooleanOption((o) => o.setName("pre_wager").setDescription("Small limbo before join window")),
     ),
-  new SlashCommandBuilder().setName("pause").setDescription("Pause all automation (host)"),
-  new SlashCommandBuilder().setName("resume").setDescription("Resume automation (host)"),
+  new SlashCommandBuilder().setName("pause").setDescription("Staff: pause all automation"),
+  new SlashCommandBuilder().setName("resume").setDescription("Staff: resume automation"),
   ];
 
   if (isHostedSaasMode()) {
@@ -307,34 +306,32 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
       return;
     }
 
-    if (interaction.commandName === "link") {
-      const sub = interaction.options.getSubcommand();
-      if (sub === "guide") {
-        await replyEmbeds(interaction, [buildSetupGuideEmbed()]);
+    if (interaction.commandName === "connect") {
+      await interaction.deferReply({ ephemeral: true });
+      if (!client || !interaction.guildId) {
+        await editEmbeds(interaction, buildErrorEmbed("Run this inside your Discord server."));
         return;
       }
-      if (sub === "link") {
-        await interaction.deferReply({ ephemeral: true });
-        if (!client || !interaction.guildId) {
-          await editEmbeds(interaction, buildErrorEmbed("Run this inside your Discord server."));
-          return;
-        }
-        const guild = await client.guilds.fetch(interaction.guildId);
-        const joinResult = await runSetupJoin({
-          client,
-          guild,
-          token: botToken,
-          discordUserId: userId,
-          username: interaction.user.username,
-        });
-        await editEmbeds(interaction, buildSetupJoinEmbed(joinResult));
-        return;
-      }
+      const guild = await client.guilds.fetch(interaction.guildId);
+      const joinResult = await runSetupJoin({
+        client,
+        guild,
+        token: botToken,
+        discordUserId: userId,
+        username: interaction.user.username,
+      });
+      await editEmbeds(interaction, buildSetupJoinEmbed(joinResult));
+      return;
     }
 
-    if (interaction.commandName === "setup") {
+    if (interaction.commandName === "guide") {
+      await replyEmbeds(interaction, [buildSetupGuideEmbed()]);
+      return;
+    }
+
+    if (interaction.commandName === "server") {
       const sub = interaction.options.getSubcommand();
-      if (sub === "server") {
+      if (sub === "setup") {
         if (!isHost(userId)) {
           await interaction.reply({ ephemeral: true, content: "Host-only — ask the server owner." });
           return;
@@ -369,23 +366,17 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
       return;
     }
 
-    if (interaction.commandName === "accounts") {
+    if (interaction.commandName === "account") {
       const block = requirePaidSeat(userId);
       if (block) {
         await replyEmbeds(interaction, [buildErrorEmbed(out(block))]);
         return;
       }
-      await replyEmbeds(interaction, [buildAccountsEmbed(userId)]);
-      return;
-    }
-
-    if (interaction.commandName === "account") {
-      const block = requirePaidSeat(userId);
-      if (block) {
-        await interaction.reply({ ephemeral: true, content: out(block) });
+      const sub = interaction.options.getSubcommand();
+      if (sub === "list") {
+        await replyEmbeds(interaction, [buildAccountsEmbed(userId)]);
         return;
       }
-      const sub = interaction.options.getSubcommand();
       await interaction.deferReply({ ephemeral: true });
       if (sub === "add") {
         const text = await addAccountForDiscordUser({

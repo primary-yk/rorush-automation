@@ -40,7 +40,7 @@ export async function addAccountForDiscordUser(input: {
     owner_discord_id: input.discordUserId,
   });
   await engine.reloadAccounts();
-  return `Saved **${nick}**. Use \`/rain\`, \`/cases\`, and \`/limbo\` to configure.`;
+  return `Saved **${nick}**. Use \`/account list\`, then \`/rain\`, \`/cases\`, and \`/limbo\`.`;
 }
 
 export async function removeAccountForDiscordUser(
@@ -172,6 +172,6 @@ export function engineStatusText(): string {
     "**Status**",
     "Automation is **online**.",
     `Accounts: **${accounts.length}** · **${friends.size}** Discord user(s) linked`,
-    "Use `/accounts`, `/rain`, `/limbo`, `/cases`.",
+    "Use `/account list`, `/rain`, `/limbo`, `/cases`.",
   ].join("\n");
 }
