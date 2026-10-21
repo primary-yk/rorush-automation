@@ -37,7 +37,7 @@ export function buildHelpEmbed(): EmbedBuilder {
       },
       {
         name: "Accounts",
-        value: "`/account add` · `/account remove`\n`/account list`",
+        value: "`/account add` · `/account session`\n`/account remove` · `/account list`",
         inline: true,
       },
       {
@@ -64,7 +64,12 @@ export function buildSetupGuideEmbed(): EmbedBuilder {
     .setDescription("Use this server to run rain automation — nothing to install.")
     .addFields(
       { name: "Step 1", value: "`/connect` — opens your **private** feed thread", inline: false },
-      { name: "Step 2", value: "`/account add` — RoRush login (ephemeral)", inline: false },
+      {
+        name: "Step 2",
+        value:
+          "`/account add` — email & password\n`/account session` — JWT from rorush.com (2FA / no password)",
+        inline: false,
+      },
       { name: "Step 3", value: "`/rain` · `/limbo` · `/cases` — enable features", inline: false },
       supportField(),
     );
@@ -86,7 +91,7 @@ export function buildSetupJoinEmbed(input: {
       },
       {
         name: "Next",
-        value: "`/account add` → `/rain account:… on:true`",
+        value: "`/account add` or `/account session` → `/rain account:… on:true`",
         inline: false,
       },
     );
@@ -127,7 +132,9 @@ export function buildAccountsEmbed(discordUserId: string): EmbedBuilder {
   const accounts = accountsForDiscordUser(discordUserId);
   const embed = baseEmbed(UI.primary).setTitle("Your accounts");
   if (accounts.length === 0) {
-    return embed.setDescription("No accounts yet. Use `/account add` — only you see the password.");
+    return embed.setDescription(
+      "No accounts yet. Use `/account add` or `/account session` — only you see the reply.",
+    );
   }
   return embed.addFields(accounts.slice(0, 8).map(accountRowField));
 }
@@ -161,7 +168,7 @@ export function buildStartHereEmbed(): EmbedBuilder {
     .setTitle("Welcome")
     .setDescription("Rain automation for this server.")
     .addFields(
-      { name: "Start", value: "`/connect` then `/account add`", inline: true },
+      { name: "Start", value: "`/connect` → `/account add` or `/account session`", inline: true },
       { name: "Automate", value: "`/rain` · `/limbo` · `/cases`", inline: true },
       { name: "Help", value: "`/guide` · `/help`", inline: true },
       supportField(),
@@ -177,7 +184,7 @@ export function buildThreadWelcomeEmbed(): EmbedBuilder {
     .setTitle("Private feed")
     .setDescription("Rain, limbo, and case updates for **your accounts** appear in this thread.")
     .addFields(
-      { name: "Account", value: "`/account add`", inline: true },
+      { name: "Account", value: "`/account add` · `/account session`", inline: true },
       { name: "Rain", value: "`/rain account:… on:true`", inline: true },
       { name: "Limbo", value: "`/limbo set` · `/limbo filters`", inline: true },
       supportField(),

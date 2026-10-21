@@ -60,7 +60,8 @@ No install. In your Discord server:
 | `/guide` | Getting started (ephemeral) |
 | `/help` | Full command reference |
 | `/server setup` | **Staff only** — full server layout (see below) |
-| `/account add` | Save RoRush login (only they see it) |
+| `/account add` | Email + password (only they see it) |
+| `/account session` | **Advanced** — session JWT from rorush.com (2FA, no password stored) |
 | `/account remove` | Remove their account |
 | `/account list` | Balance, level, toggles |
 | `/rain` / `/cases` | Turn automation on/off |
@@ -70,6 +71,10 @@ No install. In your Discord server:
 | `/status` | Engine summary |
 
 They **cannot** see or change each other’s accounts.
+
+### Session JWT (`/account session`)
+
+Same as the dashboard **Session JWT (advanced)** field: log in on **rorush.com**, open browser DevTools → **Application** → **Local Storage** (or cookies, depending on how RoRush stores it), copy the session token, paste into `/account session token:…`. The bot verifies it before saving. No password is stored; when the token expires, they paste a fresh one (remove the old nickname first, or use a new nickname).
 
 ## What `/server setup` creates (staff)
 

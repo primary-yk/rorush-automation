@@ -20,6 +20,7 @@ import { issueLicenseKey } from "../license/issue.js";
 import { getLicenseStatus } from "../license/service.js";
 import {
   addAccountForDiscordUser,
+  addAccountSessionForDiscordUser,
   removeAccountForDiscordUser,
   setLimbo,
   setRainFilters,
@@ -63,7 +64,10 @@ async function editEmbeds(interaction: ChatInputCommandInteraction, embed: Embed
 
 function resultEmbed(text: string): EmbedBuilder {
   const body = out(text);
-  const fail = /no account|not saved|required|must be|license|host-only/i.test(body);
+  const fail =
+    /no account|not saved|required|must be|license|host-only|invalid|expired|incomplete|could not verify/i.test(
+      body,
+    );
   return buildPlainResultEmbed(body, !fail);
 }
 
@@ -93,10 +97,23 @@ function buildSlashCommands() {
     .addSubcommand((sub) =>
       sub
         .setName("add")
-        .setDescription("Save email and password — only you see it")
+        .setDescription("Standard login — email and password")
         .addStringOption((o) => o.setName("nickname").setDescription("Label, e.g. Main").setRequired(true))
         .addStringOption((o) => o.setName("email").setDescription("Login email").setRequired(true))
         .addStringOption((o) => o.setName("password").setDescription("Login password").setRequired(true)),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("session")
+        .setDescription("Advanced — session JWT from rorush.com (2FA-friendly)")
+        .addStringOption((o) => o.setName("nickname").setDescription("Label, e.g. Main").setRequired(true))
+        .addStringOption((o) =>
+          o
+            .setName("token")
+            .setDescription("Session JWT from browser DevTools (same as dashboard)")
+            .setRequired(true),
+        )
+        .addStringOption((o) => o.setName("api_key").setDescription("Optional x-api-key if your account uses one")),
     )
     .addSubcommand((sub) =>
       sub
@@ -384,6 +401,16 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
           nickname: interaction.options.getString("nickname", true),
           email: interaction.options.getString("email", true),
           password: interaction.options.getString("password", true),
+        });
+        await editEmbeds(interaction, resultEmbed(text));
+        return;
+      }
+      if (sub === "session") {
+        const text = await addAccountSessionForDiscordUser({
+          discordUserId: userId,
+          nickname: interaction.options.getString("nickname", true),
+          sessionJwt: interaction.options.getString("token", true),
+          apiKey: interaction.options.getString("api_key") ?? undefined,
         });
         await editEmbeds(interaction, resultEmbed(text));
         return;

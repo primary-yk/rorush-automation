@@ -1,4 +1,5 @@
 import { encryptField } from "../accounts/session-manager.js";
+import { RoRushHttpClient } from "../rorush/http-client.js";
 import {
   deleteAccount,
   getAccount,
@@ -43,6 +44,49 @@ export async function addAccountForDiscordUser(input: {
   return `Saved **${nick}**. Use \`/account list\`, then \`/rain\`, \`/cases\`, and \`/limbo\`.`;
 }
 
+export async function addAccountSessionForDiscordUser(input: {
+  discordUserId: string;
+  nickname: string;
+  sessionJwt: string;
+  apiKey?: string;
+}): Promise<string> {
+  const nick = input.nickname.trim();
+  if (!nick) return "Nickname is required.";
+  const jwt = input.sessionJwt.trim();
+  if (jwt.length < 32) {
+    return "Session token looks incomplete. Paste the full JWT from rorush.com (same as the dashboard **Session JWT** field).";
+  }
+  const exists = listAccounts().some((a) => a.nickname.toLowerCase() === nick.toLowerCase());
+  if (exists) return `Nickname **${nick}** is already taken — pick another.`;
+
+  const apiKey = input.apiKey?.trim() || undefined;
+  const client = new RoRushHttpClient({ jwt, apiKey }, null);
+  try {
+    const status = await client.authStatus();
+    if (status.authenticated === false) {
+      return "That session token is expired or invalid. Log in on rorush.com again, copy a fresh JWT, and retry.";
+    }
+  } catch {
+    return "Could not verify that session token. Check the paste and try again, or use `/account add` with email and password.";
+  }
+
+  insertAccount({
+    nickname: nick,
+    username: null,
+    password_enc: null,
+    session_jwt_enc: encryptField(jwt),
+    api_key_enc: apiKey ? encryptField(apiKey) : null,
+    proxy_url: null,
+    owner_discord_id: input.discordUserId,
+  });
+  await engine.reloadAccounts();
+  return (
+    `Saved **${nick}** with session login (no password stored). ` +
+    "Use `/account list`, then `/rain`, `/cases`, and `/limbo`. " +
+    "When the token expires, run `/account session` again with a new JWT."
+  );
+}
+
 export async function removeAccountForDiscordUser(
   discordUserId: string,
   nickname: string,
@@ -57,7 +101,7 @@ export async function removeAccountForDiscordUser(
 export function formatAccountList(discordUserId: string): string {
   const accounts = accountsForDiscordUser(discordUserId);
   if (accounts.length === 0) {
-    return "You have no accounts yet. Use `/account add` (only you see the password).";
+    return "You have no accounts yet. Use `/account add` or `/account session` — only you see the reply.";
   }
   return accounts.map(formatOneAccount).join("\n\n");
 }
