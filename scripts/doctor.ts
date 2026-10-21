@@ -6,7 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import "../src/bootstrap-env.js";
 import { ENV_FALLBACK_FILES } from "../src/bootstrap-env.js";
-import { captchaApiKey, loadConfig, projectRoot } from "../src/config.js";
+import { captchaApiKey, loadConfig, projectRoot, requireEncryptionKey } from "../src/config.js";
 import { getDb } from "../src/db/database.js";
 import { listAccounts } from "../src/db/repositories.js";
 import { automationApiOrigin } from "../lib/automation-url.js";
@@ -35,10 +35,16 @@ async function main() {
   }
   console.log("Database file:", cfg.DATABASE_PATH);
   console.log("Database exists:", fs.existsSync(cfg.DATABASE_PATH) ? "yes" : "no (will be created on first write)");
-  console.log(
-    "ENCRYPTION_KEY:",
-    cfg.ENCRYPTION_KEY?.trim() ? "set (required to save passwords)" : "MISSING — accounts cannot be saved",
-  );
+  let encLine = "MISSING — accounts cannot be saved";
+  if (cfg.ENCRYPTION_KEY?.trim()) {
+    try {
+      requireEncryptionKey();
+      encLine = "set (32-byte key OK)";
+    } catch (e) {
+      encLine = `INVALID — ${e instanceof Error ? e.message : String(e)}`;
+    }
+  }
+  console.log("ENCRYPTION_KEY:", encLine);
   const capKey = captchaApiKey(cfg);
   console.log(
     "Captcha API key (CAPTCHA_API_KEY):",

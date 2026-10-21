@@ -93,6 +93,7 @@ export function loadConfig(): AppConfig {
 }
 
 export function requireEncryptionKey(): Buffer {
+  reloadEnv();
   const keyB64 = loadConfig().ENCRYPTION_KEY;
   if (!keyB64) {
     throw new Error("ENCRYPTION_KEY is required in .env (32-byte base64 key).");
