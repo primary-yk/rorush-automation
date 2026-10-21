@@ -236,6 +236,18 @@ export function buildSetupServerEmbed(summaryLines: string[]): EmbedBuilder {
   return baseEmbed(UI.success).setTitle(title).addFields(fields.slice(0, 12));
 }
 
+export function buildHostLogToolsEmbed(): EmbedBuilder {
+  return baseEmbed(UI.accent)
+    .setTitle("Host tools")
+    .setDescription(
+      "Check that **private feed threads** receive rain-style alerts.\n\n" +
+        "**Test rain → my feed** — sample alert in **your** thread (run **`/connect`** first).\n" +
+        "**Test rain → all feeds** — sample alert in every registered private feed.\n" +
+        "**List open feeds** — who has a thread (ephemeral to you).\n\n" +
+        "Member **connect** and **account** actions also post here automatically.",
+    );
+}
+
 export function buildConnectChannelEmbed(): EmbedBuilder {
   return baseEmbed(UI.accent)
     .setTitle("Get your private feed")

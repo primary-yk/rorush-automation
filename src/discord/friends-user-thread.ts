@@ -88,6 +88,8 @@ export async function runSetupJoin(input: {
   token: string;
   discordUserId: string;
   username: string;
+  activitySource?: "slash" | "button" | "auto_join";
+  activityDisplayName?: string;
 }): Promise<{ threadId: string; created: boolean }> {
   const layout = parseFriendsServerLayout(getSettings().discord_server_layout_json);
   if (layout?.roleIds.pilot) {
@@ -99,7 +101,25 @@ export async function runSetupJoin(input: {
     }).catch(() => undefined);
   }
 
-  return ensureUserPrivateFeedThread(input);
+  const result = await ensureUserPrivateFeedThread(input);
+  if (input.activitySource) {
+    const { logHostMemberActivity } = await import("./friends-host-activity.js");
+    const via =
+      input.activitySource === "slash"
+        ? "`/connect`"
+        : input.activitySource === "button"
+          ? "**#connect** button"
+          : "auto on join";
+    void logHostMemberActivity({
+      kind: "feed_open",
+      discordUserId: input.discordUserId,
+      displayName: input.activityDisplayName ?? input.username,
+      threadId: result.threadId,
+      created: result.created,
+      detail: via,
+    });
+  }
+  return result;
 }
 
 /** Staff joins a member's existing private feed (not added by default on create). */

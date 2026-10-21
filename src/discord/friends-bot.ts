@@ -35,6 +35,8 @@ import { bindFriendsFeedClient, notifyStaffSlashError } from "./friends-feed.js"
 import { runFriendsServerSetup } from "./friends-server-setup.js";
 import { autoConnectFeedOnJoin } from "./friends-auto-connect.js";
 import { executeConnectForUser, FRIENDS_CONNECT_BUTTON_ID } from "./friends-connect.js";
+import { logHostMemberActivity } from "./friends-host-activity.js";
+import { FRIENDS_HOST_BUTTON_IDS, handleHostToolButton } from "./friends-host-tools.js";
 import { hostJumpToUserFeedThread, restoreUserFeedThread, runSetupJoin } from "./friends-user-thread.js";
 import { isFriendsHostMode } from "./host-alerts.js";
 import { discordSupportLine } from "./friends-copy.js";
@@ -119,6 +121,9 @@ function buildSlashCommands() {
     )
     .addSubcommand((sub) =>
       sub.setName("earnings").setDescription("Lifetime earnings for every linked Discord member"),
+    )
+    .addSubcommand((sub) =>
+      sub.setName("tools").setDescription("Re-post host test buttons in #host-log"),
     ),
   new SlashCommandBuilder().setName("help").setDescription("Full command reference"),
   new SlashCommandBuilder()
@@ -289,6 +294,17 @@ function isHost(userId: string): boolean {
   return h != null && h === userId;
 }
 
+function interactionDisplayName(interaction: {
+  member: import("discord.js").GuildMember | import("discord.js").APIInteractionGuildMember | null;
+  user: import("discord.js").User;
+}): string {
+  const m = interaction.member;
+  if (m && typeof m === "object" && "displayName" in m && typeof m.displayName === "string") {
+    return m.displayName;
+  }
+  return interaction.user.username;
+}
+
 function requirePaidSeat(userId: string): string | null {
   if (isDiscordSeatActive(userId, hostDiscordId())) return null;
   return "No active license. Use `/license redeem` with your purchase key first.";
@@ -347,8 +363,17 @@ export async function startFriendsDiscordBot(): Promise<void> {
       void handleInteraction(interaction);
       return;
     }
-    if (interaction.isButton() && interaction.customId === FRIENDS_CONNECT_BUTTON_ID) {
-      void handleConnectButton(interaction);
+    if (interaction.isButton()) {
+      if (interaction.customId === FRIENDS_CONNECT_BUTTON_ID) {
+        void handleConnectButton(interaction);
+        return;
+      }
+      if (FRIENDS_HOST_BUTTON_IDS.has(interaction.customId) && client && interaction.guildId) {
+        const liveClient = client;
+        void liveClient.guilds.fetch(interaction.guildId).then((guild) => {
+          void handleHostToolButton(interaction, liveClient, guild, isHost(interaction.user.id));
+        });
+      }
     }
   });
 
@@ -381,6 +406,8 @@ export async function startFriendsDiscordBot(): Promise<void> {
             botToken: token,
             discordUserId: member.id,
             username: member.user.username,
+            activitySource: "auto_join",
+            activityDisplayName: member.displayName ?? member.user.username,
           });
           console.log(`[friends-bot] auto-connect feed for ${member.user.tag}`);
         } catch (err) {
@@ -446,6 +473,8 @@ async function handleConnectButton(interaction: ButtonInteraction): Promise<void
       botToken,
       discordUserId: interaction.user.id,
       username: interaction.user.username,
+      activitySource: "button",
+      activityDisplayName: interactionDisplayName(interaction),
     });
     await editEmbeds(interaction, buildSetupJoinEmbed(joinResult));
   } catch (err) {
@@ -574,6 +603,8 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
         token: botToken,
         discordUserId: userId,
         username: interaction.user.username,
+        activitySource: "slash",
+        activityDisplayName: interactionDisplayName(interaction),
       });
       await editEmbeds(interaction, buildSetupJoinEmbed(joinResult));
       return;
@@ -597,6 +628,37 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
           return;
         }
         await replyEmbeds(interaction, [buildServerEarningsBoardEmbed()]);
+        return;
+      }
+      if (sub === "tools") {
+        if (!isHost(userId)) {
+          await interaction.reply({ ephemeral: true, content: "Host-only." });
+          return;
+        }
+        await interaction.deferReply({ ephemeral: true });
+        if (!client || !interaction.guildId) {
+          await editEmbeds(interaction, buildErrorEmbed("Run this inside your Discord server."));
+          return;
+        }
+        const hostLogId = getSettings().discord_host_log_channel_id?.trim();
+        if (!hostLogId) {
+          await editEmbeds(
+            interaction,
+            buildErrorEmbed("No **#host-log** yet — run **`/server setup`** first."),
+          );
+          return;
+        }
+        const ch = await client.channels.fetch(hostLogId).catch(() => null);
+        if (!ch?.isTextBased()) {
+          await editEmbeds(interaction, buildErrorEmbed("**#host-log** channel missing — run **`/server setup confirm:true`**."));
+          return;
+        }
+        const { seedHostLogTools } = await import("./friends-host-tools.js");
+        await seedHostLogTools(ch as import("discord.js").TextChannel, true);
+        await editEmbeds(
+          interaction,
+          buildPlainResultEmbed(`Host tool buttons posted in <#${hostLogId}>.`, true),
+        );
         return;
       }
       if (sub === "setup") {
@@ -682,31 +744,55 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
       }
       await interaction.deferReply({ ephemeral: true });
       if (sub === "add") {
+        const nick = interaction.options.getString("nickname", true);
         const text = await addAccountForDiscordUser({
           discordUserId: userId,
-          nickname: interaction.options.getString("nickname", true),
+          nickname: nick,
           email: interaction.options.getString("email", true),
           password: interaction.options.getString("password", true),
         });
         await editEmbeds(interaction, resultEmbed(text));
+        if (/^saved/i.test(text)) {
+          void logHostMemberActivity({
+            kind: "account_add",
+            discordUserId: userId,
+            displayName: interactionDisplayName(interaction),
+            detail: `Nickname **${nick}** (password login)`,
+          });
+        }
         return;
       }
       if (sub === "session") {
+        const nick = interaction.options.getString("nickname", true);
         const text = await addAccountSessionForDiscordUser({
           discordUserId: userId,
-          nickname: interaction.options.getString("nickname", true),
+          nickname: nick,
           sessionJwt: interaction.options.getString("token", true),
           apiKey: interaction.options.getString("api_key") ?? undefined,
         });
         await editEmbeds(interaction, resultEmbed(text));
+        if (/^saved/i.test(text)) {
+          void logHostMemberActivity({
+            kind: "account_session",
+            discordUserId: userId,
+            displayName: interactionDisplayName(interaction),
+            detail: `Nickname **${nick}** (session JWT)`,
+          });
+        }
         return;
       }
       if (sub === "remove") {
-        const text = await removeAccountForDiscordUser(
-          userId,
-          interaction.options.getString("nickname", true),
-        );
+        const nick = interaction.options.getString("nickname", true);
+        const text = await removeAccountForDiscordUser(userId, nick);
         await editEmbeds(interaction, resultEmbed(text));
+        if (/^removed/i.test(text)) {
+          void logHostMemberActivity({
+            kind: "account_remove",
+            discordUserId: userId,
+            displayName: interactionDisplayName(interaction),
+            detail: `Nickname **${nick}**`,
+          });
+        }
         return;
       }
     }

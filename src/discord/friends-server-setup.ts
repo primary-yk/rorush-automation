@@ -21,6 +21,7 @@ import {
   parseFriendsServerLayout,
 } from "./friends-layout.js";
 import { FRIENDS_CONNECT_BUTTON_ID } from "./friends-connect.js";
+import { seedHostLogTools } from "./friends-host-tools.js";
 import { buildCommandsChannelEmbed, buildConnectChannelEmbed, buildStartHereEmbed } from "./friends-ui.js";
 import { SETUP_SERVER_BOT_PERMISSIONS } from "./friends-feed.js";
 import { addGuildMemberRole, syncMemberRoleForAllMembers } from "./friends-guild-roles.js";
@@ -429,6 +430,7 @@ export async function runFriendsServerSetup(input: {
   await seedConnectChannel(connectCh, purgedChannels > 0);
   await seedChannelIntro(startHere, buildStartHereEmbed(), purgedChannels > 0);
   await seedChannelIntro(commands, buildCommandsChannelEmbed(), purgedChannels > 0);
+  await seedHostLogTools(hostLog, purgedChannels > 0);
 
   const layout: FriendsServerLayout = {
     version: FRIENDS_LAYOUT_VERSION,

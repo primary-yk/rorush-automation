@@ -101,6 +101,12 @@ export function getDiscordUserThread(discordUserId: string): DiscordUserThreadRo
     .get(discordUserId) as DiscordUserThreadRow | undefined;
 }
 
+export function listDiscordUserThreads(): DiscordUserThreadRow[] {
+  return getDb()
+    .prepare("SELECT * FROM discord_user_threads ORDER BY updated_at DESC")
+    .all() as DiscordUserThreadRow[];
+}
+
 export function clearAllDiscordUserThreads(): void {
   getDb().prepare("DELETE FROM discord_user_threads").run();
 }

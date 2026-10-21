@@ -78,6 +78,9 @@ No install. In your Discord server:
 | `/server earnings` | **Staff** — lifetime totals for every linked Discord member |
 | `/jump member:…` | **Staff** — join someone's private feed thread (not auto-added) |
 | `/thread restore member:…` | **Owner only** — re-add a member to their private feed after rejoin |
+| `/server tools` | **Host** — post test buttons in `#host-log` (rain drill + list feeds) |
+
+**#host-log** includes host buttons: **Test rain → my feed**, **Test rain → all feeds**, **List open feeds**. Connect / account actions are logged there automatically.
 
 They **cannot** see or change each other’s accounts.
 

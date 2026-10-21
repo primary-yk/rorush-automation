@@ -9,6 +9,8 @@ export async function executeConnectForUser(input: {
   botToken: string;
   discordUserId: string;
   username: string;
+  activitySource?: "slash" | "button" | "auto_join";
+  activityDisplayName?: string;
 }): Promise<{ threadId: string; created: boolean }> {
   return runSetupJoin({
     client: input.client,
@@ -16,5 +18,7 @@ export async function executeConnectForUser(input: {
     token: input.botToken,
     discordUserId: input.discordUserId,
     username: input.username,
+    activitySource: input.activitySource,
+    activityDisplayName: input.activityDisplayName,
   });
 }
