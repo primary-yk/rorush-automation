@@ -46,7 +46,7 @@ Friends only use `/` commands — bot replies never include dashboard or site li
    - `DISCORD_BOT_TOKEN`, `DISCORD_GUILD_ID`
    - `HOST_DISCORD_USER_ID` (your Discord user id — `/server setup` + `/pause` `/resume`)
    - After **`/server setup`**, staff alerts (captcha, join errors, friend slash failures) go to **`#host-log`**, not DMs. Set `DISCORD_HOST_DM_ALERTS=1` only if you want **both** DMs and `#host-log`.
-   - Optional legacy: `DISCORD_REPORT_WEBHOOK` if you skip `/server setup`
+   - Do **not** keep `DISCORD_REPORT_WEBHOOK` from an old server — it posts there even after you move the bot. Rain goes to **private threads** + **`#host-log`** after `/server setup`. Set `DISCORD_USE_REPORT_WEBHOOK=1` only if you deliberately want webhooks too.
 3. Open dashboard (`npm run show-urls`) to **add/remove any account**, inspect logs, global pause.
 
 Keep **`npm run dev` running** on your PC while friends use the bot.

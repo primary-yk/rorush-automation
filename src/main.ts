@@ -5,6 +5,7 @@ import { engine } from "./worker/engine.js";
 import { captchaApiKey, encryptionKeyStatus, loadConfig, projectRoot, reloadEnv } from "./config.js";
 import { listAccounts } from "./db/repositories.js";
 import { activateLicense } from "./license/service.js";
+import { friendsAlertRoutingHint } from "./discord/friends-reporting.js";
 import { applyDiscordWebhookFromEnv } from "./discord/report-webhook.js";
 import { startFriendsDiscordBot, stopFriendsDiscordBot } from "./discord/friends-bot.js";
 import { startPilotRelayClient, stopPilotRelayClient } from "./relay/pilot-client.js";
@@ -53,6 +54,7 @@ async function main() {
     console.log("HOSTED_SAAS=1 — customers use Discord only; you run this server 24/7.");
   } else if (!process.env.DISCORD_BOT_RELAY_URL?.trim()) {
     console.log("Friends mode — Discord bot only for your group; no license keys required.");
+    console.log(`Discord rain alerts → ${friendsAlertRoutingHint()}`);
   }
   await startDiscordSidecar();
   await engine.start();

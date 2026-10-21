@@ -335,9 +335,6 @@ export async function runFriendsServerSetup(input: {
   const prior = parseFriendsServerLayout(getSettings().discord_server_layout_json);
 
   const { deleted: purgedChannels } = await purgeManagedServerChannels(input.guild, prior);
-  if (purgedChannels > 0) {
-    clearAllDiscordUserThreads();
-  }
 
   const autoRole = await evaluateAutoRoleForSetup(input.guild);
 
@@ -451,7 +448,9 @@ export async function runFriendsServerSetup(input: {
     discord_host_log_channel_id: hostLog.id,
     discord_server_layout_json: JSON.stringify(layout),
     discord_report_enabled: 1,
+    discord_report_webhook_enc: null,
   });
+  clearAllDiscordUserThreads();
 
   const purgeLine =
     purgedChannels > 0

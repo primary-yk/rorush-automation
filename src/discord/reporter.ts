@@ -10,6 +10,7 @@ import {
   postToHostLogChannel,
 } from "./friends-feed.js";
 import { dmHostEmbeds, isFriendsHostMode } from "./host-alerts.js";
+import { preferFriendsBotFeedsOverWebhook } from "./friends-reporting.js";
 import { resolveDiscordReportWebhookUrl } from "./report-webhook.js";
 import {
   COLORS,
@@ -37,6 +38,14 @@ async function deliverEmbed(
   if (friendsServerFeedActive()) {
     const routed = await deliverFriendsReporterEmbed(payload, ctx);
     if (routed) return;
+  }
+  if (preferFriendsBotFeedsOverWebhook()) {
+    if (hostLogChannelConfigured()) {
+      await postToHostLogChannel([payload]);
+    } else {
+      await dmHostEmbeds([payload]);
+    }
+    return;
   }
   if (isRelayConnected()) {
     const t = payload.title.toLowerCase();
@@ -79,6 +88,20 @@ async function deliverEmbed(
 export async function deliverEmbeds(embeds: RushEmbed[]): Promise<void> {
   if (embeds.length === 0) return;
   const stamped = embeds.slice(0, 10).map((e) => withBrand(e, e.color ?? COLORS.info));
+  if (friendsServerFeedActive()) {
+    for (const embed of stamped) {
+      await deliverFriendsReporterEmbed(embed);
+    }
+    return;
+  }
+  if (preferFriendsBotFeedsOverWebhook()) {
+    if (hostLogChannelConfigured()) {
+      await postToHostLogChannel(stamped);
+    } else {
+      await dmHostEmbeds(stamped);
+    }
+    return;
+  }
   if (isRelayConnected()) {
     for (const embed of stamped) {
       sendPilotEvent({ type: "event", kind: "activity", embed });

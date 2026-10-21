@@ -1,6 +1,7 @@
 import { encryptField, decryptField } from "../accounts/session-manager.js";
 import { reloadEnv } from "../config.js";
 import { getSettings, updateSettings } from "../db/repositories.js";
+import { friendsGuildBotConfigured, legacyReportWebhookEnabled } from "./friends-reporting.js";
 
 export function isValidDiscordWebhookUrl(url: string): boolean {
   return /discord(?:app)?\.com\/api\/webhooks\//i.test(url);
@@ -9,6 +10,9 @@ export function isValidDiscordWebhookUrl(url: string): boolean {
 /** Webhook from `.env` (wins) or encrypted value in settings when reporting is enabled. */
 export function resolveDiscordReportWebhookUrl(): string | null {
   reloadEnv();
+  if (friendsGuildBotConfigured() && !legacyReportWebhookEnabled()) {
+    return null;
+  }
   const fromEnv = process.env.DISCORD_REPORT_WEBHOOK?.trim();
   if (fromEnv && isValidDiscordWebhookUrl(fromEnv)) return fromEnv;
 
@@ -29,6 +33,13 @@ export function applyDiscordWebhookFromEnv(): void {
   reloadEnv();
   const url = process.env.DISCORD_REPORT_WEBHOOK?.trim();
   if (!url) return;
+  if (friendsGuildBotConfigured() && !legacyReportWebhookEnabled()) {
+    console.warn(
+      "[discord] DISCORD_REPORT_WEBHOOK is set but ignored — friends bot uses private threads + #host-log. " +
+        "Remove it from .env (it may still post to an old server). Set DISCORD_USE_REPORT_WEBHOOK=1 only if you need webhooks too.",
+    );
+    return;
+  }
   if (!isValidDiscordWebhookUrl(url)) {
     console.warn("[discord] DISCORD_REPORT_WEBHOOK ignored — paste the full channel webhook URL from Discord.");
     return;

@@ -6,6 +6,7 @@ import {
   type TextChannel,
 } from "discord.js";
 import {
+  deleteDiscordUserThread,
   getAccount,
   getDiscordUserThread,
   getSettings,
@@ -63,13 +64,18 @@ function rushToDiscordEmbed(embed: RushEmbed): EmbedBuilder {
   return e;
 }
 
-async function sendEmbedsToChannel(channelId: string, embeds: RushEmbed[]): Promise<void> {
+async function sendEmbedsToChannel(channelId: string, embeds: RushEmbed[]): Promise<boolean> {
   const client = clientRef;
-  if (!client || embeds.length === 0) return;
+  if (!client || embeds.length === 0) return false;
   const ch = await client.channels.fetch(channelId).catch(() => null);
-  if (!ch?.isTextBased()) return;
+  if (!ch?.isTextBased()) return false;
   const built = embeds.slice(0, 10).map(rushToDiscordEmbed);
-  await (ch as TextChannel).send({ embeds: built }).catch(() => undefined);
+  try {
+    await (ch as TextChannel).send({ embeds: built });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function postToHostLogChannel(embeds: RushEmbed[]): Promise<void> {
@@ -103,11 +109,24 @@ export async function notifyStaffSlashError(input: {
   }
 }
 
-export async function postToUserFeedThread(discordUserId: string, embeds: RushEmbed[]): Promise<void> {
-  if (!discordUserId || embeds.length === 0) return;
+export async function postToUserFeedThread(discordUserId: string, embeds: RushEmbed[]): Promise<boolean> {
+  if (!discordUserId || embeds.length === 0) return false;
   const row = getDiscordUserThread(discordUserId);
-  if (!row?.thread_id) return;
-  await sendEmbedsToChannel(row.thread_id, embeds);
+  if (!row?.thread_id) return false;
+  const ok = await sendEmbedsToChannel(row.thread_id, embeds);
+  if (!ok) {
+    deleteDiscordUserThread(discordUserId);
+    await postToHostLogChannel([
+      tagHostEmbed({
+        title: "Feed thread missing",
+        description:
+          `Could not post to <@${discordUserId}>'s saved thread (wrong server or deleted). ` +
+          "They should run **`/connect`** again.",
+        color: 0xf5_9e_0b,
+      }),
+    ]);
+  }
+  return ok;
 }
 
 function ownerForAccountId(accountId: number | null | undefined): string | null {
@@ -155,7 +174,14 @@ export async function deliverFriendsReporterEmbed(
   if (route === "user" || route === "both") {
     const owner =
       ownerForAccountId(ctx?.accountId) ?? ownerForNickname(ctx?.nickname ?? undefined);
-    if (owner) await postToUserFeedThread(owner, [embed]);
+    if (owner) {
+      const posted = await postToUserFeedThread(owner, [embed]);
+      if (!posted && route === "user") {
+        await postToHostLogChannel([tagHostEmbed(embed)]);
+      }
+    } else if (route === "user") {
+      await postToHostLogChannel([tagHostEmbed(embed)]);
+    }
   }
   return true;
 }

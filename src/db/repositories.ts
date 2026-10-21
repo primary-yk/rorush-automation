@@ -105,6 +105,10 @@ export function clearAllDiscordUserThreads(): void {
   getDb().prepare("DELETE FROM discord_user_threads").run();
 }
 
+export function deleteDiscordUserThread(discordUserId: string): void {
+  getDb().prepare("DELETE FROM discord_user_threads WHERE discord_user_id = ?").run(discordUserId);
+}
+
 export function upsertDiscordUserThread(input: {
   discordUserId: string;
   threadId: string;
