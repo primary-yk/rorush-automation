@@ -2,6 +2,12 @@ import { EmbedBuilder, type APIEmbedField } from "discord.js";
 import { listAccounts, type AccountRow } from "../db/repositories.js";
 import { accountsForDiscordUser } from "./friends-commands.js";
 import { discordSupportLine } from "./friends-copy.js";
+import {
+  formatLifetimeShort,
+  lifetimeBreakdown,
+  lifetimeByDiscordOwner,
+  sumLifetimeBreakdown,
+} from "./friends-lifetime.js";
 
 /** Friend-facing Discord palette (no product name). */
 export const UI = {
@@ -47,12 +53,12 @@ export function buildHelpEmbed(): EmbedBuilder {
       },
       {
         name: "Overview",
-        value: "`/status` — engine online?\n`/help` — this menu",
+        value: "`/status` — engine online?\n`/earnings` — lifetime totals\n`/help` — this menu",
         inline: true,
       },
       {
         name: "Staff",
-        value: "`/server setup` · `/pause` · `/resume`",
+        value: "`/server setup` · `/server earnings`\n`/pause` · `/resume`",
         inline: true,
       },
     );
@@ -121,9 +127,10 @@ function accountRowField(a: AccountRow): APIEmbedField {
   ]
     .filter(Boolean)
     .join(" · ") || "All automation off";
+  const life = formatLifetimeShort(lifetimeBreakdown(a));
   return {
     name: a.nickname,
-    value: `Balance **${bal}** · Level **${lvl}**\n${toggles}\nStatus: \`${a.status}\``,
+    value: `Balance **${bal}** · Level **${lvl}**\n${life}\n${toggles}\nStatus: \`${a.status}\``,
     inline: false,
   };
 }
@@ -136,7 +143,67 @@ export function buildAccountsEmbed(discordUserId: string): EmbedBuilder {
       "No accounts yet. Use `/account add` or `/account session` — only you see the reply.",
     );
   }
-  return embed.addFields(accounts.slice(0, 8).map(accountRowField));
+  const total = sumLifetimeBreakdown(accounts);
+  return embed
+    .addFields(accounts.slice(0, 7).map(accountRowField))
+    .addFields({
+      name: "Your lifetime (all accounts)",
+      value: formatLifetimeShort(total),
+      inline: false,
+    });
+}
+
+export function buildPersonalEarningsEmbed(discordUserId: string): EmbedBuilder {
+  const accounts = accountsForDiscordUser(discordUserId);
+  const embed = baseEmbed(UI.accent).setTitle("Lifetime earnings").setDescription("Tracked on this host — rain, cases, and codes.");
+  if (accounts.length === 0) {
+    return embed.setDescription("No accounts linked to your Discord yet. Use `/account add` or `/account session`.");
+  }
+  const fields: APIEmbedField[] = accounts.slice(0, 10).map((a) => ({
+    name: a.nickname,
+    value: formatLifetimeShort(lifetimeBreakdown(a)),
+    inline: false,
+  }));
+  const total = sumLifetimeBreakdown(accounts);
+  fields.push({
+    name: "Combined total",
+    value: formatLifetimeShort(total),
+    inline: false,
+  });
+  return embed.addFields(fields);
+}
+
+export function buildServerEarningsBoardEmbed(): EmbedBuilder {
+  const accounts = listAccounts();
+  const byOwner = lifetimeByDiscordOwner(accounts);
+  const embed = baseEmbed(UI.primary)
+    .setTitle("Lifetime earnings — all members")
+    .setDescription("Discord accounts with saved logins on this host.");
+
+  if (byOwner.size === 0) {
+    return embed.addFields({
+      name: "No linked members yet",
+      value: "Totals appear after friends use `/account add` or `/account session`.",
+      inline: false,
+    });
+  }
+
+  const rows = [...byOwner.entries()].sort((a, b) => b[1].total - a[1].total);
+  const lines = rows.slice(0, 20).map(([userId, b], i) => {
+    const rank = i + 1;
+    return `**${rank}.** <@${userId}> · **${b.total.toFixed(2)}** coins · rain ${b.rain.toFixed(2)} · cases ${b.cases.toFixed(2)} · codes ${b.codes.toFixed(2)}`;
+  });
+
+  const unowned = accounts.filter((a) => !a.owner_discord_id?.trim());
+  if (unowned.length > 0) {
+    const hostTotal = sumLifetimeBreakdown(unowned);
+    lines.push("");
+    lines.push(
+      `_Host dashboard (${unowned.length} account(s)):_ **${hostTotal.total.toFixed(2)}** coins · rain ${hostTotal.rain.toFixed(2)} · cases ${hostTotal.cases.toFixed(2)} · codes ${hostTotal.codes.toFixed(2)}`,
+    );
+  }
+
+  return embed.addFields({ name: "Members", value: lines.join("\n").slice(0, 1024), inline: false });
 }
 
 export function buildUpdateEmbed(input: {

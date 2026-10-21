@@ -69,6 +69,8 @@ No install. In your Discord server:
 | `/limbo test` | One manual test bet (real balance) |
 | `/limbo filters` | Min rain pool + pre-rain wager toggle |
 | `/status` | Engine summary |
+| `/earnings` | Lifetime rain + cases + codes (per account + your total) |
+| `/server earnings` | **Staff** — lifetime totals for every linked Discord member |
 
 They **cannot** see or change each other’s accounts.
 

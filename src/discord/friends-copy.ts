@@ -42,7 +42,7 @@ export function friendCommandsChannelText(): string {
     "• `/guide` — getting started",
     "• `/account add` · `/account session` · `/account remove` · `/account list`",
     "• `/rain` · `/cases` · `/limbo`",
-    "• `/status` · `/help`",
+    "• `/status` · `/earnings` · `/help`",
     "",
     discordSupportLine(),
   ].join("\n");

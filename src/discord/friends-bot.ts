@@ -39,6 +39,8 @@ import {
   buildAccountsEmbed,
   buildErrorEmbed,
   buildHelpEmbed,
+  buildPersonalEarningsEmbed,
+  buildServerEarningsBoardEmbed,
   buildPlainResultEmbed,
   buildSetupGuideEmbed,
   buildSetupJoinEmbed,
@@ -88,8 +90,14 @@ function buildSlashCommands() {
       sub
         .setName("setup")
         .setDescription("Replace bot channels/categories; repair roles & permissions"),
+    )
+    .addSubcommand((sub) =>
+      sub.setName("earnings").setDescription("Lifetime earnings for every linked Discord member"),
     ),
   new SlashCommandBuilder().setName("help").setDescription("Full command reference"),
+  new SlashCommandBuilder()
+    .setName("earnings")
+    .setDescription("Your lifetime rain, cases, and code earnings on this host"),
   new SlashCommandBuilder().setName("status").setDescription("Automation engine status"),
   new SlashCommandBuilder()
     .setName("account")
@@ -348,8 +356,21 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
       return;
     }
 
+    if (interaction.commandName === "earnings") {
+      await replyEmbeds(interaction, [buildPersonalEarningsEmbed(userId)]);
+      return;
+    }
+
     if (interaction.commandName === "server") {
       const sub = interaction.options.getSubcommand();
+      if (sub === "earnings") {
+        if (!isHost(userId)) {
+          await interaction.reply({ ephemeral: true, content: "Host-only — ask the server owner." });
+          return;
+        }
+        await replyEmbeds(interaction, [buildServerEarningsBoardEmbed()]);
+        return;
+      }
       if (sub === "setup") {
         if (!isHost(userId)) {
           await interaction.reply({ ephemeral: true, content: "Host-only — ask the server owner." });

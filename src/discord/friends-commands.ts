@@ -10,6 +10,7 @@ import {
 } from "../db/repositories.js";
 import { LIMBO_MIN_MULTIPLIER } from "../config.js";
 import { engine } from "../worker/engine.js";
+import { formatLifetimeShort, lifetimeBreakdown } from "./friends-lifetime.js";
 
 export function accountsForDiscordUser(discordUserId: string): AccountRow[] {
   return listAccounts().filter((a) => a.owner_discord_id === discordUserId);
@@ -118,7 +119,8 @@ function formatOneAccount(a: AccountRow): string {
   ]
     .filter(Boolean)
     .join(", ");
-  return `• **${a.nickname}** · ${bal} coins · lvl ${lvl}\n  ${flags || "all automation off"} · ${a.status}`;
+  const life = formatLifetimeShort(lifetimeBreakdown(a));
+  return `• **${a.nickname}** · ${bal} coins · lvl ${lvl}\n  ${life}\n  ${flags || "all automation off"} · ${a.status}`;
 }
 
 export async function setToggle(
