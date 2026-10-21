@@ -47,7 +47,7 @@ export function buildHelpEmbed(): EmbedBuilder {
       {
         name: "Start here",
         value:
-          "`/connect` — private activity feed\n`/guide` — setup walkthrough\n`/dashboard` — balances + one-tap controls",
+          "`/connect` — private activity feed\n`/guide` — setup walkthrough\n`/dashboard` — balances, session health, controls",
         inline: false,
       },
       {
