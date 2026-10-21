@@ -36,7 +36,7 @@ export function buildRorushVaultStartEmbed(nickname: string) {
       "1. Pick **how long** withdraw stays blocked on RoRush.",
       "2. Choose whether **rain profits** auto-move to vault **only for that timer**.",
       "",
-      "When the timer ends, nothing re-locks until you run **`/rorush vault`** again.",
+      "When the timer ends, nothing re-locks until you run **`/rorush vault`** again (duration + vault rain dropdowns).",
     ].join("\n"),
     true,
   );

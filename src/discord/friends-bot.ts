@@ -54,12 +54,15 @@ import {
 import { botRuntimeLabel, encryptionKeyStatus, projectRoot } from "../config.js";
 import { sanitizeDiscordOutbound } from "./sanitize-outbound.js";
 import { engine } from "../worker/engine.js";
+import { handleVaultFlowButton, isVaultFlowButton } from "./friends-vault-flow.js";
+import { handleFriendsSlashAutocomplete } from "./friends-slash-autocomplete.js";
 import {
-  buildRorushVaultDurationRows,
-  buildRorushVaultStartEmbed,
-  handleVaultFlowButton,
-  isVaultFlowButton,
-} from "./friends-vault-flow.js";
+  savedAccountOption,
+  vaultLockDurationOption,
+  vaultRainDuringLockOption,
+} from "./friends-slash-options.js";
+import { parseVaultLockPreset } from "../rorush/vault-lock.js";
+import { startVaultSession } from "../automation/vault-lock-apply.js";
 import {
   buildAccountsEmbed,
   buildErrorEmbed,
@@ -178,7 +181,9 @@ function buildSlashCommands() {
       sub
         .setName("remove")
         .setDescription("Remove a saved account")
-        .addStringOption((o) => o.setName("nickname").setDescription("Nickname to remove").setRequired(true)),
+        .addStringOption((o) =>
+          savedAccountOption(o, { name: "nickname", description: "Pick account to remove" }),
+        ),
     )
     .addSubcommand((sub) =>
       sub.setName("list").setDescription("Balances, levels, lifetime — refreshes stats first"),
@@ -188,26 +193,36 @@ function buildSlashCommands() {
         .setName("refresh")
         .setDescription("Refresh balance and level from RoRush")
         .addStringOption((o) =>
-          o.setName("nickname").setDescription("One account (omit for all of yours)"),
+          savedAccountOption(o, {
+            name: "nickname",
+            required: false,
+            description: "Pick one account (omit for all of yours)",
+          }),
         ),
     )
     .addSubcommand((sub) =>
       sub
         .setName("pause")
         .setDescription("Pause automation for one account (host: any nickname)")
-        .addStringOption((o) => o.setName("nickname").setDescription("Account nickname").setRequired(true)),
+        .addStringOption((o) =>
+          savedAccountOption(o, { name: "nickname", description: "Pick account to pause" }),
+        ),
     )
     .addSubcommand((sub) =>
       sub
         .setName("resume")
         .setDescription("Resume automation for one account")
-        .addStringOption((o) => o.setName("nickname").setDescription("Account nickname").setRequired(true)),
+        .addStringOption((o) =>
+          savedAccountOption(o, { name: "nickname", description: "Pick account to resume" }),
+        ),
     )
     .addSubcommand((sub) =>
       sub
         .setName("vault")
         .setDescription("After rain (+ limbo), move profit to RoRush vault (always on)")
-        .addStringOption((o) => o.setName("nickname").setDescription("Account nickname").setRequired(true))
+        .addStringOption((o) =>
+          savedAccountOption(o, { name: "nickname", description: "Pick account" }),
+        )
         .addBooleanOption((o) => o.setName("on").setDescription("Enable or disable").setRequired(true)),
     ),
   new SlashCommandBuilder()
@@ -216,18 +231,20 @@ function buildSlashCommands() {
     .addSubcommand((sub) =>
       sub
         .setName("vault")
-        .setDescription("Lock vault — pick duration and whether rain profits vault for that timer")
-        .addStringOption((o) => o.setName("account").setDescription("Account nickname").setRequired(true)),
+        .setDescription("Timed vault lock — pick account, duration, and optional rain vault")
+        .addStringOption((o) => savedAccountOption(o, { description: "Pick your account" }))
+        .addStringOption((o) => vaultLockDurationOption(o))
+        .addBooleanOption((o) => vaultRainDuringLockOption(o)),
     ),
   new SlashCommandBuilder()
     .setName("rain")
     .setDescription("Turn auto rain join on or off")
-    .addStringOption((o) => o.setName("account").setDescription("Account nickname").setRequired(true))
+    .addStringOption((o) => savedAccountOption(o))
     .addBooleanOption((o) => o.setName("on").setDescription("On or off").setRequired(true)),
   new SlashCommandBuilder()
     .setName("cases")
     .setDescription("Turn automatic case opens on or off")
-    .addStringOption((o) => o.setName("account").setDescription("Account nickname").setRequired(true))
+    .addStringOption((o) => savedAccountOption(o))
     .addBooleanOption((o) => o.setName("on").setDescription("On or off").setRequired(true)),
   new SlashCommandBuilder()
     .setName("limbo")
@@ -236,7 +253,7 @@ function buildSlashCommands() {
       sub
         .setName("set")
         .setDescription("Wager settings when rain requires play-through")
-        .addStringOption((o) => o.setName("account").setDescription("Your account nickname").setRequired(true))
+        .addStringOption((o) => savedAccountOption(o))
         .addBooleanOption((o) => o.setName("on").setDescription("Enable limbo wager").setRequired(true))
         .addNumberOption((o) =>
           o
@@ -250,7 +267,7 @@ function buildSlashCommands() {
       sub
         .setName("test")
         .setDescription("One manual limbo bet (uses real balance)")
-        .addStringOption((o) => o.setName("account").setDescription("Your account nickname").setRequired(true))
+        .addStringOption((o) => savedAccountOption(o))
         .addNumberOption((o) =>
           o.setName("bet").setDescription("Bet in coins (min 0.01)").setRequired(true).setMinValue(0.01),
         )
@@ -265,7 +282,7 @@ function buildSlashCommands() {
       sub
         .setName("filters")
         .setDescription("Min rain pool and pre-rain wager")
-        .addStringOption((o) => o.setName("account").setDescription("Your account nickname").setRequired(true))
+        .addStringOption((o) => savedAccountOption(o))
         .addNumberOption((o) => o.setName("min_rain").setDescription("Skip join if pool below this (coins)").setMinValue(0))
         .addBooleanOption((o) => o.setName("pre_wager").setDescription("Small limbo before join window")),
     ),
@@ -382,6 +399,10 @@ export async function startFriendsDiscordBot(): Promise<void> {
   });
 
   client.on(Events.InteractionCreate, (interaction) => {
+    if (interaction.isAutocomplete()) {
+      void handleFriendsSlashAutocomplete(interaction, isHost);
+      return;
+    }
     if (interaction.isChatInputCommand()) {
       void handleInteraction(interaction);
       return;
@@ -837,27 +858,50 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
     if (interaction.commandName === "rorush") {
       const sub = interaction.options.getSubcommand();
       if (sub === "vault") {
+        await interaction.deferReply({ ephemeral: true });
         const nick = interaction.options.getString("account", true);
         const account = accountsForDiscordUser(userId).find(
           (a) => a.nickname.toLowerCase() === nick.trim().toLowerCase(),
         );
         if (!account) {
-          await interaction.reply({
-            ephemeral: true,
-            embeds: [
-              buildPlainResultEmbed(
-                `No account **${nick}** saved for you. Use \`/account add\`.`,
-                false,
-              ),
-            ],
-          });
+          await editEmbeds(
+            interaction,
+            resultEmbed(`No account **${nick}** saved for you. Use \`/account add\`.`),
+          );
           return;
         }
-        await interaction.reply({
-          ephemeral: true,
-          embeds: [buildRorushVaultStartEmbed(account.nickname)],
-          components: buildRorushVaultDurationRows(account.id),
-        });
+        const durationRaw = interaction.options.getString("duration") ?? "off";
+        const minutes = parseVaultLockPreset(durationRaw);
+        if (minutes == null) {
+          await editEmbeds(interaction, buildErrorEmbed("Invalid vault lock duration."));
+          return;
+        }
+        if (minutes <= 0) {
+          await editEmbeds(
+            interaction,
+            resultEmbed(
+              [
+                `**${account.nickname}** · No timed lock applied — vault and rain settings **unchanged**.`,
+                "Pick a **duration** to lock withdraw on RoRush, or use **`/account vault`** for always-on rain → vault.",
+              ].join("\n"),
+            ),
+          );
+          return;
+        }
+        const vaultRain = interaction.options.getBoolean("vault_rain") ?? false;
+        try {
+          const text = await startVaultSession({
+            accountId: account.id,
+            lockMinutes: minutes,
+            vaultRainDuringLock: vaultRain,
+          });
+          await editEmbeds(interaction, resultEmbed(text));
+        } catch (err) {
+          await editEmbeds(
+            interaction,
+            buildErrorEmbed(err instanceof Error ? err.message : String(err)),
+          );
+        }
         return;
       }
     }
