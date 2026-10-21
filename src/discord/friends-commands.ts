@@ -9,7 +9,12 @@ import {
   updateAccount,
   type AccountRow,
 } from "../db/repositories.js";
-import { clampLimboMultiplier, LIMBO_MIN_MULTIPLIER } from "../config.js";
+import {
+  clampLimboBetCoins,
+  clampLimboMultiplier,
+  effectiveLimboMinBetCoins,
+  LIMBO_MIN_MULTIPLIER,
+} from "../config.js";
 import { engine } from "../worker/engine.js";
 import { isAccountAutomationPaused } from "../accounts/account-automation.js";
 import { appendSessionHintIfNeeded } from "./friends-auth-hints.js";
@@ -234,7 +239,7 @@ export async function setLimbo(
     patch.limbo_multiplier = clampLimboMultiplier(input.multiplier);
   }
   if (input.betCoins != null) {
-    patch.limbo_bet_coins = Math.max(0.01, input.betCoins);
+    patch.limbo_bet_coins = clampLimboBetCoins(input.betCoins);
   }
   updateAccount(account.id, patch);
   await engine.reloadAccounts();
@@ -296,8 +301,9 @@ export async function testLimboForDiscordUser(
 ): Promise<string> {
   const account = findOwnedAccount(discordUserId, nickname);
   if (!account) return `No account **${nickname}** saved for you. Use \`/account add\`.`;
-  if (!Number.isFinite(betCoins) || betCoins < 0.01) {
-    return "Bet must be at least **0.01** coins.";
+  const minBet = effectiveLimboMinBetCoins();
+  if (!Number.isFinite(betCoins) || betCoins < minBet) {
+    return `Limbo bet must be at least **${minBet.toFixed(2)}** coins on RoRush.`;
   }
   const mult = multiplier ?? account.limbo_multiplier;
   const result = await engine.testLimbo(account.id, betCoins, mult);

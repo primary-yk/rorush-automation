@@ -27,4 +27,10 @@ describe("updateAccount join_rain", () => {
     updateAccount(row.id, { limbo_multiplier: 1.1 });
     expect(getAccount(row.id)!.limbo_multiplier).toBe(1.3);
   });
+
+  it("clamps limbo_bet_coins to at least 5 on every save", () => {
+    const row = insertAccount({ nickname: "vk" });
+    updateAccount(row.id, { limbo_bet_coins: 1 });
+    expect(getAccount(row.id)!.limbo_bet_coins).toBe(5);
+  });
 });

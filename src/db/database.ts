@@ -1,7 +1,7 @@
 import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
-import { LIMBO_MIN_MULTIPLIER, loadConfig } from "../config.js";
+import { effectiveLimboMinBetCoins, LIMBO_MIN_MULTIPLIER, loadConfig } from "../config.js";
 import { SCHEMA_SQL } from "./schema.js";
 
 let db: Database.Database | null = null;
@@ -68,7 +68,7 @@ function migrateAccounts(db: Database.Database): void {
     ["owner_discord_id", "TEXT"],
     ["limbo_wager_enabled", "INTEGER NOT NULL DEFAULT 1"],
     ["limbo_multiplier", "REAL NOT NULL DEFAULT 1.3"],
-    ["limbo_bet_coins", "REAL NOT NULL DEFAULT 1"],
+    ["limbo_bet_coins", "REAL NOT NULL DEFAULT 5"],
     ["pre_wager_before_rain", "INTEGER NOT NULL DEFAULT 0"],
     ["auto_vault_deposit", "INTEGER NOT NULL DEFAULT 0"],
     ["vault_lock_minutes", "INTEGER NOT NULL DEFAULT 0"],
@@ -86,6 +86,13 @@ function migrateAccounts(db: Database.Database): void {
     db.prepare("UPDATE accounts SET limbo_multiplier = ? WHERE limbo_multiplier < ?").run(
       LIMBO_MIN_MULTIPLIER,
       LIMBO_MIN_MULTIPLIER,
+    );
+  }
+  if (cols.has("limbo_bet_coins")) {
+    const minBet = effectiveLimboMinBetCoins();
+    db.prepare("UPDATE accounts SET limbo_bet_coins = ? WHERE limbo_bet_coins < ?").run(
+      minBet,
+      minBet,
     );
   }
   if (cols.has("join_rain")) {

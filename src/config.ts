@@ -19,6 +19,24 @@ export function clampLimboMultiplier(multiplier: number): number {
   return Math.max(LIMBO_MIN_MULTIPLIER, n);
 }
 
+/** RoRush limbo minimum wager (5 coins); double/upgrader are separate games. */
+export const LIMBO_MIN_BET_COINS = 5;
+
+/** Site floor; `LIMBO_MIN_BET_CENTS` can only raise this, not go below 5 coins. */
+export function effectiveLimboMinBetCoins(): number {
+  const envBetCents = Number(process.env.LIMBO_MIN_BET_CENTS ?? NaN);
+  if (Number.isFinite(envBetCents) && envBetCents > 0) {
+    return Math.max(LIMBO_MIN_BET_COINS, envBetCents / 100);
+  }
+  return LIMBO_MIN_BET_COINS;
+}
+
+export function clampLimboBetCoins(betCoins: number): number {
+  const n = Number(betCoins);
+  if (!Number.isFinite(n)) return LIMBO_MIN_BET_COINS;
+  return Math.max(effectiveLimboMinBetCoins(), n);
+}
+
 function loadDotenv(): void {
   loadProjectEnv();
 }

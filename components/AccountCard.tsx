@@ -31,7 +31,7 @@ export function AccountCard({
   const [removing, setRemoving] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [pending, setPending] = useState<string | null>(null);
-  const [testLimboBet, setTestLimboBet] = useState("1");
+  const [testLimboBet, setTestLimboBet] = useState("5");
   const [testLimboRunning, setTestLimboRunning] = useState(false);
 
   useEffect(() => {
@@ -225,16 +225,16 @@ export function AccountCard({
               />
             </label>
             <label className="text-sm text-slate-400">
-              Fallback bet (coins)
+              Fallback bet (coins, min 5 on limbo)
               <Input
                 type="number"
                 step="0.01"
-                min={0.01}
+                min={5}
                 className="mt-1.5"
-                defaultValue={local.limboBetCoins}
+                defaultValue={Math.max(5, local.limboBetCoins)}
                 disabled={busy}
                 onBlur={async (e) => {
-                  const v = Math.max(0.01, Number(e.target.value) || 1);
+                  const v = Math.max(5, Number(e.target.value) || 5);
                   await applyPatch("limboBetCoins", { limboBetCoins: v }, { limboBetCoins: v });
                 }}
               />
@@ -249,7 +249,7 @@ export function AccountCard({
                 <Input
                   type="number"
                   step="0.01"
-                  min={0.01}
+                  min={5}
                   className="mt-1.5"
                   value={testLimboBet}
                   disabled={testLimboRunning || busy}
@@ -261,8 +261,8 @@ export function AccountCard({
                 disabled={testLimboRunning || busy}
                 onClick={async () => {
                   const bet = Number(testLimboBet);
-                  if (!Number.isFinite(bet) || bet < 0.01) {
-                    toast.push("Enter a bet of at least 0.01", "error");
+                  if (!Number.isFinite(bet) || bet < 5) {
+                    toast.push("Limbo bet must be at least 5 coins on RoRush", "error");
                     return;
                   }
                   setTestLimboRunning(true);

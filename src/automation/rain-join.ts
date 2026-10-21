@@ -5,7 +5,7 @@ import {
   shouldInvalidateRainCaptcha,
   takeRainCaptchaToken,
 } from "./rain-captcha.js";
-import { LIMBO_MIN_MULTIPLIER, loadConfig } from "../config.js";
+import { effectiveLimboMinBetCoins, LIMBO_MIN_MULTIPLIER, loadConfig } from "../config.js";
 import {
   isRainJoined,
   markRainJoined,
@@ -543,6 +543,7 @@ async function placeLimboWagerBet(
 ): Promise<{ betCoins: number; hit: boolean }> {
   await ensureAuthenticated(accountId);
   const reqId = uuid();
+  const minBetCoins = effectiveLimboMinBetCoins();
   const envBetCents = Number(process.env.LIMBO_MIN_BET_CENTS ?? NaN);
   const envMultCents = Number(process.env.LIMBO_MIN_MULTIPLIER_CENTS ?? NaN);
   const envMaxBet = Number(process.env.LIMBO_MAX_BET_COINS ?? NaN);
@@ -577,10 +578,20 @@ async function placeLimboWagerBet(
   if (Number.isFinite(envMaxBet)) betCoins = Math.min(betCoins, envMaxBet);
   betCoins = Math.min(betCoins, balanceBeforeBet * 0.98);
 
-  if (betCoins < 0.01) {
-    throw new Error(
-      `Limbo skipped — balance ${balanceBeforeBet.toFixed(2)} coins, need at least 0.01 to wager`,
-    );
+  if (opts.balanceBeforeRain != null) {
+    if (betCoins < minBetCoins) {
+      throw new Error(
+        `Limbo skipped — rain profit ${betCoins.toFixed(2)} coins is below RoRush limbo minimum ${minBetCoins.toFixed(2)}`,
+      );
+    }
+  } else if (betCoins < minBetCoins) {
+    if (balanceBeforeBet >= minBetCoins) {
+      betCoins = Math.min(minBetCoins, balanceBeforeBet * 0.98);
+    } else {
+      throw new Error(
+        `Limbo skipped — balance ${balanceBeforeBet.toFixed(2)} coins, need at least ${minBetCoins.toFixed(2)} for limbo`,
+      );
+    }
   }
 
   const reasonLabel = opts.reasonLabel ?? "Limbo wager for rain requirement";
@@ -696,7 +707,7 @@ export async function runPreRainWagerIfEnabled(input: {
   const { accountId, rain, hubs } = input;
   const { account, client } = await ensureAuthenticated(accountId);
   if (!account.pre_wager_before_rain || !account.limbo_wager_enabled) return;
-  const bet = Math.max(0.01, account.limbo_bet_coins);
+  const bet = Math.max(effectiveLimboMinBetCoins(), account.limbo_bet_coins);
   appendLog({
     accountId,
     category: "limbo",
@@ -717,8 +728,9 @@ export async function runTestLimboBet(input: {
   hubs: HubRegistry;
 }): Promise<{ betCoins: number; hit: boolean }> {
   const { accountId, betCoins, multiplier, hubs } = input;
-  if (!Number.isFinite(betCoins) || betCoins < 0.01) {
-    throw new Error("Bet must be at least 0.01 coins");
+  const minBet = effectiveLimboMinBetCoins();
+  if (!Number.isFinite(betCoins) || betCoins < minBet) {
+    throw new Error(`Bet must be at least ${minBet.toFixed(2)} coins on limbo`);
   }
   const { account, client } = await ensureAuthenticated(accountId);
   const hub = await hubs.ensure(accountId, { rain: true, cases: true });
@@ -787,13 +799,14 @@ export async function settleRainForAccount(input: {
     return;
   }
 
-  if (earned == null || before == null || earned < 0.01) {
+  const minBetAfterRain = effectiveLimboMinBetCoins();
+  if (earned == null || before == null || earned < minBetAfterRain) {
     const why =
       before == null
         ? "No pre-join balance snapshot — enable Join rain before the window and keep dev running"
         : earned == null
           ? "Payout not on balance yet — limbo skipped (your stack was not wagered)"
-          : `Payout too small (${earned.toFixed(2)} coins) for limbo`;
+          : `Payout ${earned.toFixed(2)} coins — below limbo minimum ${minBetAfterRain.toFixed(2)} (RoRush)`;
     appendLog({
       accountId,
       category: "limbo",

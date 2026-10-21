@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS accounts (
   min_code_level INTEGER NOT NULL DEFAULT 0,
   limbo_wager_enabled INTEGER NOT NULL DEFAULT 1,
   limbo_multiplier REAL NOT NULL DEFAULT 1.3,
-  limbo_bet_coins REAL NOT NULL DEFAULT 1,
+  limbo_bet_coins REAL NOT NULL DEFAULT 5,
   pre_wager_before_rain INTEGER NOT NULL DEFAULT 0,
   auto_vault_deposit INTEGER NOT NULL DEFAULT 0,
   vault_lock_minutes INTEGER NOT NULL DEFAULT 0,

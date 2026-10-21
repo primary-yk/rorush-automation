@@ -10,7 +10,7 @@ import {
   type ChatInputCommandInteraction,
   type EmbedBuilder,
 } from "discord.js";
-import { LIMBO_MIN_MULTIPLIER } from "../config.js";
+import { effectiveLimboMinBetCoins, LIMBO_MIN_MULTIPLIER } from "../config.js";
 import { getSettings, updateSettings } from "../db/repositories.js";
 import {
   activateDiscordSeat,
@@ -282,7 +282,12 @@ function buildSlashCommands() {
             .setDescription(`Target multiplier (min ${LIMBO_MIN_MULTIPLIER})`)
             .setMinValue(LIMBO_MIN_MULTIPLIER),
         )
-        .addNumberOption((o) => o.setName("bet").setDescription("Fallback bet in coins")),
+        .addNumberOption((o) =>
+          o
+            .setName("bet")
+            .setDescription(`Fallback bet in coins (min ${effectiveLimboMinBetCoins()})`)
+            .setMinValue(effectiveLimboMinBetCoins()),
+        ),
     )
     .addSubcommand((sub) =>
       sub
@@ -290,7 +295,11 @@ function buildSlashCommands() {
         .setDescription("One manual limbo bet (uses real balance)")
         .addStringOption((o) => savedAccountOption(o))
         .addNumberOption((o) =>
-          o.setName("bet").setDescription("Bet in coins (min 0.01)").setRequired(true).setMinValue(0.01),
+          o
+            .setName("bet")
+            .setDescription(`Bet in coins (min ${effectiveLimboMinBetCoins()})`)
+            .setRequired(true)
+            .setMinValue(effectiveLimboMinBetCoins()),
         )
         .addNumberOption((o) =>
           o

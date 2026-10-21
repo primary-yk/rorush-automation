@@ -2,7 +2,9 @@ import express from "express";
 import {
   captchaApiKey,
   encryptionKeyStatus,
+  clampLimboBetCoins,
   clampLimboMultiplier,
+  effectiveLimboMinBetCoins,
   LIMBO_MIN_MULTIPLIER,
   loadConfig,
   projectRoot,
@@ -207,7 +209,9 @@ export function createApiServer() {
     if (body.limboMultiplier !== undefined) {
       patch.limbo_multiplier = clampLimboMultiplier(body.limboMultiplier);
     }
-    if (body.limboBetCoins !== undefined) patch.limbo_bet_coins = body.limboBetCoins;
+    if (body.limboBetCoins !== undefined) {
+      patch.limbo_bet_coins = clampLimboBetCoins(body.limboBetCoins);
+    }
     if (body.preWagerBeforeRain !== undefined) {
       patch.pre_wager_before_rain = body.preWagerBeforeRain ? 1 : 0;
     }
@@ -298,8 +302,9 @@ export function createApiServer() {
     }
     const body = req.body as { betCoins?: number; multiplier?: number };
     const betCoins = Number(body.betCoins);
-    if (!Number.isFinite(betCoins) || betCoins < 0.01) {
-      res.status(400).json({ error: "betCoins must be at least 0.01" });
+    const minBet = effectiveLimboMinBetCoins();
+    if (!Number.isFinite(betCoins) || betCoins < minBet) {
+      res.status(400).json({ error: `betCoins must be at least ${minBet} on limbo` });
       return;
     }
     const multiplier = body.multiplier != null ? Number(body.multiplier) : undefined;
