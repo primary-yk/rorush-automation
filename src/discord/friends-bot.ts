@@ -1,4 +1,5 @@
 import {
+  ActivityType,
   Client,
   Events,
   GatewayIntentBits,
@@ -40,6 +41,7 @@ import { executeConnectForUser, FRIENDS_CONNECT_BUTTON_ID } from "./friends-conn
 import { logHostMemberActivity } from "./friends-host-activity.js";
 import { FRIENDS_HOST_BUTTON_IDS, handleHostToolButton } from "./friends-host-tools.js";
 import { hostJumpToUserFeedThread, restoreUserFeedThread, runSetupJoin } from "./friends-user-thread.js";
+import { botWatchingPresenceName } from "./friends-branding.js";
 import { isFriendsHostMode } from "./host-alerts.js";
 import { discordSupportLine } from "./friends-copy.js";
 import { ensureMemberRoleOnMember } from "./friends-guild-roles.js";
@@ -432,7 +434,12 @@ export async function startFriendsDiscordBot(): Promise<void> {
 
   client.once(Events.ClientReady, async (c) => {
     bindFriendsFeedClient(client);
-    console.log(`[friends-bot] logged in as ${c.user.tag} · ${botRuntimeLabel()}`);
+    const watching = botWatchingPresenceName();
+    c.user.setPresence({
+      activities: [{ name: watching, type: ActivityType.Watching }],
+      status: "online",
+    });
+    console.log(`[friends-bot] logged in as ${c.user.tag} · watching "${watching}" · ${botRuntimeLabel()}`);
     const enc = encryptionKeyStatus();
     if (enc.ok) {
       console.log("[friends-bot] ENCRYPTION_KEY OK — /account add can save passwords");
