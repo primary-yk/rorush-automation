@@ -893,6 +893,39 @@ export class AutomationEngine {
     });
   }
 
+  async openRewardCase(
+    accountId: number,
+    slot: import("../automation/reward-cases.js").RewardCaseSlot,
+  ) {
+    const { openRewardCaseForAccount, REWARD_CASE_SLOT_META } = await import(
+      "../automation/reward-cases.js"
+    );
+    const { applyCaseOpenOutcome } = await import("../automation/case-open-complete.js");
+    const meta = REWARD_CASE_SLOT_META[slot];
+    const outcome = await openRewardCaseForAccount({
+      accountId,
+      slot,
+      hubs: this.accountHubs,
+    });
+    applyCaseOpenOutcome({
+      accountId,
+      caseId: outcome.caseId,
+      caseKind: meta.kind,
+      slotLabel: meta.label,
+      outcome,
+    });
+    if (!outcome.ok) {
+      throw new Error(outcome.message);
+    }
+    return outcome;
+  }
+
+  async getRewardCaseSlots(accountId: number) {
+    const { fetchRewardCaseSlots } = await import("../automation/reward-cases.js");
+    const { client } = await ensureAuthenticated(accountId);
+    return fetchRewardCaseSlots(client);
+  }
+
   getRainLiveStatus() {
     return buildRainLiveStatus({
       rain: this.activeRain,

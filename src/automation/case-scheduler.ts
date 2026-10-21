@@ -1,4 +1,3 @@
-import { v4 as uuid } from "uuid";
 import {
   appendLog,
   getSettings,
@@ -6,7 +5,6 @@ import {
   listDueCases,
   nextCaseUnlockMs,
   purgeDisallowedCaseSchedules,
-  recordCaseOpen,
   removeCaseSchedule,
   upsertCaseSchedule,
   updateAccount,
@@ -16,6 +14,8 @@ import { RoRushHub } from "../rorush/signalr-hub.js";
 import { ensureAuthenticated } from "../accounts/session-manager.js";
 import { accountEligibleForCases } from "../accounts/account-automation.js";
 import { isIgnorableCaseError } from "./case-errors.js";
+import { applyCaseOpenOutcome } from "./case-open-complete.js";
+import { openRewardCaseOnHub, shouldScheduleRewardCase } from "./reward-cases.js";
 
 function parseUnlockMs(value: unknown): number | null {
   if (typeof value === "number") return value;
@@ -30,6 +30,18 @@ function isAutoOpenKind(kind: string): boolean {
   return (AUTO_OPEN_CASE_KINDS as readonly string[]).includes(kind);
 }
 
+const KIND_BY_INFO_KEY: Record<string, string> = {
+  dailyCase: CASE_KIND.daily,
+  weeklyCase: CASE_KIND.wseason,
+  monthlyCase: CASE_KIND.mseason,
+};
+
+const LABEL_BY_KIND: Record<string, string> = {
+  [CASE_KIND.daily]: "Daily",
+  [CASE_KIND.wseason]: "Weekly",
+  [CASE_KIND.mseason]: "Monthly",
+};
+
 export async function refreshCaseSchedulesForAccount(accountId: number): Promise<void> {
   const { account, client } = await ensureAuthenticated(accountId);
   if (!account.auto_open_cases) return;
@@ -42,33 +54,24 @@ export async function refreshCaseSchedulesForAccount(accountId: number): Promise
   }
 
   const dailyInfo = await client.getDailyCasesInfo().catch(() => null);
-
   const now = Date.now();
 
   const scheduleCase = (caseId: string, kind: string, unlockAtMs: number, meta?: unknown) => {
     if (!isAutoOpenKind(kind)) return;
-    if (unlockAtMs <= now) {
-      upsertCaseSchedule({ accountId, caseId, caseKind: kind, unlockAtMs: now, meta });
-    } else {
-      upsertCaseSchedule({ accountId, caseId, caseKind: kind, unlockAtMs, meta });
-    }
+    upsertCaseSchedule({ accountId, caseId, caseKind: kind, unlockAtMs, meta });
   };
 
   if (dailyInfo && typeof dailyInfo === "object") {
     const d = dailyInfo as Record<string, unknown>;
-    for (const [key, kind] of [
-      ["dailyCase", CASE_KIND.daily],
-      ["weeklyCase", CASE_KIND.wseason],
-      ["monthlyCase", CASE_KIND.mseason],
-    ] as const) {
+    for (const [key, kind] of Object.entries(KIND_BY_INFO_KEY)) {
       const entry = d[key] as Record<string, unknown> | undefined;
       const caseId = entry?.caseId as string | undefined;
       if (!caseId) continue;
       const unlock = parseUnlockMs(entry?.unlockAt) ?? now;
-      if (entry?.isAvailable === false && unlock > now) {
-        scheduleCase(caseId, kind, unlock, entry);
-      } else {
+      if (shouldScheduleRewardCase(entry)) {
         scheduleCase(caseId, kind, now, entry);
+      } else if (entry?.isAvailable === false && unlock > now) {
+        scheduleCase(caseId, kind, unlock, entry);
       }
     }
   }
@@ -106,93 +109,27 @@ export async function openDueCases(accountHubs: Map<number, RoRushHub>): Promise
         await hub.ensureCaseSubscribed();
       }
 
-      const reqId = uuid();
-      const resultPromise = new Promise<{ ok: boolean; reward: number; message: string }>(
-        (resolve) => {
-          const timeout = setTimeout(
-            () => resolve({ ok: false, reward: 0, message: "Case open timed out" }),
-            45_000,
-          );
-          const offOk = hub!.on("ReceivePrivateCaseUnboxingResult", (payload) => {
-            clearTimeout(timeout);
-            offOk();
-            offFail();
-            const p = payload as { result?: { betAmount?: number; roundResults?: Array<{ winAmount?: number }> } };
-            const win =
-              p.result?.roundResults?.reduce((s, r) => s + (r.winAmount ?? 0), 0) ?? 0;
-            resolve({ ok: true, reward: win / 100, message: "Case opened" });
-          });
-          const offFail = hub!.on("ReceiveCaseUnboxingFailure", (payload) => {
-            clearTimeout(timeout);
-            offOk();
-            offFail();
-            resolve({
-              ok: false,
-              reward: 0,
-              message: (payload as { message?: string }).message ?? "Case open failed",
-            });
-          });
-        },
-      );
-
-      await hub.playCaseUnboxing({
-        reqId,
+      const outcome = await openRewardCaseOnHub(hub, {
         caseId: row.case_id,
-        casesNumber: 1,
-        currency: "CRYPTO",
         kind: row.case_kind,
-        isFastSpin: true,
-        rankId: null,
       });
 
-      const outcome = await resultPromise;
-      recordCaseOpen({
+      applyCaseOpenOutcome({
         accountId: row.account_id,
         caseId: row.case_id,
         caseKind: row.case_kind,
-        rewardAmount: outcome.reward,
-        success: outcome.ok,
-        reason: outcome.message,
+        slotLabel: LABEL_BY_KIND[row.case_kind] ?? "Reward",
+        outcome,
       });
 
-      if (outcome.ok) {
-        opened++;
-        const acc = listAccounts().find((a) => a.id === row.account_id)!;
-        updateAccount(row.account_id, {
-          lifetime_cases: acc.lifetime_cases + outcome.reward,
-          status: "idle",
-          last_error: null,
-        });
-        appendLog({
-          accountId: row.account_id,
-          category: "cases",
-          message: "Opened case",
-          detail: `${row.case_id} (+${outcome.reward})`,
-        });
-      } else if (isIgnorableCaseError(outcome.message)) {
-        appendLog({
-          accountId: row.account_id,
-          category: "cases",
-          message: "Skipped case (not auto-opened)",
-          detail: outcome.message,
-        });
-      } else {
-        updateAccount(row.account_id, { status: "error", last_error: outcome.message });
-        appendLog({
-          accountId: row.account_id,
-          category: "cases",
-          message: "Case open failed",
-          detail: outcome.message,
-        });
-      }
-
+      if (outcome.ok) opened++;
       removeCaseSchedule(row.account_id, row.case_id);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       updateAccount(row.account_id, { status: "error", last_error: message });
       appendLog({
         accountId: row.account_id,
-        category: "cases",
+        category: "case",
         message: "Case scheduler error",
         detail: message,
       });
@@ -217,7 +154,7 @@ export async function refreshAllCaseSchedules(): Promise<void> {
       const message = err instanceof Error ? err.message : String(err);
       appendLog({
         accountId: account.id,
-        category: "cases",
+        category: "case",
         message: "Failed to refresh case schedule",
         detail: message,
       });

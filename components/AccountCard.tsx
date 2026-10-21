@@ -7,6 +7,7 @@ import { useToast } from "./Toast";
 import { dashboardApi, type Account } from "@/lib/api";
 import clsx from "clsx";
 import { SensitiveText } from "./PrivacyBlur";
+import { RewardCasesPanel } from "./RewardCasesPanel";
 
 function avatarGradient(nickname: string): string {
   let h = 0;
@@ -141,6 +142,10 @@ export function AccountCard({
           </Button>
         </div>
       )}
+
+      <div className="mt-4">
+        <RewardCasesPanel accountId={account.id} disabled={busy} />
+      </div>
 
       <div className={clsx("mt-6 grid gap-2 sm:grid-cols-3", busy && "pointer-events-none opacity-90")}>
         <Toggle

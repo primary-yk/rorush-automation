@@ -252,6 +252,39 @@ export function createApiServer() {
     }
   });
 
+  app.get("/api/rush-accounts/:id/reward-cases", async (req, res) => {
+    const id = Number(req.params.id);
+    if (!getAccount(id)) {
+      res.status(404).json({ error: "Account not found" });
+      return;
+    }
+    try {
+      const slots = await engine.getRewardCaseSlots(id);
+      res.json({ slots });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  app.post("/api/rush-accounts/:id/open-reward-case", async (req, res) => {
+    const id = Number(req.params.id);
+    if (!getAccount(id)) {
+      res.status(404).json({ error: "Account not found" });
+      return;
+    }
+    const slot = (req.body as { slot?: string })?.slot;
+    if (slot !== "daily" && slot !== "weekly" && slot !== "monthly") {
+      res.status(400).json({ error: "slot must be daily, weekly, or monthly" });
+      return;
+    }
+    try {
+      const outcome = await engine.openRewardCase(id, slot);
+      res.json({ ok: true, ...outcome });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
   app.post("/api/rush-accounts/:id/test-limbo", async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isFinite(id) || id < 1) {

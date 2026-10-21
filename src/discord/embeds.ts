@@ -10,6 +10,8 @@ export type RushEmbed = {
   footer?: { text: string };
   author?: { name: string };
   timestamp?: string;
+  image?: { url: string };
+  thumbnail?: { url: string };
 };
 
 export const BRAND = {

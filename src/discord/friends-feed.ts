@@ -58,6 +58,8 @@ function rushToDiscordEmbed(embed: RushEmbed): EmbedBuilder {
     );
   }
   if (embed.footer?.text) e.setFooter({ text: embed.footer.text.slice(0, 2048) });
+  if (embed.image?.url) e.setImage(embed.image.url.slice(0, 2048));
+  if (embed.thumbnail?.url) e.setThumbnail(embed.thumbnail.url.slice(0, 2048));
   if (embed.timestamp) {
     const ts = Date.parse(embed.timestamp);
     if (!Number.isNaN(ts)) e.setTimestamp(ts);
@@ -149,7 +151,10 @@ const HOST_TITLE =
 export function classifyEmbedRoute(title: string, hasOwner: boolean): "host" | "user" {
   if (HOST_TITLE.test(title)) return "host";
   if (/fail|error|captcha|timeout|denied|offline|stall/i.test(title)) return "host";
-  if (/joined|hit|miss|limbo|rain|case|vault/i.test(title) && hasOwner) return "user";
+  if (/joined|hit|miss|limbo|rain|case opened|vault|daily case|weekly case|monthly case/i.test(title) && hasOwner) {
+    return "user";
+  }
+  if (/case/i.test(title) && hasOwner) return "user";
   if (hasOwner) return "user";
   return "host";
 }

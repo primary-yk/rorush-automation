@@ -163,6 +163,29 @@ export const dashboardApi = {
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(60_000),
     }),
+  getRewardCases: (id: number) =>
+    api<{
+      slots: Array<{
+        slot: "daily" | "weekly" | "monthly";
+        label: string;
+        caseId: string | null;
+        isAvailable: boolean;
+        unlockAt: string | null;
+      }>;
+    }>(`/api/rush-accounts/${id}/reward-cases`),
+  openRewardCase: (id: number, slot: "daily" | "weekly" | "monthly") =>
+    api<{
+      ok: true;
+      slot: string;
+      caseId: string;
+      rewardCoins: number;
+      items: Array<{ name: string; imageUrl: string | null; priceCoins: number | null }>;
+      message: string;
+    }>(`/api/rush-accounts/${id}/open-reward-case`, {
+      method: "POST",
+      body: JSON.stringify({ slot }),
+      signal: AbortSignal.timeout(90_000),
+    }),
   listLogs: () => api<ActivityLog[]>("/api/logs"),
   getStatsSummary: () => api<PilotStats>("/api/stats/summary"),
   getRainLive: () => api<RainLiveStatus>("/api/rain/live"),
