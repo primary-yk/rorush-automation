@@ -13,6 +13,7 @@ import {
   lifetimeByDiscordOwner,
   sumLifetimeBreakdown,
 } from "./friends-lifetime.js";
+import { formatSessionHealthPanel } from "./friends-session-health.js";
 
 /** Friend-facing Discord palette (no product name). */
 export const UI = {
@@ -186,6 +187,13 @@ export function buildAccountsEmbed(discordUserId: string): EmbedBuilder {
   const joinsToday = countRainJoinsToday(accounts.map((a) => a.id));
   return embed
     .setDescription("Live balances and automation state. Use the controls below to change settings.")
+    .addFields(
+      {
+        name: "Session health",
+        value: formatSessionHealthPanel(accounts),
+        inline: false,
+      },
+    )
     .addFields(accounts.slice(0, 7).map(accountRowField))
     .addFields(
       {

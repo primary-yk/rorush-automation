@@ -108,6 +108,10 @@ export function buildAccountDashboardComponents(
         .setCustomId(`${DASHBOARD_PREFIX}pause:${focus.id}`)
         .setLabel(paused ? "Resume account" : "Pause account")
         .setStyle(paused ? ButtonStyle.Success : ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId(`${DASHBOARD_PREFIX}session-check:${focus.id}`)
+        .setLabel("Verify logins")
+        .setStyle(ButtonStyle.Secondary),
     ),
   );
 
@@ -197,6 +201,9 @@ export async function handleDashboardInteraction(interaction: MessageComponentIn
     await setLimbo(userId, account.nickname, { enabled: on });
   } else if (customId.startsWith(`${DASHBOARD_PREFIX}refresh:`)) {
     await engine.refreshAccountStatsForIds([accountId]);
+  } else if (customId.startsWith(`${DASHBOARD_PREFIX}session-check:`)) {
+    const owned = accountsForDiscordUser(userId);
+    await engine.refreshAccountStatsForIds(owned.map((a) => a.id));
   } else if (customId.startsWith(`${DASHBOARD_PREFIX}pause:`)) {
     const paused = isAccountAutomationPaused(account);
     await setAccountAutomationPaused({
