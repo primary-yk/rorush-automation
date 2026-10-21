@@ -1,6 +1,7 @@
 import { REST, Routes, type Guild, type GuildMember } from "discord.js";
 import { getSettings } from "../db/repositories.js";
 import { parseFriendsServerLayout } from "./friends-layout.js";
+import { useServerMembersIntent } from "./friends-member-intent.js";
 
 export function memberRoleIdFromLayout(): string | null {
   const layout = parseFriendsServerLayout(getSettings().discord_server_layout_json);
@@ -45,6 +46,12 @@ export async function syncMemberRoleForAllMembers(input: {
 }): Promise<number> {
   const roleId = memberRoleIdFromLayout();
   if (!roleId) return 0;
+  if (!useServerMembersIntent()) {
+    console.log(
+      "[friends-bot] skipped bulk Rain Member sync — enable DISCORD_SERVER_MEMBERS_INTENT=1 + Server Members Intent in Developer Portal.",
+    );
+    return 0;
+  }
   await input.guild.members.fetch();
   let added = 0;
   for (const member of input.guild.members.cache.values()) {

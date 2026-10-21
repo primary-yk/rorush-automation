@@ -28,9 +28,9 @@ After adding the webhook line: `npm run setup-discord-webhook` once to verify.
 2. Developer Mode → right-click **server** → Copy ID → `DISCORD_GUILD_ID`
 3. Right-click **your user** → Copy ID → `HOST_DISCORD_USER_ID`
 4. OAuth2 URL Generator: scopes `bot` + `applications.commands`, permissions **Send Messages**, **Use Slash Commands**, **Embed Links**, **Manage Channels**, **Manage Roles**, **Manage Threads**
-5. Bot settings: enable **Server Members Intent** (auto **Rain Member** when someone joins)
-6. `npm run discord-bot-doctor` then `npm run dev`
-7. In Discord (host): **`/setup server`** — creates roles, categories, channels, and permission overwrites (safe to re-run)
+5. `npm run discord-bot-doctor` then `npm run dev` — console must show **`[friends-bot] logged in`**
+6. In Discord (host): **`/setup server`** — creates roles, categories, channels, and permission overwrites (safe to re-run)
+7. **Optional** auto **Rain Member** when someone joins: Developer Portal → **Server Members Intent** ON, then `DISCORD_SERVER_MEMBERS_INTENT=1` in `.env` and restart. Without this, friends still get the role when they run **`/setup join`**.
 
 Friends only use `/` commands — bot replies never include dashboard or site links.
 

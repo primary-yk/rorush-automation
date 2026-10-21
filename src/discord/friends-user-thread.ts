@@ -87,6 +87,7 @@ export async function runSetupJoin(input: {
       pilotRoleId: layout.roleIds.pilot,
     }).catch(() => undefined);
   }
+  /* Rain Member also applied here via REST — no Server Members Intent required */
 
   const { threadId, created } = await ensureUserPrivateFeedThread(input);
   const verb = created ? "Created" : "Reopened";

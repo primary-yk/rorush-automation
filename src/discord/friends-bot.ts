@@ -33,6 +33,7 @@ import { runSetupJoin } from "./friends-user-thread.js";
 import { isFriendsHostMode, notifyHostSlashError } from "./host-alerts.js";
 import { discordSupportLine, friendSetupGuideLines } from "./friends-copy.js";
 import { ensureMemberRoleOnMember } from "./friends-guild-roles.js";
+import { serverMembersIntentHelp, useServerMembersIntent } from "./friends-member-intent.js";
 import { sanitizeDiscordOutbound } from "./sanitize-outbound.js";
 
 function out(text: string): string {
@@ -220,9 +221,12 @@ export async function startFriendsDiscordBot(): Promise<void> {
   }
   if (client) return;
 
-  client = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
-  });
+  const intents = [GatewayIntentBits.Guilds];
+  if (useServerMembersIntent()) {
+    intents.push(GatewayIntentBits.GuildMembers);
+  }
+
+  client = new Client({ intents });
 
   client.once(Events.ClientReady, async (c) => {
     bindFriendsFeedClient(client);
@@ -248,21 +252,46 @@ export async function startFriendsDiscordBot(): Promise<void> {
     void handleInteraction(interaction);
   });
 
-  client.on(Events.GuildMemberAdd, (member) => {
-    if (member.guild.id !== guildId) return;
-    void ensureMemberRoleOnMember({
-      member,
-      botToken: token,
-      hostUserId: hostDiscordId(),
-    }).catch((err) => {
-      console.warn(
-        "[friends-bot] member role on join:",
-        err instanceof Error ? err.message : String(err),
-      );
+  if (useServerMembersIntent()) {
+    client.on(Events.GuildMemberAdd, (member) => {
+      if (member.guild.id !== guildId) return;
+      void ensureMemberRoleOnMember({
+        member,
+        botToken: token,
+        hostUserId: hostDiscordId(),
+      }).catch((err) => {
+        console.warn(
+          "[friends-bot] member role on join:",
+          err instanceof Error ? err.message : String(err),
+        );
+      });
     });
+  } else {
+    console.log(
+      "[friends-bot] auto Rain Member on join is off — set DISCORD_SERVER_MEMBERS_INTENT=1 after enabling Server Members Intent in the Developer Portal.",
+    );
+  }
+
+  client.on(Events.ShardDisconnect, (_event, shardId) => {
+    console.warn(`[friends-bot] disconnected (shard ${shardId}) — discord.js will reconnect`);
   });
 
-  await client.login(token);
+  client.on(Events.Error, (err) => {
+    console.error("[friends-bot] client error:", err.message);
+  });
+
+  try {
+    await client.login(token);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await client.destroy().catch(() => undefined);
+    client = null;
+    bindFriendsFeedClient(null);
+    if (/disallowed intents/i.test(msg)) {
+      throw new Error(`${msg} — ${serverMembersIntentHelp()} Or unset DISCORD_SERVER_MEMBERS_INTENT.`);
+    }
+    throw err;
+  }
 }
 
 export async function stopFriendsDiscordBot(): Promise<void> {
