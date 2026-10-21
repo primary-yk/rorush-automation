@@ -286,13 +286,13 @@ export function buildThreadRestoreEmbed(input: {
   threadId: string;
   created: boolean;
   roleRefreshed: boolean;
-  forSelf: boolean;
+  memberTag: string;
 }): EmbedBuilder {
-  const title = input.forSelf ? "Feed thread restored" : "Member feed restored";
   const lines = [
+    `**${input.memberTag}**`,
     input.created ? "Created a **new** private feed thread." : "Re-added to their **existing** feed thread.",
     input.roleRefreshed ? "Rain Member role refreshed." : "",
     `Open: <#${input.threadId}>`,
   ].filter(Boolean);
-  return baseEmbed(UI.success).setTitle(title).setDescription(lines.join("\n"));
+  return baseEmbed(UI.success).setTitle("Member feed restored").setDescription(lines.join("\n"));
 }

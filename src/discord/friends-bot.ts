@@ -118,12 +118,12 @@ function buildSlashCommands() {
     .addUserOption((o) => o.setName("member").setDescription("Whose feed to open").setRequired(true)),
   new SlashCommandBuilder()
     .setName("thread")
-    .setDescription("Private feed thread")
+    .setDescription("Staff: private feed thread tools")
     .addSubcommand((sub) =>
       sub
         .setName("restore")
-        .setDescription("Re-add you (or a member) to a private feed thread")
-        .addUserOption((o) => o.setName("member").setDescription("Staff only — who to restore")),
+        .setDescription("Re-add a member to their private feed thread")
+        .addUserOption((o) => o.setName("member").setDescription("Member to restore").setRequired(true)),
     ),
   new SlashCommandBuilder()
     .setName("account")
@@ -413,19 +413,21 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
     if (interaction.commandName === "thread") {
       const sub = interaction.options.getSubcommand();
       if (sub === "restore") {
-        const targetUser = interaction.options.getUser("member");
-        if (targetUser && targetUser.id !== userId && !isHost(userId)) {
-          await interaction.reply({ ephemeral: true, content: "Only staff can restore another member's thread." });
+        if (!isHost(userId)) {
+          await interaction.reply({
+            ephemeral: true,
+            content: "Only the server owner can restore feed threads. Ask staff — members use **`/connect`**.",
+          });
           return;
         }
-        const restoreId = targetUser?.id ?? userId;
         await interaction.deferReply({ ephemeral: true });
         if (!client || !interaction.guildId) {
           await editEmbeds(interaction, buildErrorEmbed("Run this inside your Discord server."));
           return;
         }
+        const targetUser = interaction.options.getUser("member", true);
         const guild = await client.guilds.fetch(interaction.guildId);
-        const member = await guild.members.fetch(restoreId).catch(() => null);
+        const member = await guild.members.fetch(targetUser.id).catch(() => null);
         if (!member) {
           await editEmbeds(
             interaction,
@@ -438,7 +440,7 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
             client,
             guild,
             token: botToken,
-            targetUserId: restoreId,
+            targetUserId: targetUser.id,
             username: member.user.username,
           });
           await editEmbeds(
@@ -447,7 +449,7 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
               threadId: result.threadId,
               created: result.created,
               roleRefreshed: result.roleRefreshed,
-              forSelf: restoreId === userId,
+              memberTag: member.displayName ?? member.user.username,
             }),
           );
         } catch (err) {

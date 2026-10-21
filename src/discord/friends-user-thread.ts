@@ -115,7 +115,7 @@ export async function hostJumpToUserFeedThread(input: {
   }
   const ch = await input.client.channels.fetch(row.thread_id).catch(() => null);
   if (!ch?.isThread()) {
-    throw new Error("Their feed thread is missing — have them run **`/connect`** or use **`/thread restore`**.");
+    throw new Error("Their feed thread is missing — have them run **`/connect`**, or staff **`/thread restore`**.");
   }
   await ch.members.add(input.hostUserId).catch(() => undefined);
   const member = await input.guild.members.fetch(input.targetUserId).catch(() => null);

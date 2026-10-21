@@ -74,7 +74,7 @@ No install. In your Discord server:
 | `/earnings` | Lifetime rain + cases + codes (per account + your total) |
 | `/server earnings` | **Staff** — lifetime totals for every linked Discord member |
 | `/jump member:…` | **Staff** — join someone's private feed thread (not auto-added) |
-| `/thread restore` | Re-add yourself to your feed; staff can pass `member` for someone who left |
+| `/thread restore member:…` | **Owner only** — re-add a member to their private feed after rejoin |
 
 They **cannot** see or change each other’s accounts.
 
