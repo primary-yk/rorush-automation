@@ -231,7 +231,7 @@ function buildSlashCommands() {
     .addSubcommand((sub) =>
       sub
         .setName("vault")
-        .setDescription("Timed vault lock — pick account, duration, and optional rain vault")
+        .setDescription("Vault lock and/or always vault rain profit — pick account and options")
         .addStringOption((o) => savedAccountOption(o, { description: "Pick your account" }))
         .addStringOption((o) => vaultLockDurationOption(o))
         .addBooleanOption((o) => vaultRainDuringLockOption(o)),
@@ -876,19 +876,34 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
           await editEmbeds(interaction, buildErrorEmbed("Invalid vault lock duration."));
           return;
         }
+        const vaultRainOpt = interaction.options.getBoolean("vault_rain");
         if (minutes <= 0) {
+          if (vaultRainOpt === true) {
+            const text = await setAutoVaultDeposit(userId, account.nickname, true);
+            await editEmbeds(
+              interaction,
+              resultEmbed(
+                `${text}\n\nNo vault **lock** on RoRush — withdraw stays available. Rain profit keeps moving to vault until you turn this off (**vault_rain: false** or \`/account vault on:false\`).`,
+              ),
+            );
+            return;
+          }
+          if (vaultRainOpt === false) {
+            const text = await setAutoVaultDeposit(userId, account.nickname, false);
+            await editEmbeds(interaction, resultEmbed(text));
+            return;
+          }
           await editEmbeds(
             interaction,
             resultEmbed(
               [
-                `**${account.nickname}** · No timed lock applied — vault and rain settings **unchanged**.`,
-                "Pick a **duration** to lock withdraw on RoRush, or use **`/account vault`** for always-on rain → vault.",
+                `**${account.nickname}** · No changes — pick **duration** to lock, or **vault_rain: true** to vault rains without locking.`,
               ].join("\n"),
             ),
           );
           return;
         }
-        const vaultRain = interaction.options.getBoolean("vault_rain") ?? false;
+        const vaultRain = vaultRainOpt ?? false;
         try {
           const text = await startVaultSession({
             accountId: account.id,

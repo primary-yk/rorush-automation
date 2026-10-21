@@ -48,6 +48,8 @@ export function vaultRainDuringLockOption(
 ): import("@discordjs/builders").SlashCommandBooleanOption {
   return option
     .setName("vault_rain")
-    .setDescription("While locked, auto-vault rain profit (withdraw still blocked until timer ends)")
+    .setDescription(
+      "Auto-vault rain profit — with a lock: until timer ends; without a lock: stays on (same as /account vault on)",
+    )
     .setRequired(false);
 }
