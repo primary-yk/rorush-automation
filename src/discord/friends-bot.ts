@@ -314,6 +314,12 @@ export async function startFriendsDiscordBot(): Promise<void> {
     } else {
       console.error(`[friends-bot] ${enc.reason} — /account add will fail until .env is fixed and dev restarted`);
     }
+    if (isFriendsHostMode() && projectRoot().replace(/\\/g, "/").includes("/workspace")) {
+      console.warn(
+        "[friends-bot] WARNING: Running from a cloud /workspace folder — do not use your real guild bot token here. " +
+          "Reset the token if this was connected to your friends server.",
+      );
+    }
     const rest = new REST({ version: "10" }).setToken(token);
     const mode = isHostedSaasMode() ? "hosted SaaS (licenses on)" : "friends (no licenses)";
     try {
@@ -497,7 +503,7 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
         if (!isHost(userId)) {
           await interaction.reply({
             ephemeral: true,
-            content: "Only the server owner can restore feed threads. Ask staff — members use **`/connect`**.",
+            content: "Host only (`HOST_DISCORD_USER_ID`). Members use **`/connect`**.",
           });
           return;
         }
