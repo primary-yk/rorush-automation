@@ -26,6 +26,7 @@ import {
   refreshAccountsForDiscordUser,
   removeAccountForDiscordUser,
   setAccountAutomationPaused,
+  setAutoVaultDeposit,
   setLimbo,
   setRainFilters,
   setToggle,
@@ -195,6 +196,13 @@ function buildSlashCommands() {
         .setName("resume")
         .setDescription("Resume automation for one account")
         .addStringOption((o) => o.setName("nickname").setDescription("Account nickname").setRequired(true)),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("vault")
+        .setDescription("After rain (+ limbo), move profit to RoRush vault")
+        .addStringOption((o) => o.setName("nickname").setDescription("Account nickname").setRequired(true))
+        .addBooleanOption((o) => o.setName("on").setDescription("Enable or disable").setRequired(true)),
     ),
   new SlashCommandBuilder()
     .setName("rain")
@@ -739,6 +747,16 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
           nickname: interaction.options.getString("nickname", true),
           paused: sub === "pause",
         });
+        await editEmbeds(interaction, resultEmbed(text));
+        return;
+      }
+      if (sub === "vault") {
+        await interaction.deferReply({ ephemeral: true });
+        const text = await setAutoVaultDeposit(
+          userId,
+          interaction.options.getString("nickname", true),
+          interaction.options.getBoolean("on", true),
+        );
         await editEmbeds(interaction, resultEmbed(text));
         return;
       }

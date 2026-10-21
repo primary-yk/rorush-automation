@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS accounts (
   limbo_multiplier REAL NOT NULL DEFAULT 1.3,
   limbo_bet_coins REAL NOT NULL DEFAULT 1,
   pre_wager_before_rain INTEGER NOT NULL DEFAULT 0,
+  auto_vault_deposit INTEGER NOT NULL DEFAULT 0,
   automation_paused INTEGER NOT NULL DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'idle',
   last_error TEXT,

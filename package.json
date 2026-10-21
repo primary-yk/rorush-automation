@@ -14,6 +14,7 @@
     "activate-license": "tsx scripts/activate-license-cli.ts",
     "update-account": "tsx scripts/update-account-cli.ts",
     "test-login": "tsx scripts/test-login.ts",
+    "test-vault": "tsx scripts/test-vault.ts",
     "test-stats": "tsx scripts/test-stats.ts",
     "last-rain-errors": "tsx scripts/last-rain-errors.ts",
     "test-captcha": "tsx scripts/test-captcha.ts",

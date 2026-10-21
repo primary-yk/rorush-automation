@@ -175,6 +175,7 @@ function formatOneAccount(a: AccountRow): string {
     a.join_rain ? "rain" : null,
     a.auto_open_cases ? "cases" : null,
     a.limbo_wager_enabled ? `limbo ${a.limbo_multiplier.toFixed(2)}×` : null,
+    a.auto_vault_deposit ? "vault rain profit" : null,
     a.pre_wager_before_rain ? "pre-wager" : null,
     a.min_rain_amount > 0 ? `min pool ${a.min_rain_amount.toFixed(0)}` : null,
   ]
@@ -227,6 +228,23 @@ export async function setLimbo(
   return (
     `**${row.nickname}** · Limbo wager **${row.limbo_wager_enabled ? "ON" : "OFF"}** · ` +
     `${row.limbo_multiplier.toFixed(2)}× · fallback bet ${row.limbo_bet_coins.toFixed(2)} coins`
+  );
+}
+
+export async function setAutoVaultDeposit(
+  discordUserId: string,
+  nickname: string,
+  enabled: boolean,
+): Promise<string> {
+  const account = findOwnedAccount(discordUserId, nickname);
+  if (!account) return `No account **${nickname}** saved for you. Use \`/account add\`.`;
+  updateAccount(account.id, { auto_vault_deposit: enabled ? 1 : 0 });
+  await engine.reloadAccounts();
+  return (
+    `**${account.nickname}** · Auto vault **${enabled ? "ON" : "OFF"}** — ` +
+    (enabled
+      ? "after each rain (+ limbo if enabled), profit above your pre-rain wallet balance moves to **RoRush vault**."
+      : "rain profits stay in your wallet.")
   );
 }
 

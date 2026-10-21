@@ -11,6 +11,11 @@ export const RORUSH_PATHS = {
     level: "/api/v1/user/level",
     stats: "/api/v1/user/stats",
   },
+  vault: {
+    deposit: "/api/v1/vault/deposit",
+    withdraw: "/api/v1/vault/withdraw",
+    info: "/api/v1/vault/info",
+  },
   rewards: {
     dailyCasesInfo: "/api/v1/rewards/daily-cases/info",
     energyCasesInfo: "/api/v1/rewards/energy-cases/info",

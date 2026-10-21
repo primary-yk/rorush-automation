@@ -13,6 +13,7 @@ import {
 } from "./rain-join-state.js";
 import {
   appendLog,
+  getAccount,
   getRainJoinBalanceBefore,
   patchRainJoinBalanceBefore,
   recordRainJoin,
@@ -715,7 +716,22 @@ export async function settleRainForAccount(input: {
     updateAccount(accountId, { balance: after });
   }
 
-  if (!account.limbo_wager_enabled) return;
+  const runVaultStep = async (): Promise<void> => {
+    const fresh = getAccount(accountId);
+    if (!fresh) return;
+    const { vaultRainCycleProfits } = await import("./vault-after-rain.js");
+    await vaultRainCycleProfits({
+      account: fresh,
+      client,
+      balanceBeforeRain: before,
+      rainId,
+    });
+  };
+
+  if (!account.limbo_wager_enabled) {
+    await runVaultStep();
+    return;
+  }
 
   if (earned == null || before == null || earned < 0.01) {
     const why =
@@ -730,6 +746,7 @@ export async function settleRainForAccount(input: {
       message: "Limbo skipped after rain",
       detail: why,
     });
+    await runVaultStep();
     return;
   }
 
@@ -751,6 +768,8 @@ export async function settleRainForAccount(input: {
     });
     updateAccount(accountId, { last_error: msg, status: "error" });
   }
+
+  await runVaultStep();
 }
 
 const rainSettlementInflight = new Set<string>();
