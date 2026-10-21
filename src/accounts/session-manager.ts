@@ -23,6 +23,51 @@ export function decryptField(value: string | null | undefined): string | null {
   return decryptSecret(value, requireEncryptionKey());
 }
 
+/** Check email/password against RoRush before saving (Discord `/account add`, dashboard). */
+export async function verifyRoRushEmailPassword(
+  email: string,
+  password: string,
+): Promise<
+  | { ok: true; jwt: string; apiKey: string | null; level: number | null }
+  | { ok: false; message: string }
+> {
+  const username = email.trim();
+  if (!username || !password) {
+    return { ok: false, message: "Email and password are required." };
+  }
+  const client = new RoRushHttpClient({ jwt: "" }, null);
+  try {
+    const login = await client.loginEmail(username, password);
+    if (login.twoFactorToken) {
+      return {
+        ok: false,
+        message:
+          "RoRush wants 2FA for this account — use **`/account session`** with a JWT from your browser instead of password.",
+      };
+    }
+    const jwt = login.userInfo?.jwtToken;
+    if (!jwt) {
+      return { ok: false, message: login.message ?? "Login failed — check email and password." };
+    }
+    const level = login.userInfo?.level;
+    return {
+      ok: true,
+      jwt,
+      apiKey: login.userInfo?.apiKey ?? null,
+      level: typeof level === "number" && Number.isFinite(level) ? Math.trunc(level) : null,
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/credentials|invalid|401|403|unauthorized/i.test(msg)) {
+      return {
+        ok: false,
+        message: "RoRush rejected that email or password — fix the typo or use **`/account session`** if you sign in with Discord/Google.",
+      };
+    }
+    return { ok: false, message: `Could not reach RoRush to verify login — try again in a minute. (${msg})` };
+  }
+}
+
 export async function resolveCredentials(account: AccountRow): Promise<RoRushCredentials | null> {
   const jwtFromSession = decryptField(account.session_jwt_enc);
   if (jwtFromSession) {

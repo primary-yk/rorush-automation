@@ -10,7 +10,7 @@ import {
   type EmbedBuilder,
 } from "discord.js";
 import { LIMBO_MIN_MULTIPLIER } from "../config.js";
-import { updateSettings } from "../db/repositories.js";
+import { getSettings, updateSettings } from "../db/repositories.js";
 import {
   activateDiscordSeat,
   discordSeatStatus,
@@ -39,6 +39,7 @@ import { hostJumpToUserFeedThread, restoreUserFeedThread, runSetupJoin } from ".
 import { isFriendsHostMode } from "./host-alerts.js";
 import { discordSupportLine } from "./friends-copy.js";
 import { ensureMemberRoleOnMember } from "./friends-guild-roles.js";
+import { parseFriendsServerLayout } from "./friends-layout.js";
 import { serverMembersIntentHelp, useServerMembersIntent } from "./friends-member-intent.js";
 import { appendSessionHintIfNeeded } from "./friends-auth-hints.js";
 import {
@@ -109,7 +110,12 @@ function buildSlashCommands() {
     .addSubcommand((sub) =>
       sub
         .setName("setup")
-        .setDescription("Replace bot channels/categories; repair roles & permissions"),
+        .setDescription("Replace bot channels/categories; repair roles & permissions")
+        .addBooleanOption((o) =>
+          o
+            .setName("confirm")
+            .setDescription("Set true to replace an existing bot layout (deletes old channels/threads)"),
+        ),
     )
     .addSubcommand((sub) =>
       sub.setName("earnings").setDescription("Lifetime earnings for every linked Discord member"),
@@ -603,6 +609,18 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
           await interaction.reply({
             ephemeral: true,
             content: out("Set `HOST_DISCORD_USER_ID` in `.env` first."),
+          });
+          return;
+        }
+        const priorLayout = parseFriendsServerLayout(getSettings().discord_server_layout_json);
+        const confirmed = interaction.options.getBoolean("confirm") === true;
+        if (priorLayout && !confirmed) {
+          await interaction.reply({
+            ephemeral: true,
+            content: out(
+              "Setup was already run. This command **deletes** old bot channels and private feed threads. " +
+                "To continue, run **`/server setup confirm:true`**. To only fix permissions, ask support — or confirm only when you mean a full reset.",
+            ),
           });
           return;
         }

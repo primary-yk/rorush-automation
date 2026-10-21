@@ -1,4 +1,4 @@
-import { encryptField } from "../accounts/session-manager.js";
+import { encryptField, verifyRoRushEmailPassword } from "../accounts/session-manager.js";
 import { RoRushHttpClient } from "../rorush/http-client.js";
 import {
   deleteAccount,
@@ -87,15 +87,21 @@ export async function addAccountForDiscordUser(input: {
   const taken = listAccounts().some((a) => a.nickname.toLowerCase() === nick.toLowerCase());
   if (taken) return `Nickname **${nick}** is already taken — pick another.`;
 
-  insertAccount({
+  const verified = await verifyRoRushEmailPassword(input.email, input.password);
+  if (!verified.ok) return verified.message;
+
+  const row = insertAccount({
     nickname: nick,
     username: input.email.trim(),
     password_enc: encryptField(input.password),
-    session_jwt_enc: null,
-    api_key_enc: null,
+    session_jwt_enc: encryptField(verified.jwt),
+    api_key_enc: verified.apiKey ? encryptField(verified.apiKey) : null,
     proxy_url: null,
     owner_discord_id: input.discordUserId,
   });
+  if (verified.level != null) {
+    updateAccount(row.id, { level: verified.level });
+  }
   await engine.reloadAccounts();
   return `Saved **${nick}**. Use \`/account list\`, then \`/rain\`, \`/cases\`, and \`/limbo\`.`;
 }
