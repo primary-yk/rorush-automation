@@ -1,5 +1,9 @@
 import type { Guild } from "discord.js";
-import { serverMembersIntentHelp, useServerMembersIntent } from "./friends-member-intent.js";
+import {
+  serverMembersIntentHelp,
+  serverMembersIntentOptedOut,
+  useServerMembersIntent,
+} from "./friends-member-intent.js";
 
 export type AutoRoleSetupStatus = {
   envEnabled: boolean;
@@ -10,23 +14,28 @@ export type AutoRoleSetupStatus = {
 export async function evaluateAutoRoleForSetup(guild: Guild): Promise<AutoRoleSetupStatus> {
   const envEnabled = useServerMembersIntent();
   if (!envEnabled) {
+    const reason = serverMembersIntentOptedOut()
+      ? "disabled in `.env` (`DISCORD_SERVER_MEMBERS_INTENT=0`)"
+      : "not enabled for this bot mode";
     return {
       envEnabled: false,
       memberListOk: false,
       lines: [
-        "**Auto-role on join:** OFF",
-        "Set `DISCORD_SERVER_MEMBERS_INTENT=1` and enable **Server Members Intent** in the Developer Portal, then restart the bot.",
+        `**Auto-role on join:** OFF — ${reason}`,
+        "Remove `DISCORD_SERVER_MEMBERS_INTENT=0`, enable **Server Members Intent** in the Developer Portal, restart `npm run dev`.",
         "Until then, friends get **Rain Member** when they run **`/connect`**.",
       ],
     };
   }
 
   let memberListOk = false;
+  let fetchHint = "";
   try {
     await guild.members.fetch({ limit: 1 });
     memberListOk = true;
-  } catch {
+  } catch (err) {
     memberListOk = false;
+    fetchHint = err instanceof Error ? err.message : String(err);
   }
 
   if (!memberListOk) {
@@ -34,10 +43,11 @@ export async function evaluateAutoRoleForSetup(guild: Guild): Promise<AutoRoleSe
       envEnabled: true,
       memberListOk: false,
       lines: [
-        "**Auto-role on join:** misconfigured",
-        "`DISCORD_SERVER_MEMBERS_INTENT=1` is set but the bot cannot read members.",
+        "**Auto-role on join:** waiting on bot restart",
+        "Server Members Intent is enabled in the Portal, but this running bot cannot read members yet.",
         serverMembersIntentHelp(),
-      ],
+        fetchHint ? `Detail: \`${fetchHint.slice(0, 120)}\`` : "",
+      ].filter(Boolean),
     };
   }
 

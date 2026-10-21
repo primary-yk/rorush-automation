@@ -4,6 +4,10 @@
  */
 import "../src/bootstrap-env.js";
 import { captchaApiKey, loadConfig } from "../src/config.js";
+import {
+  serverMembersIntentOptedOut,
+  useServerMembersIntent,
+} from "../src/discord/friends-member-intent.js";
 
 function ok(label: string, pass: boolean, hint?: string): void {
   console.log(`${pass ? "OK" : "MISSING"} — ${label}${hint ? ` (${hint})` : ""}`);
@@ -29,7 +33,15 @@ if (relay) {
 } else if (token && guild) {
   console.log("\nNext: npm run dev — look for [friends-bot] logged in (before rain engine finishes connecting).");
   console.log("Invite bot: OAuth2 → bot + applications.commands + Manage Channels/Roles/Threads");
-  console.log("Optional auto-role on join: Portal → Server Members Intent ON, then DISCORD_SERVER_MEMBERS_INTENT=1 in .env");
+  const members = useServerMembersIntent();
+  console.log(
+    members
+      ? "Auto-role on join: ON (GuildMembers) — needs Server Members Intent ON in Developer Portal + npm run dev restart"
+      : "Auto-role on join: OFF — remove DISCORD_SERVER_MEMBERS_INTENT=0 or set to 1 after enabling Portal intent",
+  );
+  if (serverMembersIntentOptedOut()) {
+    console.log("  (You set DISCORD_SERVER_MEMBERS_INTENT=0 — delete that line to use Portal intent.)");
+  }
   console.log("Staff: /server setup  ·  Friends: /connect → /account add → /rain");
 } else if (webhook) {
   console.log("\nWebhook-only mode: [friends-bot] skipped is OK. Slash commands need DISCORD_BOT_TOKEN + DISCORD_GUILD_ID.");

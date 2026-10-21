@@ -235,7 +235,8 @@ export async function startFriendsDiscordBot(): Promise<void> {
   if (client) return;
 
   const intents = [GatewayIntentBits.Guilds];
-  if (useServerMembersIntent()) {
+  const membersIntent = useServerMembersIntent();
+  if (membersIntent) {
     intents.push(GatewayIntentBits.GuildMembers);
   }
 
@@ -265,7 +266,8 @@ export async function startFriendsDiscordBot(): Promise<void> {
     void handleInteraction(interaction);
   });
 
-  if (useServerMembersIntent()) {
+  if (membersIntent) {
+    console.log("[friends-bot] Rain Member auto-role on join: ON (GuildMembers intent)");
     client.on(Events.GuildMemberAdd, (member) => {
       if (member.guild.id !== guildId) return;
       void ensureMemberRoleOnMember({
@@ -281,7 +283,7 @@ export async function startFriendsDiscordBot(): Promise<void> {
     });
   } else {
     console.log(
-      "[friends-bot] auto Rain Member on join is off — set DISCORD_SERVER_MEMBERS_INTENT=1 after enabling Server Members Intent in the Developer Portal.",
+      "[friends-bot] Rain Member auto-role on join: OFF — remove DISCORD_SERVER_MEMBERS_INTENT=0 or enable Server Members Intent in the Developer Portal.",
     );
   }
 
@@ -301,7 +303,7 @@ export async function startFriendsDiscordBot(): Promise<void> {
     client = null;
     bindFriendsFeedClient(null);
     if (/disallowed intents/i.test(msg)) {
-      throw new Error(`${msg} — ${serverMembersIntentHelp()} Or unset DISCORD_SERVER_MEMBERS_INTENT.`);
+      throw new Error(`${msg} — ${serverMembersIntentHelp()} Or set DISCORD_SERVER_MEMBERS_INTENT=0 if the Portal toggle is off.`);
     }
     throw err;
   }

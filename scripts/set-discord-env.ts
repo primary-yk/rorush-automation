@@ -54,6 +54,7 @@ const merged = upsertLines(content, {
   DISCORD_BOT_TOKEN: token,
   DISCORD_GUILD_ID: guild,
   HOST_DISCORD_USER_ID: host,
+  DISCORD_SERVER_MEMBERS_INTENT: "1",
 });
 
 fs.writeFileSync(envPath, merged, { mode: 0o600 });

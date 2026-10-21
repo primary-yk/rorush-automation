@@ -48,7 +48,7 @@ export async function syncMemberRoleForAllMembers(input: {
   if (!roleId) return 0;
   if (!useServerMembersIntent()) {
     console.log(
-      "[friends-bot] skipped bulk Rain Member sync — enable DISCORD_SERVER_MEMBERS_INTENT=1 + Server Members Intent in Developer Portal.",
+      "[friends-bot] skipped bulk Rain Member sync — enable Server Members Intent in Developer Portal and restart (or remove DISCORD_SERVER_MEMBERS_INTENT=0).",
     );
     return 0;
   }
