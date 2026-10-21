@@ -19,7 +19,7 @@ const BUCKET_COLOR: Record<HostIssueBucket, number> = {
 export function classifyHostIssue(text: string): HostIssueBucket {
   const m = text.toLowerCase();
   if (
-    /wager required|join blocked \(wager\)|join failed \(wager\)|wager clear|limbo wager|play.?through|must bet|rain · wager/.test(
+    /wager required|join blocked \(wager\)|join failed \(wager\)|wager lock|wager clear|manual wager|limbo wager|play.?through|must bet|rain · wager/.test(
       m,
     )
   ) {

@@ -28,6 +28,7 @@ import type { RainState } from "../rorush/types.js";
 import { ensureAuthenticated } from "../accounts/session-manager.js";
 import {
   reportLimboOutcome,
+  reportRainManualWagerClearRequired,
   reportRainOutcome,
   reportRainWagerClearing,
 } from "../discord/reporter.js";
@@ -164,6 +165,13 @@ export type RainJoinFailureKind =
   | "other";
 
 /** User-facing bucket for rain join failures (wager before captcha when limbo was tried). */
+export const MANUAL_WAGER_CLEAR_MESSAGE =
+  "Manual wager clear required — auto limbo turned off (balance below RoRush limbo minimum)";
+
+export function isManualWagerClearReason(message: string): boolean {
+  return /manual wager clear required/i.test(message);
+}
+
 export function classifyRainJoinFailure(
   message: string,
   ctx?: { wagerClearAttempted?: boolean },
@@ -189,6 +197,7 @@ export function isPermanentRainJoinFailure(message: string): boolean {
   if (/rain amount.*below filter|below filter|pool below minimum|below minimum/i.test(m)) return true;
   if (/wager required but limbo wager is off/i.test(m)) return true;
   if (/enable `\/limbo set on:true`/i.test(m)) return true;
+  if (/manual wager clear required/i.test(m)) return true;
   if (/account (is )?banned|permanently banned|disabled account/i.test(m)) return true;
   return false;
 }
@@ -331,42 +340,89 @@ async function joinRainForAccountOnce(input: {
     let outcome = await outcomePromise;
 
     if (!outcome.ok && isWagerRejection(outcome.message) && account.limbo_wager_enabled) {
-      appendLog({
-        accountId,
-        category: "rain",
-        message: "Wager requirement detected; placing limbo bet",
-        detail: outcome.message,
-      });
-      void reportRainWagerClearing({
-        nickname: account.nickname,
-        rainId: rain.rainId,
-        poolCoins: rainAmount,
-        siteMessage: outcome.message,
-      });
-      wagerClearAttempted = true;
-      await placeLimboWagerBet(accountId, client, hub, account, rainAmount, account.nickname, rain.rainId);
-      const retryReq = uuid();
-      let retryOutcome = await joinOnce(hub, retryReq, rain.rainId, accountId);
-      outcome = retryOutcome;
-      // Some rains need more than one rain-sized wager before join succeeds.
-      let extraWagers = 0;
-      while (
-        !outcome.ok &&
-        isWagerRejection(outcome.message) &&
-        account.limbo_wager_enabled &&
-        extraWagers < 2
-      ) {
-        extraWagers++;
+      const minBet = effectiveLimboMinBetCoins();
+      const walletForWager = await readBalanceCoins(client);
+
+      if (walletForWager < minBet) {
+        wagerClearAttempted = true;
         appendLog({
           accountId,
           category: "rain",
-          message: "Still need wager; repeating limbo at rain pool size",
-          detail: `${rainAmount} coins · attempt ${extraWagers + 1}`,
+          message: "Wager lock — one limbo try below site minimum",
+          detail: `${walletForWager.toFixed(2)} coins wallet · min bet ${minBet.toFixed(2)} · ${outcome.message}`,
         });
+        try {
+          await placeLimboWagerBet(
+            accountId,
+            client,
+            hub,
+            account,
+            rainAmount,
+            account.nickname,
+            rain.rainId,
+            {
+              allowBelowMinOnce: true,
+              betCoinsOverride: Math.max(0.01, walletForWager * 0.98),
+              reasonLabel: "Wager clear attempt (balance below 5 coin min)",
+            },
+          );
+        } catch (err) {
+          appendLog({
+            accountId,
+            category: "limbo",
+            message: "Low-balance wager attempt failed",
+            detail: err instanceof Error ? err.message : String(err),
+          });
+        }
+        const retryReq = uuid();
+        outcome = await joinOnce(hub, retryReq, rain.rainId, accountId);
+        if (!outcome.ok) {
+          await applyManualWagerClearStop({
+            accountId,
+            nickname: account.nickname,
+            rainId: rain.rainId,
+            balanceCoins: walletForWager,
+            minBetCoins: minBet,
+          });
+          outcome = { ok: false, message: MANUAL_WAGER_CLEAR_MESSAGE };
+        }
+      } else {
+        appendLog({
+          accountId,
+          category: "rain",
+          message: "Wager requirement detected; placing limbo bet",
+          detail: outcome.message,
+        });
+        void reportRainWagerClearing({
+          nickname: account.nickname,
+          rainId: rain.rainId,
+          poolCoins: rainAmount,
+          siteMessage: outcome.message,
+        });
+        wagerClearAttempted = true;
         await placeLimboWagerBet(accountId, client, hub, account, rainAmount, account.nickname, rain.rainId);
-        const againReq = uuid();
-        retryOutcome = await joinOnce(hub, againReq, rain.rainId, accountId);
+        const retryReq = uuid();
+        let retryOutcome = await joinOnce(hub, retryReq, rain.rainId, accountId);
         outcome = retryOutcome;
+        let extraWagers = 0;
+        while (
+          !outcome.ok &&
+          isWagerRejection(outcome.message) &&
+          getAccount(accountId)?.limbo_wager_enabled &&
+          extraWagers < 2
+        ) {
+          extraWagers++;
+          appendLog({
+            accountId,
+            category: "rain",
+            message: "Still need wager; repeating limbo at rain pool size",
+            detail: `${rainAmount} coins · attempt ${extraWagers + 1}`,
+          });
+          await placeLimboWagerBet(accountId, client, hub, account, rainAmount, account.nickname, rain.rainId);
+          const againReq = uuid();
+          retryOutcome = await joinOnce(hub, againReq, rain.rainId, accountId);
+          outcome = retryOutcome;
+        }
       }
     } else if (!outcome.ok && isWagerRejection(outcome.message)) {
       appendLog({
@@ -529,7 +585,42 @@ type LimboWagerOpts = {
   multiplierOverride?: number;
   /** Only wager balance gained since join — never touch pre-rain stack. */
   balanceBeforeRain?: number;
+  /** One attempt below RoRush min bet (e.g. 2 coins when min is 5). */
+  allowBelowMinOnce?: boolean;
 };
+
+async function applyManualWagerClearStop(input: {
+  accountId: number;
+  nickname: string;
+  rainId: string;
+  balanceCoins: number;
+  minBetCoins: number;
+}): Promise<void> {
+  const row = getAccount(input.accountId);
+  const wasAuto =
+    row != null &&
+    (Number(row.limbo_wager_enabled) !== 0 || Number(row.pre_wager_before_rain) !== 0);
+  updateAccount(input.accountId, {
+    limbo_wager_enabled: 0,
+    pre_wager_before_rain: 0,
+    status: "idle",
+    last_error: MANUAL_WAGER_CLEAR_MESSAGE,
+  });
+  appendLog({
+    accountId: input.accountId,
+    category: "rain",
+    message: "Auto limbo disabled — manual wager clear",
+    detail: `${input.balanceCoins.toFixed(2)} coins wallet · need ${input.minBetCoins.toFixed(2)} min limbo bet`,
+  });
+  if (wasAuto) {
+    void reportRainManualWagerClearRequired({
+      nickname: input.nickname,
+      rainId: input.rainId,
+      balanceCoins: input.balanceCoins,
+      minBetCoins: input.minBetCoins,
+    });
+  }
+}
 
 async function placeLimboWagerBet(
   accountId: number,
@@ -578,7 +669,13 @@ async function placeLimboWagerBet(
   if (Number.isFinite(envMaxBet)) betCoins = Math.min(betCoins, envMaxBet);
   betCoins = Math.min(betCoins, balanceBeforeBet * 0.98);
 
-  if (opts.balanceBeforeRain != null) {
+  if (opts.allowBelowMinOnce) {
+    if (betCoins < 0.01) {
+      throw new Error(
+        `Limbo skipped — balance ${balanceBeforeBet.toFixed(2)} coins is too low for any limbo attempt`,
+      );
+    }
+  } else if (opts.balanceBeforeRain != null) {
     if (betCoins < minBetCoins) {
       throw new Error(
         `Limbo skipped — rain profit ${betCoins.toFixed(2)} coins is below RoRush limbo minimum ${minBetCoins.toFixed(2)}`,

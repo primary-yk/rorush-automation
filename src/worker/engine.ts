@@ -17,6 +17,7 @@ import {
 } from "../automation/rain-captcha.js";
 import { clearRainJoinStateForRain, isRainJoined } from "../automation/rain-join-state.js";
 import {
+  isManualWagerClearReason,
   isPermanentRainJoinFailure,
   joinRainForAccount,
   parseRain,
@@ -675,14 +676,16 @@ export class AutomationEngine {
         });
 
         if (isPermanentRainJoinFailure(result.reason)) {
-          void reportRainOutcome({
-            nickname: account.nickname,
-            success: false,
-            message: result.reason,
-            rainId: liveJoin.rainId,
-            poolCoins: liveJoin.amount ?? undefined,
-            wagerClearAttempted: result.wagerClearAttempted,
-          });
+          if (!isManualWagerClearReason(result.reason)) {
+            void reportRainOutcome({
+              nickname: account.nickname,
+              success: false,
+              message: result.reason,
+              rainId: liveJoin.rainId,
+              poolCoins: liveJoin.amount ?? undefined,
+              wagerClearAttempted: result.wagerClearAttempted,
+            });
+          }
           return { retryable: false };
         }
 
@@ -713,14 +716,16 @@ export class AutomationEngine {
       const pool =
         liveEnd?.amount ??
         (this.activeRain?.rainId === rainId ? this.activeRain?.amount : undefined);
-      void reportRainOutcome({
-        nickname: account.nickname,
-        success: false,
-        message: lastReason,
-        rainId,
-        poolCoins: pool ?? undefined,
-        wagerClearAttempted: lastWagerClearAttempted,
-      });
+      if (!isManualWagerClearReason(lastReason)) {
+        void reportRainOutcome({
+          nickname: account.nickname,
+          success: false,
+          message: lastReason,
+          rainId,
+          poolCoins: pool ?? undefined,
+          wagerClearAttempted: lastWagerClearAttempted,
+        });
+      }
       if (liveEnd && rainJoinWindowOpen(liveEnd)) {
         appendLog({
           accountId: account.id,

@@ -239,6 +239,31 @@ export async function reportLimboOutcome(input: {
   );
 }
 
+export async function reportRainManualWagerClearRequired(input: {
+  nickname: string;
+  rainId: string;
+  balanceCoins: number;
+  minBetCoins: number;
+}): Promise<void> {
+  await deliverEmbed(
+    {
+      title: "Rain · Wager lock (manual)",
+      description:
+        "RoRush still requires **play-through** before rain join. Your wallet is below the **limbo minimum bet**, so the bot tried once and turned **auto limbo off**.\n\n" +
+        "Clear wager on **rorush.com**, deposit if needed, then run **`/limbo set on:true`** on this account.",
+      color: COLORS.rainFail,
+      fields: [
+        { name: accountFieldLabel(), value: `**${input.nickname}**`, inline: true },
+        { name: "Wallet", value: formatCoins(input.balanceCoins), inline: true },
+        { name: "Limbo min bet", value: formatCoins(input.minBetCoins), inline: true },
+        { name: "Rain ID", value: shortRainId(input.rainId), inline: false },
+      ],
+      footer: { text: "Rain · wager lock" },
+    },
+    { nickname: input.nickname },
+  );
+}
+
 export async function reportRainWagerClearing(input: {
   nickname: string;
   rainId: string;
@@ -308,9 +333,12 @@ export async function reportRainOutcome(input: {
       fields.push({ name: "Note", value: detail.slice(0, 900), inline: false });
     }
   } else {
-    const kind = classifyRainJoinFailure(detail, {
+    let kind = classifyRainJoinFailure(detail, {
       wagerClearAttempted: input.wagerClearAttempted,
     });
+    if (/manual wager clear required/i.test(detail)) {
+      kind = "wager_limbo_off";
+    }
     const failCopy = rainJoinFailureEmbedCopy(kind);
     title = failCopy.title;
     description = failCopy.description;

@@ -32,6 +32,7 @@ describe("isPermanentRainJoinFailure", () => {
   it("blocks only hard skips", () => {
     expect(isPermanentRainJoinFailure("Rain amount 10 below filter")).toBe(true);
     expect(isPermanentRainJoinFailure("Join rain disabled for account")).toBe(true);
+    expect(isPermanentRainJoinFailure("Manual wager clear required — auto limbo turned off")).toBe(true);
     expect(isPermanentRainJoinFailure("Rain join failed")).toBe(false);
   });
 });
