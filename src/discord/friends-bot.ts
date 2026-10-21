@@ -87,7 +87,7 @@ function buildSlashCommands() {
     .addSubcommand((sub) =>
       sub
         .setName("setup")
-        .setDescription("Create roles, channels, and permissions"),
+        .setDescription("Replace bot channels/categories; repair roles & permissions"),
     ),
   new SlashCommandBuilder().setName("help").setDescription("Full command reference"),
   new SlashCommandBuilder().setName("status").setDescription("Automation engine status"),

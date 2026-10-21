@@ -29,7 +29,7 @@ After adding the webhook line: `npm run setup-discord-webhook` once to verify.
 3. Right-click **your user** → Copy ID → `HOST_DISCORD_USER_ID`
 4. OAuth2 URL Generator: scopes `bot` + `applications.commands`, permissions **Send Messages**, **Use Slash Commands**, **Embed Links**, **Manage Channels**, **Manage Roles**, **Manage Threads**
 5. `npm run discord-bot-doctor` then `npm run dev` — console must show **`[friends-bot] logged in`**
-6. In Discord (staff): **`/server setup`** — creates roles, categories, channels, and permission overwrites (safe to re-run)
+6. In Discord (staff): **`/server setup`** — creates roles, categories, channels, and permission overwrites. **Re-run** deletes previous bot-made channels/categories (including old `RUSH PILOT · …` names) and builds a fresh layout; friends run **`/connect`** again for new private feeds.
 7. **Optional** auto **Rain Member** when someone joins: Developer Portal → **Server Members Intent** ON, then `DISCORD_SERVER_MEMBERS_INTENT=1` in `.env` and restart. Without this, friends still get the role when they run **`/connect`**.
 
 Friends only use `/` commands — bot replies never include dashboard or site links.
@@ -78,7 +78,7 @@ Same as the dashboard **Session JWT (advanced)** field: log in on **rorush.com**
 
 ## What `/server setup` creates (staff)
 
-Re-run anytime to **repair roles and channel permissions** (does not delete friend threads).
+Re-run anytime to **replace** the bot layout (old INFO / FEEDS / STAFF channels and `#rain-feeds` threads are removed) and **repair roles**. The setup reply reports whether **auto Rain Member on join** is ON (`DISCORD_SERVER_MEMBERS_INTENT=1` + Server Members Intent in the Developer Portal).
 
 | Piece | Purpose |
 |--------|---------|

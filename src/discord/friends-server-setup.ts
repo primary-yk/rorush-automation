@@ -6,7 +6,9 @@ import {
   type Role,
   type TextChannel,
 } from "discord.js";
-import { getSettings, updateSettings } from "../db/repositories.js";
+import { clearAllDiscordUserThreads, getSettings, updateSettings } from "../db/repositories.js";
+import { evaluateAutoRoleForSetup } from "./friends-auto-role-status.js";
+import { purgeManagedServerChannels } from "./friends-server-purge.js";
 import {
   FRIENDS_CATEGORY_NAMES,
   FRIENDS_CHANNEL_NAMES,
@@ -268,9 +270,15 @@ async function ensureTextChannel(input: {
   return ch;
 }
 
-async function seedChannelIntro(channel: TextChannel, embed: import("discord.js").EmbedBuilder): Promise<void> {
-  const recent = await channel.messages.fetch({ limit: 5 }).catch(() => null);
-  if (recent && recent.size > 0) return;
+async function seedChannelIntro(
+  channel: TextChannel,
+  embed: import("discord.js").EmbedBuilder,
+  force = false,
+): Promise<void> {
+  if (!force) {
+    const recent = await channel.messages.fetch({ limit: 5 }).catch(() => null);
+    if (recent && recent.size > 0) return;
+  }
   await channel.send({ embeds: [embed] }).catch(() => undefined);
 }
 
@@ -288,6 +296,13 @@ export async function runFriendsServerSetup(input: {
   }
 
   const prior = parseFriendsServerLayout(getSettings().discord_server_layout_json);
+
+  const { deleted: purgedChannels } = await purgeManagedServerChannels(input.guild, prior);
+  if (purgedChannels > 0) {
+    clearAllDiscordUserThreads();
+  }
+
+  const autoRole = await evaluateAutoRoleForSetup(input.guild);
 
   const hostRole = await ensureRole(
     input.guild,
@@ -370,8 +385,8 @@ export async function runFriendsServerSetup(input: {
     hostUserId: input.hostUserId,
   });
 
-  await seedChannelIntro(startHere, buildStartHereEmbed());
-  await seedChannelIntro(commands, buildCommandsChannelEmbed());
+  await seedChannelIntro(startHere, buildStartHereEmbed(), purgedChannels > 0);
+  await seedChannelIntro(commands, buildCommandsChannelEmbed(), purgedChannels > 0);
 
   const layout: FriendsServerLayout = {
     version: FRIENDS_LAYOUT_VERSION,
@@ -392,17 +407,30 @@ export async function runFriendsServerSetup(input: {
     discord_report_enabled: 1,
   });
 
+  const purgeLine =
+    purgedChannels > 0
+      ? `Removed **${purgedChannels}** old channel(s)/thread(s) from the previous layout. Friends should run **`/connect`** again for a new private feed.`
+      : "No prior bot channels to remove (first setup).";
+
+  const memberSyncLine =
+    autoRole.envEnabled && autoRole.memberListOk
+      ? `Member sync this run · **${membersTagged}** received **${FRIENDS_ROLE_NAMES.pilot}**.`
+      : "Member sync skipped — see auto-role status below.";
+
   const summaryLines = [
-    "**Server layout applied** (safe to re-run — repairs roles & permissions)",
+    "**Server layout applied**",
+    "",
+    purgeLine,
     "",
     `Roles · **${FRIENDS_ROLE_NAMES.host}** · **${FRIENDS_ROLE_NAMES.pilot}**`,
     `Info · ${infoCat.name} → <#${startHere.id}> · <#${commands.id}>`,
     `Feeds · ${feedsCat.name} → <#${rainFeeds.id}> (private threads per friend)`,
     `Host · ${hostCat.name} → <#${hostLog.id}> (captcha / join errors — not DMs)`,
     "",
-    `Auto-role · **${FRIENDS_ROLE_NAMES.pilot}** on join (+ ${membersTagged} existing member(s) updated this run)`,
+    ...autoRole.lines,
+    memberSyncLine,
     "",
-    "Friends: **`/connect`** → **`/account add`**. Staff log → `#host-log`.",
+    "Friends: **`/connect`** → **`/account add`** or **`/account session`**. Staff log → `#host-log`.",
   ];
 
   return { layout, summaryLines };
