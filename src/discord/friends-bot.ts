@@ -203,6 +203,27 @@ function buildSlashCommands() {
         .setDescription("After rain (+ limbo), move profit to RoRush vault")
         .addStringOption((o) => o.setName("nickname").setDescription("Account nickname").setRequired(true))
         .addBooleanOption((o) => o.setName("on").setDescription("Enable or disable").setRequired(true)),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("vaultlock")
+        .setDescription("Timed RoRush vault lock (withdraw blocked; rain still deposits)")
+        .addStringOption((o) => o.setName("nickname").setDescription("Account nickname").setRequired(true))
+        .addStringOption((o) =>
+          o
+            .setName("duration")
+            .setDescription("Lock length (or off)")
+            .setRequired(true)
+            .addChoices(
+              { name: "Off", value: "off" },
+              { name: "10 minutes", value: "10m" },
+              { name: "30 minutes", value: "30m" },
+              { name: "1 hour", value: "1h" },
+              { name: "6 hours", value: "6h" },
+              { name: "12 hours", value: "12h" },
+              { name: "1 day", value: "1d" },
+            ),
+        ),
     ),
   new SlashCommandBuilder()
     .setName("rain")
@@ -758,6 +779,37 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
           interaction.options.getBoolean("on", true),
         );
         await editEmbeds(interaction, resultEmbed(text));
+        return;
+      }
+      if (sub === "vaultlock") {
+        await interaction.deferReply({ ephemeral: true });
+        const nick = interaction.options.getString("nickname", true);
+        const account = accountsForDiscordUser(userId).find(
+          (a) => a.nickname.toLowerCase() === nick.trim().toLowerCase(),
+        );
+        if (!account) {
+          await editEmbeds(
+            interaction,
+            resultEmbed(`No account **${nick}** saved for you. Use \`/account add\`.`),
+          );
+          return;
+        }
+        const { parseVaultLockPreset } = await import("../rorush/vault-lock.js");
+        const { applyVaultLockSetting } = await import("../automation/vault-lock-apply.js");
+        const minutes = parseVaultLockPreset(interaction.options.getString("duration", true));
+        if (minutes == null) {
+          await editEmbeds(interaction, buildErrorEmbed("Invalid vault lock duration."));
+          return;
+        }
+        try {
+          const text = await applyVaultLockSetting({ accountId: account.id, lockMinutes: minutes });
+          await editEmbeds(interaction, resultEmbed(text));
+        } catch (err) {
+          await editEmbeds(
+            interaction,
+            buildErrorEmbed(err instanceof Error ? err.message : String(err)),
+          );
+        }
         return;
       }
       await interaction.deferReply({ ephemeral: true });

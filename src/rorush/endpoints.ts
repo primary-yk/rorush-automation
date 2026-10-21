@@ -15,6 +15,7 @@ export const RORUSH_PATHS = {
     deposit: "/api/v1/vault/deposit",
     withdraw: "/api/v1/vault/withdraw",
     info: "/api/v1/vault/info",
+    lock: "/api/v1/vault/lock",
   },
   rewards: {
     dailyCasesInfo: "/api/v1/rewards/daily-cases/info",

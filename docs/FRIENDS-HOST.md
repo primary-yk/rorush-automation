@@ -70,6 +70,7 @@ No install. In your Discord server:
 | `/account refresh` | Manual balance/level refresh (one nickname or all yours) |
 | `/account pause` / `resume` | Pause **one account** (host: any nickname; friends: own only) |
 | `/account vault` | After rain (+ limbo), send **profit** (wallet above pre-rain balance) to **RoRush vault** |
+| `/account vaultlock` | Timed vault lock on RoRush (**10m**–**1d**). Withdraw blocked until timer ends; **rain still deposits** while locked |
 | `/rain` / `/cases` | Turn automation on/off |
 | `/limbo set` | Wager on/off + multiplier + fallback bet |
 | `/limbo test` | One manual test bet (real balance) |

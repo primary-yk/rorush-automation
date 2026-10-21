@@ -71,6 +71,8 @@ function migrateAccounts(db: Database.Database): void {
     ["limbo_bet_coins", "REAL NOT NULL DEFAULT 1"],
     ["pre_wager_before_rain", "INTEGER NOT NULL DEFAULT 0"],
     ["auto_vault_deposit", "INTEGER NOT NULL DEFAULT 0"],
+    ["vault_lock_minutes", "INTEGER NOT NULL DEFAULT 0"],
+    ["vault_lock_expires_at", "TEXT"],
     ["automation_paused", "INTEGER NOT NULL DEFAULT 0"],
   ];
   for (const [name, type] of add) {

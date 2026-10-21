@@ -13,6 +13,7 @@ import { engine } from "../worker/engine.js";
 import { isAccountAutomationPaused } from "../accounts/account-automation.js";
 import { appendSessionHintIfNeeded } from "./friends-auth-hints.js";
 import { formatLifetimeShort, lifetimeBreakdown } from "./friends-lifetime.js";
+import { vaultLockStatusLine } from "../automation/vault-lock-apply.js";
 
 export function accountsForDiscordUser(discordUserId: string): AccountRow[] {
   return listAccounts().filter((a) => a.owner_discord_id === discordUserId);
@@ -176,6 +177,7 @@ function formatOneAccount(a: AccountRow): string {
     a.auto_open_cases ? "cases" : null,
     a.limbo_wager_enabled ? `limbo ${a.limbo_multiplier.toFixed(2)}×` : null,
     a.auto_vault_deposit ? "vault rain profit" : null,
+    vaultLockStatusLine(a),
     a.pre_wager_before_rain ? "pre-wager" : null,
     a.min_rain_amount > 0 ? `min pool ${a.min_rain_amount.toFixed(0)}` : null,
   ]
