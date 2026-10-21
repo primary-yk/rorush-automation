@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildRainJoinExhaustedReason,
   classifyRainJoinFailure,
   isPermanentRainJoinFailure,
   isRetryableRainFailure,
@@ -42,6 +43,28 @@ describe("isWagerRejection", () => {
     expect(isWagerRejection("You need to wager 100 more coins")).toBe(true);
     expect(isWagerRejection("Play through requirement not met")).toBe(true);
     expect(isWagerRejection("Captcha invalid")).toBe(false);
+  });
+});
+
+describe("buildRainJoinExhaustedReason", () => {
+  it("explains captcha timeout when no token was used", () => {
+    const msg = buildRainJoinExhaustedReason({
+      lastReason: "Could not join this rain",
+      joinSubmissions: 0,
+      captchaTokenEverHeld: false,
+    });
+    expect(msg.toLowerCase()).toContain("captcha");
+    expect(classifyRainJoinFailure(msg)).toBe("captcha");
+  });
+
+  it("explains captcha rejection after join was sent", () => {
+    const msg = buildRainJoinExhaustedReason({
+      lastReason: "Could not join this rain",
+      joinSubmissions: 2,
+      captchaTokenEverHeld: true,
+    });
+    expect(msg.toLowerCase()).toContain("submitting captcha");
+    expect(classifyRainJoinFailure(msg)).toBe("captcha");
   });
 });
 

@@ -55,9 +55,9 @@ function rainJoinFailureEmbedCopy(kind: RainJoinFailureKind): {
       };
     case "captcha":
       return {
-        title: "Rain · Captcha retry",
+        title: "Rain · Captcha issue",
         description:
-          "Captcha was rejected or expired. A new solve is queued automatically — this is **not** a wager issue.",
+          "hCaptcha / 2Captcha did not complete a valid join for this pool. This is **not** a wager issue — check API key balance and host logs.",
         color: COLORS.rainFail,
       };
     case "pool_filter":
@@ -343,6 +343,17 @@ export async function reportRainOutcome(input: {
     title = failCopy.title;
     description = failCopy.description;
     color = failCopy.color;
+    if (kind === "captcha") {
+      if (/not ready before the join window/i.test(detail)) {
+        title = "Rain · Captcha not ready";
+        description =
+          "2Captcha did not finish before the join window closed. Top up **2Captcha**, confirm **CAPTCHA_API_KEY** in `.env`, and watch **#host-log** for solve errors.";
+      } else if (/after submitting captcha/i.test(detail)) {
+        title = "Rain · Captcha rejected";
+        description =
+          "A captcha token was sent but RoRush did not confirm the join. The next rain will request a **fresh** solve automatically.";
+      }
+    }
     const noteLabel =
       kind === "captcha"
         ? "Site message"

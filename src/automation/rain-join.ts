@@ -180,12 +180,45 @@ export function classifyRainJoinFailure(
   if (/below filter|pool below|below minimum|join rain disabled/i.test(message)) {
     return "pool_filter";
   }
-  if (isWagerRejection(message)) return "wager";
   if (ctx?.wagerClearAttempted) return "wager_after_limbo";
-  if (/captcha|hcaptcha|complete the captcha|captcha again|token missing/i.test(message)) {
+  if (
+    /captcha|hcaptcha|complete the captcha|captcha again|token missing|2captcha|submitting captcha|not ready before the join window/i.test(
+      message,
+    )
+  ) {
     return "captcha";
   }
+  if (isWagerRejection(message)) return "wager";
   return "other";
+}
+
+const GENERIC_RAIN_JOIN_FAILURE = /^could not join this rain\.?$/i;
+
+/** Final Discord/log reason when the join loop ends without success. */
+export function buildRainJoinExhaustedReason(input: {
+  lastReason: string;
+  joinSubmissions: number;
+  captchaTokenEverHeld: boolean;
+}): string {
+  const last = input.lastReason.trim();
+  if (!GENERIC_RAIN_JOIN_FAILURE.test(last)) return last;
+
+  if (input.joinSubmissions === 0 && !input.captchaTokenEverHeld) {
+    return (
+      "Captcha was not ready before the join window closed. " +
+      "Check **CAPTCHA_API_KEY**, **2Captcha balance**, and host logs for solve errors — this is not a wager issue."
+    );
+  }
+  if (input.joinSubmissions > 0) {
+    return (
+      "Join failed after submitting captcha — RoRush did not accept the token (expired, invalid, or rejected). " +
+      "The next rain will request a fresh 2Captcha solve."
+    );
+  }
+  return (
+    "Join window closed before a successful join. " +
+    "If captcha solves were slow, check 2Captcha balance or host **#host-log** for captcha errors."
+  );
 }
 
 /** Do not keep burning captcha/join attempts for these (same rain window). */

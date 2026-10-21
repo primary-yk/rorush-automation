@@ -17,6 +17,7 @@ import {
 } from "../automation/rain-captcha.js";
 import { clearRainJoinStateForRain, isRainJoined } from "../automation/rain-join-state.js";
 import {
+  buildRainJoinExhaustedReason,
   isManualWagerClearReason,
   isPermanentRainJoinFailure,
   joinRainForAccount,
@@ -580,6 +581,8 @@ export class AutomationEngine {
     let hub: Awaited<ReturnType<HubRegistry["ensure"]>> | null = null;
     let lastReason = "Could not join this rain";
     let lastWagerClearAttempted = false;
+    let captchaTokenEverHeld = false;
+    let joinSubmissions = 0;
 
     while (tries < maxTries) {
       tries++;
@@ -641,9 +644,12 @@ export class AutomationEngine {
         continue;
       }
 
+      captchaTokenEverHeld = true;
+
       try {
         rainTelemetryAccountPhase(liveJoin.rainId, account.id, account.nickname, "joining");
         hub ??= await this.accountHubs.ensure(account.id, { rain: true, cases: true });
+        joinSubmissions++;
         const result = await joinRainForAccount({
           accountId: account.id,
           rain: liveJoin,
@@ -716,11 +722,16 @@ export class AutomationEngine {
       const pool =
         liveEnd?.amount ??
         (this.activeRain?.rainId === rainId ? this.activeRain?.amount : undefined);
+      const finalReason = buildRainJoinExhaustedReason({
+        lastReason,
+        joinSubmissions,
+        captchaTokenEverHeld,
+      });
       if (!isManualWagerClearReason(lastReason)) {
         void reportRainOutcome({
           nickname: account.nickname,
           success: false,
-          message: lastReason,
+          message: finalReason,
           rainId,
           poolCoins: pool ?? undefined,
           wagerClearAttempted: lastWagerClearAttempted,
