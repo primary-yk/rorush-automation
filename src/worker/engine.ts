@@ -816,7 +816,12 @@ export class AutomationEngine {
     if (!account) return { accountId, ok: false, error: "Account not found" };
     try {
       const { client } = await ensureAuthenticated(account.id);
-      const [balanceRaw, levelRaw] = await Promise.all([client.getBalance(), client.getLevel()]);
+      const { fetchVaultBalanceCoins } = await import("../rorush/vault.js");
+      const [balanceRaw, levelRaw, vaultBal] = await Promise.all([
+        client.getBalance(),
+        client.getLevel(),
+        fetchVaultBalanceCoins(client).catch(() => null),
+      ]);
       const balanceRawAmount = parseBalanceCents(balanceRaw);
       const level = parseLevel(levelRaw);
       const patch: Parameters<typeof updateAccount>[1] = {};
@@ -827,6 +832,7 @@ export class AutomationEngine {
             : balanceRawAmount;
       }
       if (level != null) patch.level = level;
+      if (vaultBal != null) patch.vault_balance = vaultBal;
       const row = listAccounts().find((a) => a.id === account.id);
       if (row?.last_error && isIgnorableCaseError(row.last_error)) {
         patch.last_error = null;

@@ -71,6 +71,8 @@ No install. In your Discord server:
 | `/account pause` / `resume` | Pause **one account** (host: any nickname; friends: own only) |
 | `/account vault` | Always-on: after rain (+ limbo), send **profit** to **RoRush vault** |
 | `/rorush vault` | **Dropdowns** — **account**, optional **duration** (lock withdraw), optional **vault_rain**. **No lock + vault_rain true** = always vault rain (`/account vault on`). **Lock + vault_rain** = rain→vault until timer ends. Expired timers do not re-lock |
+| `/rorush off` | Turn off **all** vault automation on the host for one account (does not unlock RoRush early) |
+| `/owner backup` | **Owner only** — encrypted JSON backup to move hosts (same `ENCRYPTION_KEY` on new PC) |
 | `/rain` / `/cases` | Turn automation on/off |
 | `/limbo set` | Wager on/off + multiplier + fallback bet |
 | `/limbo test` | One manual test bet (real balance) |

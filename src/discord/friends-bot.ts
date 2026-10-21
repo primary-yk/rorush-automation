@@ -5,6 +5,7 @@ import {
   REST,
   Routes,
   SlashCommandBuilder,
+  AttachmentBuilder,
   type ButtonInteraction,
   type ChatInputCommandInteraction,
   type EmbedBuilder,
@@ -24,7 +25,7 @@ import {
   addAccountForDiscordUser,
   addAccountSessionForDiscordUser,
   refreshAccountsForDiscordUser,
-  removeAccountForDiscordUser,
+  findOwnedAccount,
   setAccountAutomationPaused,
   setAutoVaultDeposit,
   setLimbo,
@@ -62,7 +63,13 @@ import {
   vaultRainDuringLockOption,
 } from "./friends-slash-options.js";
 import { parseVaultLockPreset } from "../rorush/vault-lock.js";
-import { startVaultSession } from "../automation/vault-lock-apply.js";
+import { clearAllVaultPreferences, startVaultSession } from "../automation/vault-lock-apply.js";
+import {
+  buildRemoveAccountConfirmRow,
+  handleRemoveAccountButton,
+  isRemoveConfirmButton,
+} from "./friends-account-remove.js";
+import { writeHostBackupFile } from "./friends-owner-backup.js";
 import {
   buildAccountsEmbed,
   buildErrorEmbed,
@@ -235,6 +242,20 @@ function buildSlashCommands() {
         .addStringOption((o) => savedAccountOption(o, { description: "Pick your account" }))
         .addStringOption((o) => vaultLockDurationOption(o))
         .addBooleanOption((o) => vaultRainDuringLockOption(o)),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("off")
+        .setDescription("Turn off all vault automation for an account (no RoRush early unlock)")
+        .addStringOption((o) => savedAccountOption(o, { description: "Pick your account" })),
+    ),
+  new SlashCommandBuilder()
+    .setName("owner")
+    .setDescription("Host owner tools (HOST_DISCORD_USER_ID only)")
+    .addSubcommand((sub) =>
+      sub
+        .setName("backup")
+        .setDescription("Download encrypted backup JSON to move this host to another PC"),
     ),
   new SlashCommandBuilder()
     .setName("rain")
@@ -421,6 +442,10 @@ export async function startFriendsDiscordBot(): Promise<void> {
       }
       if (isVaultFlowButton(interaction.customId)) {
         void handleVaultFlowButton(interaction, interaction.user.id);
+        return;
+      }
+      if (isRemoveConfirmButton(interaction.customId)) {
+        void handleRemoveAccountButton(interaction, interaction.user.id);
       }
     }
   });
@@ -800,6 +825,33 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
         await editEmbeds(interaction, resultEmbed(text));
         return;
       }
+      if (sub === "remove") {
+        const nick = interaction.options.getString("nickname", true);
+        const account = findOwnedAccount(userId, nick);
+        if (!account) {
+          await interaction.reply({
+            ephemeral: true,
+            embeds: [
+              buildPlainResultEmbed(
+                `No account **${nick}** saved for you. Use \`/account add\`.`,
+                false,
+              ),
+            ],
+          });
+          return;
+        }
+        await interaction.reply({
+          ephemeral: true,
+          embeds: [
+            buildPlainResultEmbed(
+              `Remove **${account.nickname}** from this host?\n\nAutomation stops immediately. This cannot be undone from Discord.`,
+              true,
+            ),
+          ],
+          components: [buildRemoveAccountConfirmRow(account.id)],
+        });
+        return;
+      }
       await interaction.deferReply({ ephemeral: true });
       if (sub === "add") {
         const nick = interaction.options.getString("nickname", true);
@@ -839,17 +891,32 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
         }
         return;
       }
-      if (sub === "remove") {
-        const nick = interaction.options.getString("nickname", true);
-        const text = await removeAccountForDiscordUser(userId, nick);
-        await editEmbeds(interaction, resultEmbed(text));
-        if (/^removed/i.test(text)) {
-          void logHostMemberActivity({
-            kind: "account_remove",
-            discordUserId: userId,
-            displayName: interactionDisplayName(interaction),
-            detail: `Nickname **${nick}**`,
+    }
+
+    if (interaction.commandName === "owner") {
+      if (!isHost(userId)) {
+        await interaction.reply({
+          ephemeral: true,
+          content: "Owner only — set `HOST_DISCORD_USER_ID` to your Discord user id.",
+        });
+        return;
+      }
+      const sub = interaction.options.getSubcommand();
+      if (sub === "backup") {
+        await interaction.deferReply({ ephemeral: true });
+        try {
+          const { path, filename } = writeHostBackupFile();
+          const file = new AttachmentBuilder(path, { name: filename });
+          await interaction.editReply({
+            content:
+              "Host backup (encrypted logins). Keep **`ENCRYPTION_KEY`** identical on the new PC, then restore via dashboard or support docs.",
+            files: [file],
           });
+        } catch (err) {
+          await editEmbeds(
+            interaction,
+            buildErrorEmbed(err instanceof Error ? err.message : String(err)),
+          );
         }
         return;
       }
@@ -857,6 +924,28 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
 
     if (interaction.commandName === "rorush") {
       const sub = interaction.options.getSubcommand();
+      if (sub === "off") {
+        await interaction.deferReply({ ephemeral: true });
+        const nick = interaction.options.getString("account", true);
+        const account = findOwnedAccount(userId, nick);
+        if (!account) {
+          await editEmbeds(
+            interaction,
+            resultEmbed(`No account **${nick}** saved for you. Use \`/account add\`.`),
+          );
+          return;
+        }
+        try {
+          const text = await clearAllVaultPreferences(account.id);
+          await editEmbeds(interaction, resultEmbed(text));
+        } catch (err) {
+          await editEmbeds(
+            interaction,
+            buildErrorEmbed(err instanceof Error ? err.message : String(err)),
+          );
+        }
+        return;
+      }
       if (sub === "vault") {
         await interaction.deferReply({ ephemeral: true });
         const nick = interaction.options.getString("account", true);

@@ -60,6 +60,7 @@ export function categoryEmoji(category: string, message: string): string {
     return "🎲";
   }
   if (category === "case") return "📦";
+  if (category === "vault") return "🔒";
   return "▪️";
 }
 

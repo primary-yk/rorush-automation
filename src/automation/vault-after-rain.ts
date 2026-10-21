@@ -4,6 +4,7 @@ import { depositCoinsToVault } from "../rorush/vault.js";
 import type { RoRushHttpClient } from "../rorush/http-client.js";
 import { parseBalanceCents } from "../rorush/balance-level.js";
 import { shouldAutoVaultRainProfit } from "./vault-session.js";
+import { notifyVaultDepositInUserFeed } from "../discord/friends-vault-feed.js";
 
 async function readBalanceCoins(client: RoRushHttpClient): Promise<number> {
   const body = await client.getBalance("crypto");
@@ -48,9 +49,14 @@ export async function vaultRainCycleProfits(input: {
 
   appendLog({
     accountId: input.account.id,
-    category: "rain",
-    message: "Moved rain profit to vault",
+    category: "vault",
+    message: "Vaulted rain profit",
     detail: `${depositCoins.toFixed(2)} coins · rain ${input.rainId.slice(0, 8)}…`,
+  });
+  void notifyVaultDepositInUserFeed({
+    accountId: input.account.id,
+    depositedCoins: depositCoins,
+    rainId: input.rainId,
   });
   return { deposited: depositCoins };
 }

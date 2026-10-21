@@ -17,6 +17,7 @@ import { categoryEmoji, COLORS, withBrand, type RushEmbed } from "./embeds.js";
 import { isFriendsHostMode } from "./host-alerts.js";
 import { parseFriendsServerLayout, type FriendsServerLayout } from "./friends-layout.js";
 import { classifyHostIssue, groupHostLogEmbeds, tagHostEmbed, bucketLabel } from "./host-log-classify.js";
+import { isHostOnlyActivityLog } from "./friends-activity-routing.js";
 import { redactForDiscord, type ActivityLogRow } from "./public-alert-filter.js";
 
 let clientRef: Client | null = null;
@@ -147,7 +148,8 @@ const HOST_TITLE =
 /** @internal testable routing without DB/settings. */
 export function classifyEmbedRoute(title: string, hasOwner: boolean): "host" | "user" {
   if (HOST_TITLE.test(title)) return "host";
-  if (/joined|hit|miss|limbo|rain|case/i.test(title) && hasOwner) return "user";
+  if (/fail|error|captcha|timeout|denied|offline|stall/i.test(title)) return "host";
+  if (/joined|hit|miss|limbo|rain|case|vault/i.test(title) && hasOwner) return "user";
   if (hasOwner) return "user";
   return "host";
 }
@@ -198,10 +200,7 @@ export async function postFriendsActivityLogs(logs: ActivityLogRow[]): Promise<v
   for (const log of logs) {
     const embed = activityLogToEmbed(log);
     const owner = ownerForAccountId(log.account_id);
-    const hostish =
-      /join failed|join error|pipeline error|captcha|timeout|fail|error/i.test(log.message) ||
-      log.category === "system";
-    if (hostish || !owner) {
+    if (isHostOnlyActivityLog(log) || !owner) {
       hostBatch.push(embed);
     } else {
       const list = byUser.get(owner) ?? [];
@@ -231,12 +230,23 @@ function activityLogToEmbed(log: ActivityLogRow): RushEmbed {
   }
   const value = detail ? `**${message}**\n${detail.slice(0, 350)}` : `**${message}**`;
   const color =
-    log.category === "rain"
+    log.category === "vault"
       ? COLORS.rainOk
+      : log.category === "rain"
+        ? COLORS.rainOk
+        : log.category === "limbo"
+          ? COLORS.limboSkip
+          : COLORS.activity;
+  const headline =
+    log.category === "rain"
+      ? "Rain"
       : log.category === "limbo"
-        ? COLORS.limboSkip
-        : COLORS.activity;
-  const headline = log.category === "rain" ? "Rain" : log.category === "limbo" ? "Limbo" : log.category === "case" ? "Cases" : "Activity";
+        ? "Limbo"
+        : log.category === "case"
+          ? "Cases"
+          : log.category === "vault"
+            ? "Vault"
+            : "Activity";
   const bucket = classifyHostIssue(`${log.message} ${log.detail ?? ""}`);
   return withBrand(
     {

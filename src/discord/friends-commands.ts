@@ -1,6 +1,7 @@
 import { encryptField, verifyRoRushEmailPassword } from "../accounts/session-manager.js";
 import { RoRushHttpClient } from "../rorush/http-client.js";
 import {
+  countRainJoinsToday,
   deleteAccount,
   getAccount,
   insertAccount,
@@ -166,11 +167,19 @@ export function formatAccountList(discordUserId: string): string {
   if (accounts.length === 0) {
     return "You have no accounts yet. Use `/account add` or `/account session` — only you see the reply.";
   }
-  return accounts.map(formatOneAccount).join("\n\n");
+  const joinsToday = countRainJoinsToday(accounts.map((a) => a.id));
+  const lines = accounts.map((a) =>
+    formatOneAccount(a, accounts.length === 1 ? joinsToday : undefined),
+  );
+  if (accounts.length > 1) {
+    lines.push(`**Rain joins today (all yours):** ${joinsToday}`);
+  }
+  return lines.join("\n\n");
 }
 
-function formatOneAccount(a: AccountRow): string {
+function formatOneAccount(a: AccountRow, joinsToday?: number): string {
   const bal = a.balance != null ? a.balance.toFixed(2) : "—";
+  const vault = a.vault_balance != null ? a.vault_balance.toFixed(2) : "—";
   const lvl = a.level != null ? String(a.level) : "—";
   const flags = [
     a.join_rain ? "rain" : null,
@@ -185,7 +194,10 @@ function formatOneAccount(a: AccountRow): string {
     .join(", ");
   const life = formatLifetimeShort(lifetimeBreakdown(a));
   const paused = isAccountAutomationPaused(a) ? " · **automation paused**" : "";
-  let line = `• **${a.nickname}** · ${bal} coins · lvl ${lvl}${paused}\n  ${life}\n  ${flags || "all automation off"} · ${a.status}`;
+  const joins =
+    joinsToday != null && joinsToday > 0 ? ` · **${joinsToday}** rain join(s) today` : "";
+  let line =
+    `• **${a.nickname}** · wallet **${bal}** · vault **${vault}** · lvl ${lvl}${paused}${joins}\n  ${life}\n  ${flags || "all automation off"} · ${a.status}`;
   line = appendSessionHintIfNeeded(line, a);
   return line;
 }

@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS accounts (
   status TEXT NOT NULL DEFAULT 'idle',
   last_error TEXT,
   balance REAL,
+  vault_balance REAL,
   level INTEGER,
   lifetime_rain REAL NOT NULL DEFAULT 0,
   lifetime_cases REAL NOT NULL DEFAULT 0,

@@ -3,6 +3,30 @@ import { appendLog, getAccount, updateAccount } from "../db/repositories.js";
 import { formatVaultLockPreset } from "../rorush/vault-lock.js";
 import { isVaultLockActive, lockVaultForMinutes } from "../rorush/vault.js";
 import { expireVaultSessionIfNeeded } from "./vault-session.js";
+import { engine } from "../worker/engine.js";
+
+/** Turn off always-on rain vault + local timed vault session prefs (does not unlock RoRush early). */
+export async function clearAllVaultPreferences(accountId: number): Promise<string> {
+  const account = getAccount(accountId);
+  if (!account) return "Account not found.";
+  updateAccount(accountId, {
+    auto_vault_deposit: 0,
+    vault_lock_minutes: 0,
+    vault_lock_expires_at: null,
+    vault_session_auto_deposit: 0,
+  });
+  await engine.reloadAccounts();
+  appendLog({
+    accountId,
+    category: "vault",
+    message: "Vault automation cleared",
+    detail: "Always-on rain vault and local lock session prefs off",
+  });
+  return (
+    `**${account.nickname}** · All vault automation **OFF** on this host (always-on rain vault + local timer prefs).\n` +
+    "If vault is still locked on **RoRush**, wait for the site timer — this does not unlock early."
+  );
+}
 
 /** Start a timed vault lock from `/rorush vault` (optional rain→vault for that window only). */
 export async function startVaultSession(input: {

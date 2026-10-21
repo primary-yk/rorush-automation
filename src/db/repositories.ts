@@ -27,6 +27,7 @@ export type AccountRow = {
   status: string;
   last_error: string | null;
   balance: number | null;
+  vault_balance: number | null;
   level: number | null;
   lifetime_rain: number;
   lifetime_cases: number;
@@ -207,7 +208,7 @@ export function updateAccount(
        pre_wager_before_rain = ?, auto_vault_deposit = ?, vault_lock_minutes = ?, vault_lock_expires_at = ?,
        vault_session_auto_deposit = ?,
        automation_paused = ?,
-       status = ?, last_error = ?, balance = ?, level = ?,
+       status = ?, last_error = ?, balance = ?, vault_balance = ?, level = ?,
        lifetime_rain = ?, lifetime_cases = ?, lifetime_codes = ?, updated_at = ?
        WHERE id = ?`,
     )
@@ -236,6 +237,7 @@ export function updateAccount(
       next.status,
       next.last_error,
       next.balance,
+      next.vault_balance ?? null,
       next.level,
       next.lifetime_rain,
       next.lifetime_cases,
@@ -561,6 +563,20 @@ export function getPilotStats(): {
     captchaSolvesEstimate7d: solveEstimate,
     estimatedCaptchaSpendUsd7d: Math.round(solveEstimate * spendPerSolve * 100) / 100,
   };
+}
+
+/** Successful rain joins since UTC midnight for the given accounts. */
+export function countRainJoinsToday(accountIds: number[]): number {
+  if (accountIds.length === 0) return 0;
+  const dayStart = `${new Date().toISOString().slice(0, 10)}T00:00:00.000Z`;
+  const placeholders = accountIds.map(() => "?").join(", ");
+  const row = getDb()
+    .prepare(
+      `SELECT COUNT(*) AS n FROM rain_joins
+       WHERE account_id IN (${placeholders}) AND success = 1 AND created_at >= ?`,
+    )
+    .get(...accountIds, dayStart) as { n: number };
+  return row.n ?? 0;
 }
 
 export function listRecentRainJoins(accountId: number, limit = 20) {

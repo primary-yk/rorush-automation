@@ -1,8 +1,27 @@
 import type { AutocompleteInteraction } from "discord.js";
+import type { AccountRow } from "../db/repositories.js";
 import { listAccounts } from "../db/repositories.js";
 import { accountsForDiscordUser } from "./friends-commands.js";
+import { isAccountAutomationPaused } from "../accounts/account-automation.js";
 
 const ACCOUNT_OPTION_NAMES = new Set(["account", "nickname"]);
+
+function formatAccountAutocompleteLabel(a: AccountRow): string {
+  const wallet = a.balance != null ? `${a.balance.toFixed(1)}w` : "—w";
+  const vault = a.vault_balance != null ? `${a.vault_balance.toFixed(1)}v` : "";
+  const balPart = vault ? `${wallet}/${vault}` : wallet;
+  const flags = [
+    a.join_rain ? "rain" : null,
+    a.auto_vault_deposit || a.vault_session_auto_deposit ? "vault" : null,
+    a.limbo_wager_enabled ? "limbo" : null,
+    isAccountAutomationPaused(a) ? "paused" : null,
+  ]
+    .filter(Boolean)
+    .join("·");
+  const suffix = flags || "off";
+  const label = `${a.nickname} · ${balPart} · ${suffix}`;
+  return label.length > 100 ? `${label.slice(0, 97)}…` : label;
+}
 
 export function accountNicknameAutocompleteChoices(input: {
   discordUserId: string;
@@ -16,7 +35,10 @@ export function accountNicknameAutocompleteChoices(input: {
   return pool
     .filter((a) => !q || a.nickname.toLowerCase().includes(q))
     .slice(0, 25)
-    .map((a) => ({ name: a.nickname, value: a.nickname }));
+    .map((a) => ({
+      name: formatAccountAutocompleteLabel(a),
+      value: a.nickname,
+    }));
 }
 
 function hostMayPickAnyAccount(interaction: AutocompleteInteraction, isHost: boolean): boolean {

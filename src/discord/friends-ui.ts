@@ -1,6 +1,8 @@
 import { EmbedBuilder, type APIEmbedField } from "discord.js";
 import { listAccounts, type AccountRow } from "../db/repositories.js";
 import { accountsForDiscordUser } from "./friends-commands.js";
+import { countRainJoinsToday } from "../db/repositories.js";
+import { vaultLockStatusLine } from "../automation/vault-lock-apply.js";
 import { discordSupportLine } from "./friends-copy.js";
 import { isAccountAutomationPaused } from "../accounts/account-automation.js";
 import { appendSessionHintIfNeeded } from "./friends-auth-hints.js";
@@ -52,7 +54,7 @@ export function buildHelpEmbed(): EmbedBuilder {
       {
         name: "Automation",
         value:
-          "`/rain` · `/cases`\n`/limbo set` · `/limbo test` · `/limbo filters`\n`/account vault` · `/rorush vault`",
+          "`/rain` · `/cases`\n`/limbo` · `/account vault` · `/rorush vault` · `/rorush off`",
         inline: true,
       },
       {
@@ -61,8 +63,9 @@ export function buildHelpEmbed(): EmbedBuilder {
         inline: true,
       },
       {
-        name: "Staff",
-        value: "`/server setup` · `/server earnings`\n`/jump` · `/thread restore`\n`/pause` · `/resume`",
+        name: "Staff / owner",
+        value:
+          "`/server setup` · `/server earnings` · `/server tools`\n`/jump` · `/thread restore` · `/pause` · `/resume`\n`/owner backup` (host user id only)",
         inline: true,
       },
     );
@@ -121,10 +124,13 @@ export function buildStatusEmbed(): EmbedBuilder {
 
 function accountRowField(a: AccountRow): APIEmbedField {
   const bal = a.balance != null ? `${a.balance.toFixed(2)} coins` : "—";
+  const vault = a.vault_balance != null ? `${a.vault_balance.toFixed(2)} coins` : "—";
   const lvl = a.level != null ? String(a.level) : "—";
   const toggles = [
     a.join_rain ? "Rain" : null,
     a.auto_open_cases ? "Cases" : null,
+    a.auto_vault_deposit ? "Vault rain" : null,
+    vaultLockStatusLine(a),
     a.limbo_wager_enabled ? `Limbo ${a.limbo_multiplier.toFixed(2)}×` : null,
     a.pre_wager_before_rain ? "Pre-wager" : null,
     a.min_rain_amount > 0 ? `Min pool ${a.min_rain_amount.toFixed(0)}` : null,
@@ -133,7 +139,7 @@ function accountRowField(a: AccountRow): APIEmbedField {
     .join(" · ") || "All automation off";
   const life = formatLifetimeShort(lifetimeBreakdown(a));
   const paused = isAccountAutomationPaused(a) ? "\n**Automation paused** — `/account resume` or staff override" : "";
-  let value = `Balance **${bal}** · Level **${lvl}**\n${life}\n${toggles}\nStatus: \`${a.status}\`${paused}`;
+  let value = `Wallet **${bal}** · Vault **${vault}** · Level **${lvl}**\n${life}\n${toggles}\nStatus: \`${a.status}\`${paused}`;
   value = appendSessionHintIfNeeded(value, a);
   return {
     name: a.nickname,
@@ -151,13 +157,21 @@ export function buildAccountsEmbed(discordUserId: string): EmbedBuilder {
     );
   }
   const total = sumLifetimeBreakdown(accounts);
+  const joinsToday = countRainJoinsToday(accounts.map((a) => a.id));
   return embed
     .addFields(accounts.slice(0, 7).map(accountRowField))
-    .addFields({
-      name: "Your lifetime (all accounts)",
-      value: formatLifetimeShort(total),
-      inline: false,
-    });
+    .addFields(
+      {
+        name: "Rain joins today (UTC)",
+        value: String(joinsToday),
+        inline: true,
+      },
+      {
+        name: "Your lifetime (all accounts)",
+        value: formatLifetimeShort(total),
+        inline: false,
+      },
+    );
 }
 
 export function buildPersonalEarningsEmbed(discordUserId: string): EmbedBuilder {
@@ -166,11 +180,17 @@ export function buildPersonalEarningsEmbed(discordUserId: string): EmbedBuilder 
   if (accounts.length === 0) {
     return embed.setDescription("No accounts linked to your Discord yet. Use `/account add` or `/account session`.");
   }
+  const joinsToday = countRainJoinsToday(accounts.map((a) => a.id));
   const fields: APIEmbedField[] = accounts.slice(0, 10).map((a) => ({
     name: a.nickname,
     value: formatLifetimeShort(lifetimeBreakdown(a)),
     inline: false,
   }));
+  fields.push({
+    name: "Rain joins today (UTC)",
+    value: String(joinsToday),
+    inline: false,
+  });
   const total = sumLifetimeBreakdown(accounts);
   fields.push({
     name: "Combined total",
