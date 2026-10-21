@@ -14,8 +14,10 @@ DISCORD_BOT_TOKEN=...
 DISCORD_GUILD_ID=...
 HOST_DISCORD_USER_ID=...
 
-# Optional: rain/error alerts to a channel (webhook from Discord → Integrations → Webhooks)
+# Optional: rain/error alerts — private webhook and/or DMs to HOST_DISCORD_USER_ID (not friends)
 # DISCORD_REPORT_WEBHOOK=https://discord.com/api/webhooks/...
+# Do NOT point DISCORD_ACTIVITY_CHANNEL_ID at a channel friends can read (use DMs or a private mod channel).
+# Set DISCORD_ACTIVITY_PUBLIC=1 only if you intentionally want the activity channel public.
 ```
 
 After adding the webhook line: `npm run setup-discord-webhook` once to verify.
@@ -56,7 +58,9 @@ No install. In your Discord server:
 | `/account remove` | Remove their account |
 | `/accounts` | Balance, level, toggles |
 | `/rain` / `/cases` | Turn automation on/off |
-| `/limbo` | Wager on/off + multiplier + optional bet |
+| `/limbo set` | Wager on/off + multiplier + fallback bet |
+| `/limbo test` | One manual test bet (real balance) |
+| `/limbo filters` | Min rain pool + pre-rain wager toggle |
 | `/status` | Engine summary |
 
 They **cannot** see or change each other’s accounts.

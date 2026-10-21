@@ -2,6 +2,7 @@ import { fetch } from "undici";
 import { listAccounts } from "../db/repositories.js";
 import { isRelayConnected, sendPilotEvent } from "../relay/pilot-client.js";
 import { redactForDiscord } from "./public-alert-filter.js";
+import { dmHostEmbeds, isFriendsHostMode } from "./host-alerts.js";
 import { resolveDiscordReportWebhookUrl } from "./report-webhook.js";
 import {
   COLORS,
@@ -32,7 +33,10 @@ async function deliverEmbed(embed: RushEmbed): Promise<void> {
     return;
   }
   const url = webhookConfigured();
-  if (!url) return;
+  if (!url) {
+    if (isFriendsHostMode()) await dmHostEmbeds([payload]);
+    return;
+  }
   try {
     const res = await fetch(url, {
       method: "POST",
@@ -57,7 +61,10 @@ export async function deliverEmbeds(embeds: RushEmbed[]): Promise<void> {
     return;
   }
   const url = webhookConfigured();
-  if (!url) return;
+  if (!url) {
+    if (isFriendsHostMode()) await dmHostEmbeds(stamped);
+    return;
+  }
   try {
     await fetch(url, {
       method: "POST",

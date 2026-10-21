@@ -14,6 +14,11 @@ import {
   shouldPostPublicDiscordAlert,
 } from "./public-alert-filter.js";
 import { reportLimboSkipped, reportRainAlert, reportRainJoinSummary } from "./reporter.js";
+import {
+  dmHostEmbeds,
+  isFriendsHostMode,
+  publicActivityChannelAllowed,
+} from "./host-alerts.js";
 import { resolveDiscordReportWebhookUrl } from "./report-webhook.js";
 
 export type { ActivityLogRow } from "./public-alert-filter.js";
@@ -129,6 +134,10 @@ async function postEmbeds(embeds: RushEmbed[]): Promise<void> {
   }
   const bot = envBotChannel();
   if (bot) {
+    if (isFriendsHostMode() && !publicActivityChannelAllowed()) {
+      await dmHostEmbeds(stamped);
+      return;
+    }
     const lines = stamped
       .flatMap((e) => e.fields?.map((f) => `${f.name}\n${f.value}`) ?? [e.description ?? e.title])
       .join("\n\n")
@@ -145,6 +154,8 @@ async function postEmbeds(embeds: RushEmbed[]): Promise<void> {
     } catch (err) {
       console.warn("[discord bot channel]", err instanceof Error ? err.message : String(err));
     }
+  } else if (isFriendsHostMode() && !webhookUrl()) {
+    await dmHostEmbeds(stamped);
   }
 }
 

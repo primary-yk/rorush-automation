@@ -23,8 +23,11 @@ import {
   formatAccountList,
   removeAccountForDiscordUser,
   setLimbo,
+  setRainFilters,
   setToggle,
+  testLimboForDiscordUser,
 } from "./friends-commands.js";
+import { isFriendsHostMode, notifyHostSlashError } from "./host-alerts.js";
 import { sanitizeDiscordOutbound } from "./sanitize-outbound.js";
 
 function out(text: string): string {
@@ -68,13 +71,44 @@ function buildSlashCommands() {
     .addBooleanOption((o) => o.setName("on").setDescription("true = on").setRequired(true)),
   new SlashCommandBuilder()
     .setName("limbo")
-    .setDescription("Limbo wager when rain requires play-through")
-    .addStringOption((o) => o.setName("account").setDescription("Your account nickname").setRequired(true))
-    .addBooleanOption((o) => o.setName("on").setDescription("Enable limbo wager").setRequired(true))
-    .addNumberOption((o) =>
-      o.setName("multiplier").setDescription(`Target multiplier (min ${LIMBO_MIN_MULTIPLIER})`).setMinValue(LIMBO_MIN_MULTIPLIER),
+    .setDescription("Limbo wager, test bet, and rain filters")
+    .addSubcommand((sub) =>
+      sub
+        .setName("set")
+        .setDescription("Wager settings when rain requires play-through")
+        .addStringOption((o) => o.setName("account").setDescription("Your account nickname").setRequired(true))
+        .addBooleanOption((o) => o.setName("on").setDescription("Enable limbo wager").setRequired(true))
+        .addNumberOption((o) =>
+          o
+            .setName("multiplier")
+            .setDescription(`Target multiplier (min ${LIMBO_MIN_MULTIPLIER})`)
+            .setMinValue(LIMBO_MIN_MULTIPLIER),
+        )
+        .addNumberOption((o) => o.setName("bet").setDescription("Fallback bet in coins")),
     )
-    .addNumberOption((o) => o.setName("bet").setDescription("Fallback bet in coins if pool unknown")),
+    .addSubcommand((sub) =>
+      sub
+        .setName("test")
+        .setDescription("One manual limbo bet (uses real balance)")
+        .addStringOption((o) => o.setName("account").setDescription("Your account nickname").setRequired(true))
+        .addNumberOption((o) =>
+          o.setName("bet").setDescription("Bet in coins (min 0.01)").setRequired(true).setMinValue(0.01),
+        )
+        .addNumberOption((o) =>
+          o
+            .setName("multiplier")
+            .setDescription("Override multiplier (optional)")
+            .setMinValue(LIMBO_MIN_MULTIPLIER),
+        ),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("filters")
+        .setDescription("Min rain pool and pre-rain wager")
+        .addStringOption((o) => o.setName("account").setDescription("Your account nickname").setRequired(true))
+        .addNumberOption((o) => o.setName("min_rain").setDescription("Skip join if pool below this (coins)").setMinValue(0))
+        .addBooleanOption((o) => o.setName("pre_wager").setDescription("Small limbo before join window")),
+    ),
   new SlashCommandBuilder().setName("pause").setDescription("Pause all automation (host)"),
   new SlashCommandBuilder().setName("resume").setDescription("Resume automation (host)"),
   ];
@@ -120,7 +154,7 @@ function helpText(): string {
     "`/account add` — save RoRush login (only you see it)",
     "`/account remove` — delete your account",
     "`/accounts` — balance, level, toggles",
-    "`/rain` · `/cases` · `/limbo` — automation toggles",
+    "`/rain` · `/cases` · `/limbo set` · `/limbo test` · `/limbo filters`",
     "`/status` — is the host engine running?",
     "`/pause` · `/resume` — host only (global stop/start)",
   ];
@@ -306,16 +340,38 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
         await interaction.reply({ ephemeral: true, content: out(block) });
         return;
       }
+      const sub = interaction.options.getSubcommand();
       await interaction.deferReply({ ephemeral: true });
-      const mult = interaction.options.getNumber("multiplier") ?? undefined;
-      const bet = interaction.options.getNumber("bet") ?? undefined;
-      const text = await setLimbo(userId, interaction.options.getString("account", true), {
-        enabled: interaction.options.getBoolean("on", true),
-        multiplier: mult,
-        betCoins: bet,
-      });
-      await interaction.editReply(out(text));
-      return;
+      const account = interaction.options.getString("account", true);
+      if (sub === "set") {
+        const text = await setLimbo(userId, account, {
+          enabled: interaction.options.getBoolean("on", true),
+          multiplier: interaction.options.getNumber("multiplier") ?? undefined,
+          betCoins: interaction.options.getNumber("bet") ?? undefined,
+        });
+        await interaction.editReply(out(text));
+        return;
+      }
+      if (sub === "test") {
+        const text = await testLimboForDiscordUser(
+          userId,
+          account,
+          interaction.options.getNumber("bet", true),
+          interaction.options.getNumber("multiplier") ?? undefined,
+        );
+        await interaction.editReply(out(text));
+        return;
+      }
+      if (sub === "filters") {
+        const minRain = interaction.options.getNumber("min_rain");
+        const preWager = interaction.options.getBoolean("pre_wager");
+        const text = await setRainFilters(userId, account, {
+          minRainCoins: minRain ?? undefined,
+          preWagerBeforeRain: preWager ?? undefined,
+        });
+        await interaction.editReply(out(text));
+        return;
+      }
     }
 
     if (interaction.commandName === "license") {
@@ -413,10 +469,22 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    if (isFriendsHostMode() && !isHost(interaction.user.id)) {
+      void notifyHostSlashError({
+        command: interaction.commandName,
+        userId: interaction.user.id,
+        username: interaction.user.username,
+        detail: msg,
+      });
+    }
+    const friendMsg =
+      isFriendsHostMode() && !isHost(interaction.user.id)
+        ? "Something went wrong — the host was notified."
+        : msg;
     if (interaction.deferred || interaction.replied) {
-      await interaction.editReply({ content: out(msg) }).catch(() => undefined);
+      await interaction.editReply({ content: out(friendMsg) }).catch(() => undefined);
     } else {
-      await interaction.reply({ ephemeral: true, content: out(msg) }).catch(() => undefined);
+      await interaction.reply({ ephemeral: true, content: out(friendMsg) }).catch(() => undefined);
     }
   }
 }
