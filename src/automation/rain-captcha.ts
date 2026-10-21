@@ -131,31 +131,11 @@ async function solveRainCaptchaWithHedge(): Promise<string | null> {
 
     void solveCaptcha("hcaptcha", opts).then(finish).catch(onErr);
 
-    const hedgeTimer = setTimeout(() => {
+    setTimeout(() => {
       if (settled) return;
       console.log("[rain-captcha] hedge solve — primary task still in flight");
       void solveCaptcha("hcaptcha", { ...opts, taskAttempts: 2 }).then(finish).catch(onErr);
     }, hedgeAfterMs);
-
-    void Promise.resolve().then(() => {
-      /* allow primary to win without waiting for hedge timer cleanup */
-    });
-
-    const watchdog = setTimeout(() => {
-      clearTimeout(hedgeTimer);
-    }, 600_000);
-    void Promise.race([
-      new Promise<void>((r) => {
-        const check = setInterval(() => {
-          if (settled) {
-            clearInterval(check);
-            clearTimeout(hedgeTimer);
-            clearTimeout(watchdog);
-            r();
-          }
-        }, 200);
-      }),
-    ]);
   });
 }
 

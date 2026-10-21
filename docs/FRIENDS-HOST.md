@@ -31,7 +31,7 @@ After adding the webhook line: `npm run setup-discord-webhook` once to verify.
 5. `npm run discord-bot-doctor` then `npm run dev` — console must show **`[friends-bot] logged in`**
 6. In Discord (staff): **`/server setup`** — creates roles, categories, channels, and permission overwrites. **Re-run** needs **`/server setup confirm:true`** (deletes previous bot channels/threads); friends open **`#connect`** again after a reset.
 7. Auto **Rain Member** when someone joins: Developer Portal → **Server Members Intent** ON, then **restart** `npm run dev` (friends bots use GuildMembers by default). Set `DISCORD_SERVER_MEMBERS_INTENT=0` only if the Portal toggle is off. Friends always get the role via **`#connect`** / **`/connect`** too.
-8. By default the bot **auto-creates a private feed when someone joins** (needs Server Members Intent + **`/server setup`** done). Set `DISCORD_AUTO_CONNECT_ON_JOIN=0` if you want them to use **`#connect`** only.
+8. By default **no** auto feed on join — members use **`#connect`** or **`/connect`**. Set `DISCORD_AUTO_CONNECT_ON_JOIN=1` to auto-create a private feed when someone joins (needs Server Members Intent + **`/server setup`**).
 
 Friends only use `/` commands — bot replies never include dashboard or site links.
 

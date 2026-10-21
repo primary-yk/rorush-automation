@@ -511,7 +511,11 @@ export async function startFriendsDiscordBot(): Promise<void> {
 
   if (autoConnectFeedOnJoin()) {
     console.log(
-      "[friends-bot] Private feed auto-connect on join: ON (set DISCORD_AUTO_CONNECT_ON_JOIN=0 to require #connect button)",
+      "[friends-bot] Private feed auto-connect on join: ON (DISCORD_AUTO_CONNECT_ON_JOIN=1)",
+    );
+  } else {
+    console.log(
+      "[friends-bot] Private feed auto-connect on join: OFF — members use #connect or /connect (set DISCORD_AUTO_CONNECT_ON_JOIN=1 to enable)",
     );
   }
 
