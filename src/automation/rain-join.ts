@@ -681,6 +681,13 @@ async function placeLimboWagerBet(
 
   const balanceBeforeBet = await readBalanceCoins(client);
   let betCoins: number;
+  /** Wager full rain payout / pool slice — do not apply the 2% wallet headroom. */
+  const wagerFullRainAmount =
+    opts.balanceBeforeRain != null || (rainAmountCoins > 0 && opts.betCoinsOverride == null);
+  const balanceCap = (amount: number) =>
+    wagerFullRainAmount
+      ? Math.min(amount, balanceBeforeBet)
+      : Math.min(amount, balanceBeforeBet * 0.98);
 
   if (opts.betCoinsOverride != null && Number.isFinite(opts.betCoinsOverride)) {
     betCoins = opts.betCoinsOverride;
@@ -696,11 +703,11 @@ async function placeLimboWagerBet(
           ? envBetCents / 100
           : account.limbo_bet_coins;
     if (Number.isFinite(envMaxBet)) targetBet = Math.min(targetBet, envMaxBet);
-    betCoins = Math.min(targetBet, balanceBeforeBet * 0.98);
+    betCoins = balanceCap(targetBet);
   }
 
   if (Number.isFinite(envMaxBet)) betCoins = Math.min(betCoins, envMaxBet);
-  betCoins = Math.min(betCoins, balanceBeforeBet * 0.98);
+  betCoins = balanceCap(betCoins);
 
   if (opts.allowBelowMinOnce) {
     if (betCoins < 0.01) {
@@ -893,7 +900,6 @@ export async function settleRainForAccount(input: {
   const key = rainBalanceKey(accountId, rainId);
   const before =
     rainBalanceBeforeJoin.get(key) ?? getRainJoinBalanceBefore(accountId, rainId);
-  await new Promise((r) => setTimeout(r, 1_500));
   const { after, earned } = await measureRainPayoutCoins(client, before);
   rainBalanceBeforeJoin.delete(key);
 
@@ -949,8 +955,12 @@ export async function settleRainForAccount(input: {
 
   try {
     const hub = await hubs.ensure(accountId, { rain: true, cases: true });
+    const freshBalance = await readBalanceCoins(client);
+    const rainProfit =
+      before != null ? Math.max(0, freshBalance - before) : earned ?? 0;
+    const betRainProceeds = Math.max(earned ?? 0, rainProfit);
     await placeLimboWagerBet(accountId, client, hub, account, poolCoins ?? 0, account.nickname, rainId, {
-      betCoinsOverride: earned,
+      betCoinsOverride: betRainProceeds,
       balanceBeforeRain: before,
       reasonLabel: "Limbo wager (rain payout only)",
       rainId,
