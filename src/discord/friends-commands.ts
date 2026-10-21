@@ -20,6 +20,11 @@ export function findOwnedAccount(discordUserId: string, nickname: string): Accou
   return accountsForDiscordUser(discordUserId).find((a) => a.nickname.toLowerCase() === q);
 }
 
+function findAccountByNickname(nickname: string): AccountRow | undefined {
+  const q = nickname.trim().toLowerCase();
+  return listAccounts().find((a) => a.nickname.toLowerCase() === q);
+}
+
 export async function addAccountForDiscordUser(input: {
   discordUserId: string;
   nickname: string;
@@ -28,8 +33,16 @@ export async function addAccountForDiscordUser(input: {
 }): Promise<string> {
   const nick = input.nickname.trim();
   if (!nick) return "Nickname is required.";
-  const exists = listAccounts().some((a) => a.nickname.toLowerCase() === nick.toLowerCase());
-  if (exists) return `Nickname **${nick}** is already taken — pick another.`;
+  const existing = findAccountByNickname(nick);
+  if (existing) {
+    if (!existing.owner_discord_id) {
+      return `Nickname **${nick}** already exists from the dashboard. Run \`/account claim nickname:${nick}\` to attach it to your Discord.`;
+    }
+    if (existing.owner_discord_id === input.discordUserId) {
+      return `You already have **${nick}**. Use \`/account list\`.`;
+    }
+    return `Nickname **${nick}** is already taken — pick another.`;
+  }
 
   insertAccount({
     nickname: nick,
@@ -56,8 +69,16 @@ export async function addAccountSessionForDiscordUser(input: {
   if (jwt.length < 32) {
     return "Session token looks incomplete. Paste the full JWT from rorush.com (same as the dashboard **Session JWT** field).";
   }
-  const exists = listAccounts().some((a) => a.nickname.toLowerCase() === nick.toLowerCase());
-  if (exists) return `Nickname **${nick}** is already taken — pick another.`;
+  const existing = findAccountByNickname(nick);
+  if (existing) {
+    if (!existing.owner_discord_id) {
+      return `Nickname **${nick}** already exists from the dashboard. Run \`/account claim nickname:${nick}\` to attach it to your Discord.`;
+    }
+    if (existing.owner_discord_id === input.discordUserId) {
+      return `You already have **${nick}**. Use \`/account list\`.`;
+    }
+    return `Nickname **${nick}** is already taken — pick another.`;
+  }
 
   const apiKey = input.apiKey?.trim() || undefined;
   const client = new RoRushHttpClient({ jwt, apiKey }, null);
@@ -84,6 +105,30 @@ export async function addAccountSessionForDiscordUser(input: {
     `Saved **${nick}** with session login (no password stored). ` +
     "Use `/account list`, then `/rain`, `/cases`, and `/limbo`. " +
     "When the token expires, run `/account session` again with a new JWT."
+  );
+}
+
+/** Attach a dashboard-created account (no Discord owner yet) to this user. */
+export async function claimAccountForDiscordUser(
+  discordUserId: string,
+  nickname: string,
+): Promise<string> {
+  const nick = nickname.trim();
+  if (!nick) return "Nickname is required.";
+  const account = findAccountByNickname(nick);
+  if (!account) {
+    return `No account **${nick}** on this host. Add it on the dashboard or use \`/account add\`.`;
+  }
+  if (account.owner_discord_id === discordUserId) {
+    return `**${account.nickname}** is already on your Discord profile. Use \`/account list\`.`;
+  }
+  if (account.owner_discord_id) {
+    return `**${account.nickname}** is linked to another Discord user. Ask staff if this is wrong.`;
+  }
+  updateAccount(account.id, { owner_discord_id: discordUserId });
+  await engine.reloadAccounts();
+  return (
+    `Linked **${account.nickname}** to your Discord. Use \`/account list\`, then \`/rain\`, \`/cases\`, and \`/limbo\`.`
   );
 }
 

@@ -62,6 +62,7 @@ No install. In your Discord server:
 | `/server setup` | **Staff only** — full server layout (see below) |
 | `/account add` | Email + password (only they see it) |
 | `/account session` | **Advanced** — session JWT from rorush.com (2FA, no password stored) |
+| `/account claim` | Link an account you (or staff) added on the **dashboard** — same nickname, one-time |
 | `/account remove` | Remove their account |
 | `/account list` | Balance, level, toggles |
 | `/rain` / `/cases` | Turn automation on/off |

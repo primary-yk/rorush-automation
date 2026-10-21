@@ -21,6 +21,7 @@ import { getLicenseStatus } from "../license/service.js";
 import {
   addAccountForDiscordUser,
   addAccountSessionForDiscordUser,
+  claimAccountForDiscordUser,
   removeAccountForDiscordUser,
   setLimbo,
   setRainFilters,
@@ -114,6 +115,14 @@ function buildSlashCommands() {
             .setRequired(true),
         )
         .addStringOption((o) => o.setName("api_key").setDescription("Optional x-api-key if your account uses one")),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("claim")
+        .setDescription("Link a dashboard account (same nickname) to your Discord")
+        .addStringOption((o) =>
+          o.setName("nickname").setDescription("Nickname from the website dashboard").setRequired(true),
+        ),
     )
     .addSubcommand((sub) =>
       sub
@@ -414,6 +423,14 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
           sessionJwt: interaction.options.getString("token", true),
           apiKey: interaction.options.getString("api_key") ?? undefined,
         });
+        await editEmbeds(interaction, resultEmbed(text));
+        return;
+      }
+      if (sub === "claim") {
+        const text = await claimAccountForDiscordUser(
+          userId,
+          interaction.options.getString("nickname", true),
+        );
         await editEmbeds(interaction, resultEmbed(text));
         return;
       }

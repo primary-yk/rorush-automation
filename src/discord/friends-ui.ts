@@ -37,7 +37,8 @@ export function buildHelpEmbed(): EmbedBuilder {
       },
       {
         name: "Accounts",
-        value: "`/account add` · `/account session`\n`/account remove` · `/account list`",
+        value:
+          "`/account add` · `/account session`\n`/account claim` · `/account remove` · `/account list`",
         inline: true,
       },
       {
@@ -67,7 +68,7 @@ export function buildSetupGuideEmbed(): EmbedBuilder {
       {
         name: "Step 2",
         value:
-          "`/account add` — email & password\n`/account session` — JWT from rorush.com (2FA / no password)",
+          "`/account add` · `/account session` — save login here\n`/account claim` — already on the dashboard (same nickname)",
         inline: false,
       },
       { name: "Step 3", value: "`/rain` · `/limbo` · `/cases` — enable features", inline: false },
