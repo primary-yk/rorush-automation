@@ -30,7 +30,7 @@ After adding the webhook line: `npm run setup-discord-webhook` once to verify.
 4. OAuth2 URL Generator: scopes `bot` + `applications.commands`, permissions **Send Messages**, **Use Slash Commands**, **Embed Links**, **Manage Channels**, **Manage Roles**, **Manage Threads**
 5. `npm run discord-bot-doctor` then `npm run dev` — console must show **`[friends-bot] logged in`**
 6. In Discord (host): **`/setup server`** — creates roles, categories, channels, and permission overwrites (safe to re-run)
-7. **Optional** auto **Rain Member** when someone joins: Developer Portal → **Server Members Intent** ON, then `DISCORD_SERVER_MEMBERS_INTENT=1` in `.env` and restart. Without this, friends still get the role when they run **`/setup join`**.
+7. **Optional** auto **Rain Member** when someone joins: Developer Portal → **Server Members Intent** ON, then `DISCORD_SERVER_MEMBERS_INTENT=1` in `.env` and restart. Without this, friends still get the role when they run **`/link link`**.
 
 Friends only use `/` commands — bot replies never include dashboard or site links.
 
@@ -56,8 +56,8 @@ No install. In your Discord server:
 
 | Command | What it does |
 |---------|----------------|
-| `/setup join` | **Rush Pilot** role + private thread in `#rain-feeds` (rain/limbo updates) |
-| `/setup guide` | Short how-to (ephemeral) |
+| `/link link` | **Rain Member** role + private thread in `#rain-feeds` (rain/limbo updates) |
+| `/link guide` | Link guide (ephemeral) |
 | `/setup server` | **Host only** — full server layout (see below) |
 | `/account add` | Save RoRush login (only they see it) |
 | `/account remove` | Remove their account |
@@ -77,7 +77,7 @@ Re-run anytime to **repair roles and channel permissions** (does not delete frie
 | Piece | Purpose |
 |--------|---------|
 | **Role `Rush Host`** | You — see `#host-log`, manage info channels |
-| **Role `Rush Pilot`** | Friends after `/setup join` |
+| **Role `Rain Member`** | Friends after `/link link` |
 | **Category `RUSH PILOT · INFO`** | `#start-here` (read-only), `#commands` cheat sheet |
 | **Category `RUSH PILOT · FEEDS`** | `#rain-feeds` — parent for **private threads** (one per friend) |
 | **Category `RUSH PILOT · HOST`** | `#host-log` — captcha failures, join errors, engine issues |

@@ -72,17 +72,20 @@ let client: Client | null = null;
 function buildSlashCommands() {
   const core = [
   new SlashCommandBuilder()
-    .setName("setup")
-    .setDescription("Private feed thread or host server layout")
+    .setName("link")
+    .setDescription("Link your private feed")
     .addSubcommand((sub) =>
-      sub.setName("join").setDescription("Open your private rain & limbo thread"),
+      sub.setName("link").setDescription("Open your private rain & limbo thread"),
     )
+    .addSubcommand((sub) => sub.setName("guide").setDescription("Link guide")),
+  new SlashCommandBuilder()
+    .setName("setup")
+    .setDescription("Host: server layout")
     .addSubcommand((sub) =>
       sub
         .setName("server")
-        .setDescription("Host: create roles, categories, channels, permissions"),
-    )
-    .addSubcommand((sub) => sub.setName("guide").setDescription("How automation works here")),
+        .setDescription("Create roles, categories, channels, permissions"),
+    ),
   new SlashCommandBuilder().setName("help").setDescription("Slash commands for friends"),
   new SlashCommandBuilder().setName("status").setDescription("Is the host engine running?"),
   new SlashCommandBuilder().setName("accounts").setDescription("Your linked RoRush accounts"),
@@ -304,12 +307,33 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
       return;
     }
 
-    if (interaction.commandName === "setup") {
+    if (interaction.commandName === "link") {
       const sub = interaction.options.getSubcommand();
       if (sub === "guide") {
         await replyEmbeds(interaction, [buildSetupGuideEmbed()]);
         return;
       }
+      if (sub === "link") {
+        await interaction.deferReply({ ephemeral: true });
+        if (!client || !interaction.guildId) {
+          await editEmbeds(interaction, buildErrorEmbed("Run this inside your Discord server."));
+          return;
+        }
+        const guild = await client.guilds.fetch(interaction.guildId);
+        const joinResult = await runSetupJoin({
+          client,
+          guild,
+          token: botToken,
+          discordUserId: userId,
+          username: interaction.user.username,
+        });
+        await editEmbeds(interaction, buildSetupJoinEmbed(joinResult));
+        return;
+      }
+    }
+
+    if (interaction.commandName === "setup") {
+      const sub = interaction.options.getSubcommand();
       if (sub === "server") {
         if (!isHost(userId)) {
           await interaction.reply({ ephemeral: true, content: "Host-only — ask the server owner." });
@@ -336,23 +360,6 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
           botToken,
         });
         await editEmbeds(interaction, buildSetupServerEmbed(summaryLines));
-        return;
-      }
-      if (sub === "join") {
-        await interaction.deferReply({ ephemeral: true });
-        if (!client || !interaction.guildId) {
-          await editEmbeds(interaction, buildErrorEmbed("Run this inside your Discord server."));
-          return;
-        }
-        const guild = await client.guilds.fetch(interaction.guildId);
-        const joinResult = await runSetupJoin({
-          client,
-          guild,
-          token: botToken,
-          discordUserId: userId,
-          username: interaction.user.username,
-        });
-        await editEmbeds(interaction, buildSetupJoinEmbed(joinResult));
         return;
       }
     }

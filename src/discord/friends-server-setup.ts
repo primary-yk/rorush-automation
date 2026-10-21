@@ -402,7 +402,7 @@ export async function runFriendsServerSetup(input: {
     "",
     `Auto-role · **${FRIENDS_ROLE_NAMES.pilot}** on join (+ ${membersTagged} existing member(s) updated this run)`,
     "",
-    "Friends: **`/setup join`** → **`/account add`**. Staff log → `#host-log`.",
+    "Friends: **`/link link`** → **`/account add`**. Staff log → `#host-log`.",
   ];
 
   return { layout, summaryLines };

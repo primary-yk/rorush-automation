@@ -13,7 +13,7 @@ export function friendSetupGuideLines(): string[] {
   return [
     "**Getting started**",
     "",
-    "1. **`/setup join`** — opens your **private** rain & limbo thread",
+    "1. **`/link link`** — opens your **private** rain & limbo thread",
     "2. **`/account add`** — save login (only you see it)",
     "3. **`/rain`** · **`/limbo`** · **`/cases`**",
     "",
@@ -37,7 +37,7 @@ export function friendStartHereChannelText(): string {
     "",
     "Automation runs from this Discord server — you do not install anything.",
     "",
-    "1. **`/setup join`** — private thread for your updates",
+    "1. **`/link link`** — private thread for your updates",
     "2. **`/account add`** — your login (ephemeral)",
     "3. **`/rain`** · **`/limbo`** · **`/cases`**",
     "",
@@ -48,7 +48,7 @@ export function friendStartHereChannelText(): string {
 export function friendCommandsChannelText(): string {
   return [
     "**Commands**",
-    "• `/setup join` — your private feed thread",
+    "• `/link link` — your private feed thread",
     "• `/account add` · `/account remove`",
     "• `/accounts` — balance & toggles",
     "• `/rain` · `/cases`",

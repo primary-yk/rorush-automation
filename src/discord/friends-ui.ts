@@ -32,7 +32,7 @@ export function buildHelpEmbed(): EmbedBuilder {
     .addFields(
       {
         name: "Setup",
-        value: "`/setup join` — private feed thread\n`/account add` · `/account remove`",
+        value: "`/link link` — private feed\n`/account add` · `/account remove`",
         inline: true,
       },
       {
@@ -42,7 +42,7 @@ export function buildHelpEmbed(): EmbedBuilder {
       },
       {
         name: "Overview",
-        value: "`/accounts` — balances & toggles\n`/status` · `/setup guide`",
+        value: "`/accounts` — balances & toggles\n`/status` · `/link guide`",
         inline: true,
       },
     );
@@ -50,10 +50,10 @@ export function buildHelpEmbed(): EmbedBuilder {
 
 export function buildSetupGuideEmbed(): EmbedBuilder {
   return baseEmbed(UI.accent)
-    .setTitle("Getting started")
+    .setTitle("Link guide")
     .setDescription("Everything runs from this server — nothing to install.")
     .addFields(
-      { name: "1", value: "`/setup join` — your private rain & limbo thread", inline: false },
+      { name: "1", value: "`/link link` — your private rain & limbo thread", inline: false },
       { name: "2", value: "`/account add` — login (ephemeral, only you see it)", inline: false },
       { name: "3", value: "`/rain` · `/limbo` · `/cases` — turn features on/off", inline: false },
       supportField(),
@@ -159,7 +159,7 @@ export function buildStartHereEmbed(): EmbedBuilder {
     .setTitle("Welcome")
     .setDescription("Rain automation for this server — controlled from Discord.")
     .addFields(
-      { name: "Start", value: "`/setup join` then `/account add`", inline: true },
+      { name: "Start", value: "`/link link` then `/account add`", inline: true },
       { name: "Automate", value: "`/rain` · `/limbo` · `/cases`", inline: true },
       supportField(),
     );
