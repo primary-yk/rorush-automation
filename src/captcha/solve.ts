@@ -229,18 +229,39 @@ function pollFailureMessage(resultJson: PollResult): string | null {
   return null;
 }
 
+export type CaptchaSolveOptions = {
+  /** Cancel a stuck "processing" task after this many ms and retry with a new task. */
+  cancelAfterMs?: number;
+  /** How many createTask+poll cycles per solveCaptcha call. */
+  taskAttempts?: number;
+};
+
+function resolveCancelAfterMs(override?: number): number {
+  if (override != null && Number.isFinite(override)) {
+    return Math.max(30_000, override);
+  }
+  return Math.max(
+    45_000,
+    Number(process.env.CAPTCHA_CANCEL_AFTER_MS ?? 110_000) || 110_000,
+  );
+}
+
+function resolveTaskAttempts(override?: number): number {
+  if (override != null && Number.isFinite(override)) {
+    return Math.max(1, Math.trunc(override));
+  }
+  return Math.max(1, Number(process.env.CAPTCHA_TASK_ATTEMPTS ?? 2) || 2);
+}
+
 async function pollTaskUntilReady(
   provider: CaptchaProvider,
   clientKey: string,
   taskId: number | string,
-  opts: { attempt: number; attempts: number },
+  opts: { attempt: number; attempts: number; cancelAfterMs: number },
 ): Promise<string> {
   const pollMs = Math.max(800, Number(process.env.CAPTCHA_POLL_MS ?? 1000) || 1000);
   const maxPolls = Math.max(20, Number(process.env.CAPTCHA_MAX_POLLS ?? 180) || 180);
-  const cancelAfterMs = Math.max(
-    45_000,
-    Number(process.env.CAPTCHA_CANCEL_AFTER_MS ?? 110_000) || 110_000,
-  );
+  const cancelAfterMs = opts.cancelAfterMs;
   const verbose = /^(1|true|yes|on)$/i.test(process.env.CAPTCHA_VERBOSE?.trim() ?? "");
   const started = Date.now();
   let lastStatus = "processing";
@@ -298,12 +319,13 @@ async function pollTaskUntilReady(
   );
 }
 
-async function createAndPollOnce(
+async function createAndPollOnceWithOpts(
   provider: CaptchaProvider,
   clientKey: string,
   kind: CaptchaKind,
   attempt: number,
   attempts: number,
+  cancelAfterMs: number,
 ): Promise<string> {
   const websiteKey = siteKey(kind);
   const task = buildTask(provider, kind, websiteKey);
@@ -341,19 +363,32 @@ async function createAndPollOnce(
     );
   }
 
-  return pollTaskUntilReady(provider, clientKeyClean, createJson.taskId, { attempt, attempts });
+  return pollTaskUntilReady(provider, clientKeyClean, createJson.taskId, {
+    attempt,
+    attempts,
+    cancelAfterMs,
+  });
 }
 
 async function createAndPoll(
   provider: CaptchaProvider,
   clientKey: string,
   kind: CaptchaKind,
+  solveOpts?: CaptchaSolveOptions,
 ): Promise<string | null> {
-  const attempts = Math.max(1, Number(process.env.CAPTCHA_TASK_ATTEMPTS ?? 2) || 2);
+  const attempts = resolveTaskAttempts(solveOpts?.taskAttempts);
+  const cancelAfterMs = resolveCancelAfterMs(solveOpts?.cancelAfterMs);
   let lastErr: unknown;
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
-      return await createAndPollOnce(provider, clientKey, kind, attempt, attempts);
+      return await createAndPollOnceWithOpts(
+        provider,
+        clientKey,
+        kind,
+        attempt,
+        attempts,
+        cancelAfterMs,
+      );
     } catch (err) {
       lastErr = err;
       if (attempt < attempts && isCaptchaRetryableTaskError(err)) {
@@ -434,14 +469,17 @@ export async function resolveCaptchaProvider(
   return "2captcha";
 }
 
-export async function solveCaptcha(kind: CaptchaKind): Promise<string | null> {
+export async function solveCaptcha(
+  kind: CaptchaKind,
+  solveOpts?: CaptchaSolveOptions,
+): Promise<string | null> {
   reloadEnv();
   const clientKey = captchaApiKey();
   if (!clientKey) return null;
 
   const provider = await resolveCaptchaProvider(clientKey, kind);
   try {
-    return await createAndPoll(provider, clientKey, kind);
+    return await createAndPoll(provider, clientKey, kind, solveOpts);
   } catch (firstErr) {
     const forced = providerFromEnv();
     if (forced !== "auto") throw firstErr;
@@ -451,7 +489,7 @@ export async function solveCaptcha(kind: CaptchaKind): Promise<string | null> {
     for (const alt of others) {
       try {
         cachedProvider = alt;
-        return await createAndPoll(alt, clientKey, kind);
+        return await createAndPoll(alt, clientKey, kind, solveOpts);
       } catch {
         continue;
       }

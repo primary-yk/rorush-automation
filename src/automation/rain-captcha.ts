@@ -2,6 +2,7 @@ import {
   isCaptchaRetryableTaskError,
   isTransientNetworkError,
   solveCaptcha,
+  type CaptchaSolveOptions,
 } from "../captcha/solve.js";
 import {
   rainTelemetryAccountCaptchaReady,
@@ -88,12 +89,82 @@ function isWorkerUnsolvableError(err: unknown): boolean {
   );
 }
 
+function rainCaptchaSolveOptions(): CaptchaSolveOptions {
+  return {
+    cancelAfterMs: Math.max(
+      35_000,
+      Number(process.env.CAPTCHA_RAIN_CANCEL_AFTER_MS ?? 55_000) || 55_000,
+    ),
+    taskAttempts: Math.max(2, Number(process.env.CAPTCHA_RAIN_TASK_ATTEMPTS ?? 4) || 4),
+  };
+}
+
+/** Start a second 2Captcha task if the first is still polling (queue stalls). */
+async function solveRainCaptchaWithHedge(): Promise<string | null> {
+  const opts = rainCaptchaSolveOptions();
+  const hedgeAfterMs = Math.max(
+    0,
+    Number(process.env.CAPTCHA_RAIN_HEDGE_AFTER_MS ?? 40_000) || 40_000,
+  );
+  if (hedgeAfterMs <= 0) {
+    return solveCaptcha("hcaptcha", opts);
+  }
+
+  return new Promise<string | null>((resolve, reject) => {
+    let settled = false;
+    const finish = (token: string | null) => {
+      if (settled || token == null) return;
+      settled = true;
+      resolve(token);
+    };
+    const fail = (err: unknown) => {
+      if (settled) return;
+      settled = true;
+      reject(err instanceof Error ? err : new Error(String(err)));
+    };
+
+    let failures = 0;
+    const onErr = (err: unknown) => {
+      failures++;
+      if (failures >= 2) fail(err);
+    };
+
+    void solveCaptcha("hcaptcha", opts).then(finish).catch(onErr);
+
+    const hedgeTimer = setTimeout(() => {
+      if (settled) return;
+      console.log("[rain-captcha] hedge solve — primary task still in flight");
+      void solveCaptcha("hcaptcha", { ...opts, taskAttempts: 2 }).then(finish).catch(onErr);
+    }, hedgeAfterMs);
+
+    void Promise.resolve().then(() => {
+      /* allow primary to win without waiting for hedge timer cleanup */
+    });
+
+    const watchdog = setTimeout(() => {
+      clearTimeout(hedgeTimer);
+    }, 600_000);
+    void Promise.race([
+      new Promise<void>((r) => {
+        const check = setInterval(() => {
+          if (settled) {
+            clearInterval(check);
+            clearTimeout(hedgeTimer);
+            clearTimeout(watchdog);
+            r();
+          }
+        }, 200);
+      }),
+    ]);
+  });
+}
+
 async function solveHcaptchaWithRetry(): Promise<string | null> {
   const maxAttempts = Math.max(1, Number(process.env.RAIN_CAPTCHA_WORKER_RETRIES ?? 3) || 3);
   let lastErr: unknown;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      return await solveCaptcha("hcaptcha");
+      return await solveRainCaptchaWithHedge();
     } catch (err) {
       lastErr = err;
       const retry =
