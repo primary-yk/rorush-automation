@@ -3,18 +3,18 @@ import type { CaseWonItem } from "../rorush/case-unbox-parse.js";
 import { COLORS, withBrand, type RushEmbed } from "./embeds.js";
 import { postToUserFeedThread } from "./friends-feed.js";
 
-export async function notifyCaseWinInUserFeed(input: {
-  accountId: number;
+export function buildCaseWinFeedEmbed(input: {
   slotLabel: string;
   items: CaseWonItem[];
   totalCoins: number;
-}): Promise<void> {
-  const account = getAccount(input.accountId);
-  const owner = account?.owner_discord_id?.trim();
-  if (!owner) return;
-
+  nickname?: string | null;
+  sampleNote?: string;
+}): RushEmbed {
   const primary = input.items[0];
   const lines: string[] = [];
+  if (input.sampleNote) {
+    lines.push(input.sampleNote);
+  }
   if (primary) {
     lines.push(`**${primary.name}**`);
     if (primary.priceCoins != null) lines.push(`Value **${primary.priceCoins.toFixed(2)} coins**`);
@@ -25,15 +25,16 @@ export async function notifyCaseWinInUserFeed(input: {
     lines.push(`+ ${input.items.length - 1} more item(s)`);
   }
 
+  const title = input.sampleNote ? `Cases · ${input.slotLabel} (sample)` : `Cases · ${input.slotLabel}`;
   const embed: RushEmbed = withBrand(
     {
-      title: `Cases · ${input.slotLabel}`,
-      description: lines.join("\n") || "Reward case opened successfully.",
+      title,
+      description: lines.filter(Boolean).join("\n") || "Reward case opened successfully.",
       color: COLORS.case,
-      fields: account?.nickname
-        ? [{ name: "Account", value: `**${account.nickname}**`, inline: true }]
+      fields: input.nickname
+        ? [{ name: "Account", value: `**${input.nickname}**`, inline: true }]
         : undefined,
-      footer: { text: "Cases" },
+      footer: { text: input.sampleNote ? "Cases · sample" : "Cases" },
     },
     COLORS.case,
   );
@@ -41,6 +42,42 @@ export async function notifyCaseWinInUserFeed(input: {
   if (primary?.imageUrl) {
     embed.image = { url: primary.imageUrl };
   }
+
+  return embed;
+}
+
+export function buildSampleDailyCaseEmbed(nickname: string): RushEmbed {
+  return buildCaseWinFeedEmbed({
+    slotLabel: "Daily",
+    nickname,
+    totalCoins: 12.5,
+    sampleNote: "_Host test only — not a real case open._",
+    items: [
+      {
+        name: "Sample reward (daily case)",
+        priceCoins: 12.5,
+        imageUrl: null,
+      },
+    ],
+  });
+}
+
+export async function notifyCaseWinInUserFeed(input: {
+  accountId: number;
+  slotLabel: string;
+  items: CaseWonItem[];
+  totalCoins: number;
+}): Promise<void> {
+  const account = getAccount(input.accountId);
+  const owner = account?.owner_discord_id?.trim();
+  if (!owner) return;
+
+  const embed = buildCaseWinFeedEmbed({
+    slotLabel: input.slotLabel,
+    items: input.items,
+    totalCoins: input.totalCoins,
+    nickname: account?.nickname,
+  });
 
   await postToUserFeedThread(owner, [embed]);
 }

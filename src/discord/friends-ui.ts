@@ -263,10 +263,12 @@ export function buildHostLogToolsEmbed(): EmbedBuilder {
   return baseEmbed(UI.accent)
     .setTitle("Host tools")
     .setDescription(
-      "Check that **private feed threads** receive rain-style alerts.\n\n" +
-        "**Test rain → my feed** — sample alert in **your** thread (run **`/connect`** first).\n" +
-        "**Test rain → all feeds** — sample alert in every registered private feed.\n" +
+      "Check that **private feed threads** receive automation alerts.\n\n" +
+        "**Test rain → my feed** — sample rain join card in **your** thread (run **`/connect`** first).\n" +
+        "**Test rain → all feeds** — same sample to every registered feed.\n" +
+        "**Test daily case → my feed** — sample **daily case** open card (same layout as real opens).\n" +
         "**List open feeds** — who has a thread (ephemeral to you).\n\n" +
+        "Missing buttons? Run **`/server tools`** to post a fresh panel.\n\n" +
         "Member **connect** and **account** actions also post here automatically.",
     );
 }

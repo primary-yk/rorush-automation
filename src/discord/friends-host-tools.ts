@@ -7,7 +7,8 @@ import {
   type Guild,
   type TextChannel,
 } from "discord.js";
-import { getDiscordUserThread, listDiscordUserThreads } from "../db/repositories.js";
+import { getDiscordUserThread, listAccounts, listDiscordUserThreads } from "../db/repositories.js";
+import { buildSampleDailyCaseEmbed } from "./friends-case-feed.js";
 import { COLORS, rainJoinEmbedCopy, type RushEmbed } from "./embeds.js";
 import { postToHostLogChannel, postToUserFeedThread } from "./friends-feed.js";
 import { buildErrorEmbed, buildHostLogToolsEmbed, buildPlainResultEmbed } from "./friends-ui.js";
@@ -16,11 +17,13 @@ import { replyEphemeralEmbed } from "./friends-interaction.js";
 
 export const FRIENDS_HOST_TEST_RAIN_ME = "friends:host:test-rain-me";
 export const FRIENDS_HOST_TEST_RAIN_ALL = "friends:host:test-rain-all";
+export const FRIENDS_HOST_TEST_DAILY_ME = "friends:host:test-daily-me";
 export const FRIENDS_HOST_LIST_FEEDS = "friends:host:list-feeds";
 
 export const FRIENDS_HOST_BUTTON_IDS = new Set([
   FRIENDS_HOST_TEST_RAIN_ME,
   FRIENDS_HOST_TEST_RAIN_ALL,
+  FRIENDS_HOST_TEST_DAILY_ME,
   FRIENDS_HOST_LIST_FEEDS,
 ]);
 
@@ -52,7 +55,7 @@ export async function seedHostLogTools(channel: TextChannel, force = false): Pro
     );
     if (hasTools) return;
   }
-  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+  const rowRain = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(FRIENDS_HOST_TEST_RAIN_ME)
       .setLabel("Test rain → my feed")
@@ -66,7 +69,20 @@ export async function seedHostLogTools(channel: TextChannel, force = false): Pro
       .setLabel("List open feeds")
       .setStyle(ButtonStyle.Success),
   );
-  await channel.send({ embeds: [buildHostLogToolsEmbed()], components: [row] }).catch(() => undefined);
+  const rowCases = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(FRIENDS_HOST_TEST_DAILY_ME)
+      .setLabel("Test daily case → my feed")
+      .setStyle(ButtonStyle.Primary),
+  );
+  await channel
+    .send({ embeds: [buildHostLogToolsEmbed()], components: [rowRain, rowCases] })
+    .catch(() => undefined);
+}
+
+function sampleNicknameForHost(hostUserId: string): string {
+  const owned = listAccounts().find((a) => a.owner_discord_id === hostUserId);
+  return owned?.nickname ?? "sample";
 }
 
 export async function handleHostToolButton(
@@ -108,6 +124,39 @@ export async function handleHostToolButton(
         title: "Feed list viewed",
         description: `<@${interaction.user.id}> listed **${rows.length}** private feed(s).`,
         color: 0x63_66_f1,
+      }),
+    ]);
+    return;
+  }
+
+  if (interaction.customId === FRIENDS_HOST_TEST_DAILY_ME) {
+    const row = getDiscordUserThread(interaction.user.id);
+    if (!row?.thread_id) {
+      await replyEphemeralEmbed(
+        interaction,
+        buildErrorEmbed("You have no private feed yet — run **`/connect`** first, then test again."),
+      );
+      return;
+    }
+    const nick = sampleNicknameForHost(interaction.user.id);
+    const embed = buildSampleDailyCaseEmbed(nick);
+    const ok = await postToUserFeedThread(interaction.user.id, [embed]);
+    if (!ok) {
+      await replyEphemeralEmbed(
+        interaction,
+        buildErrorEmbed("Could not post to your thread — run **`/connect`** again."),
+      );
+      return;
+    }
+    await replyEphemeralEmbed(
+      interaction,
+      buildPlainResultEmbed(`Sample **daily case** embed sent to <#${row.thread_id}>.`, true),
+    );
+    await postToHostLogChannel([
+      tagHostEmbed({
+        title: "Daily case drill (host)",
+        description: `<@${interaction.user.id}> sent a sample daily-case embed to <#${row.thread_id}>.`,
+        color: COLORS.case,
       }),
     ]);
     return;
