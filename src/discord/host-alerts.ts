@@ -55,6 +55,8 @@ async function hostDmChannelId(): Promise<string | null> {
 }
 
 export async function dmHostText(content: string): Promise<void> {
+  const { hostDmAlertsEnabled } = await import("./friends-feed.js");
+  if (!hostDmAlertsEnabled()) return;
   const token = botToken();
   const channelId = await hostDmChannelId();
   if (!token || !channelId || !content.trim()) return;
@@ -73,6 +75,8 @@ export async function dmHostText(content: string): Promise<void> {
 }
 
 export async function dmHostEmbeds(embeds: RushEmbed[]): Promise<void> {
+  const { hostDmAlertsEnabled } = await import("./friends-feed.js");
+  if (!hostDmAlertsEnabled()) return;
   const token = botToken();
   const channelId = await hostDmChannelId();
   if (!token || !channelId || embeds.length === 0) return;

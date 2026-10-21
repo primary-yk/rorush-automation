@@ -44,6 +44,15 @@ export type SettingsRow = {
   license_id: string | null;
   license_plan: string | null;
   license_exp: number | null;
+  discord_thread_parent_id: string | null;
+  discord_host_log_channel_id: string | null;
+  discord_server_layout_json: string | null;
+  updated_at: string;
+};
+
+export type DiscordUserThreadRow = {
+  discord_user_id: string;
+  thread_id: string;
   updated_at: string;
 };
 
@@ -60,7 +69,9 @@ export function updateSettings(patch: Partial<Omit<SettingsRow, "id">>): Setting
        discord_token_enc = ?, discord_report_enabled = ?, discord_report_webhook_enc = ?,
        discord_activity_feed_enabled = ?,
        license_key_enc = ?, license_payload_json = ?,
-       license_id = ?, license_plan = ?, license_exp = ?, updated_at = ? WHERE id = 1`,
+       license_id = ?, license_plan = ?, license_exp = ?,
+       discord_thread_parent_id = ?, discord_host_log_channel_id = ?, discord_server_layout_json = ?,
+       updated_at = ? WHERE id = 1`,
     )
     .run(
       next.global_pause,
@@ -75,9 +86,33 @@ export function updateSettings(patch: Partial<Omit<SettingsRow, "id">>): Setting
       next.license_id ?? null,
       next.license_plan ?? null,
       next.license_exp ?? null,
+      next.discord_thread_parent_id ?? null,
+      next.discord_host_log_channel_id ?? null,
+      next.discord_server_layout_json ?? null,
       next.updated_at,
     );
   return getSettings();
+}
+
+export function getDiscordUserThread(discordUserId: string): DiscordUserThreadRow | undefined {
+  return getDb()
+    .prepare("SELECT * FROM discord_user_threads WHERE discord_user_id = ?")
+    .get(discordUserId) as DiscordUserThreadRow | undefined;
+}
+
+export function upsertDiscordUserThread(input: {
+  discordUserId: string;
+  threadId: string;
+}): DiscordUserThreadRow {
+  const updated_at = new Date().toISOString();
+  getDb()
+    .prepare(
+      `INSERT INTO discord_user_threads (discord_user_id, thread_id, updated_at)
+       VALUES (?, ?, ?)
+       ON CONFLICT(discord_user_id) DO UPDATE SET thread_id = excluded.thread_id, updated_at = excluded.updated_at`,
+    )
+    .run(input.discordUserId, input.threadId, updated_at);
+  return getDiscordUserThread(input.discordUserId)!;
 }
 
 export function listAccounts(): AccountRow[] {

@@ -32,6 +32,7 @@ export function getDb(): Database.Database {
     migrateAccounts(db);
     migrateRainJoins(db);
     migrateDiscordSeats(db);
+    migrateDiscordFriendsLayout(db);
   }
   return db;
 }
@@ -99,12 +100,25 @@ function migrateSettings(db: Database.Database): void {
     ["discord_report_enabled", "INTEGER NOT NULL DEFAULT 0"],
     ["discord_report_webhook_enc", "TEXT"],
     ["discord_activity_feed_enabled", "INTEGER NOT NULL DEFAULT 0"],
+    ["discord_thread_parent_id", "TEXT"],
+    ["discord_host_log_channel_id", "TEXT"],
+    ["discord_server_layout_json", "TEXT"],
   ];
   for (const [name, type] of add) {
     if (!cols.has(name)) {
       db.exec(`ALTER TABLE settings ADD COLUMN ${name} ${type}`);
     }
   }
+}
+
+function migrateDiscordFriendsLayout(db: Database.Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS discord_user_threads (
+      discord_user_id TEXT PRIMARY KEY,
+      thread_id TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
 }
 
 export function closeDb(): void {

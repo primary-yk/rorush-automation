@@ -2,6 +2,7 @@ import { fetch } from "undici";
 import { listAccounts } from "../db/repositories.js";
 import { isRelayConnected, sendPilotEvent } from "../relay/pilot-client.js";
 import { redactForDiscord } from "./public-alert-filter.js";
+import { deliverFriendsReporterEmbed, friendsServerFeedActive } from "./friends-feed.js";
 import { dmHostEmbeds, isFriendsHostMode } from "./host-alerts.js";
 import { resolveDiscordReportWebhookUrl } from "./report-webhook.js";
 import {
@@ -18,8 +19,15 @@ function webhookConfigured(): string | null {
   return resolveDiscordReportWebhookUrl();
 }
 
-async function deliverEmbed(embed: RushEmbed): Promise<void> {
+async function deliverEmbed(
+  embed: RushEmbed,
+  ctx?: { accountId?: number | null; nickname?: string | null },
+): Promise<void> {
   const payload = withBrand(embed, embed.color ?? COLORS.info);
+  if (friendsServerFeedActive()) {
+    const routed = await deliverFriendsReporterEmbed(payload, ctx);
+    if (routed) return;
+  }
   if (isRelayConnected()) {
     const t = payload.title.toLowerCase();
     const kind = t.includes("limbo")
@@ -118,13 +126,16 @@ export async function reportLimboOutcome(input: {
     fields.push({ name: "Rain", value: shortRainId(input.rainId), inline: false });
   }
 
-  await deliverEmbed({
-    title,
-    description: headline,
-    color: input.hit ? COLORS.limboHit : COLORS.limboMiss,
-    fields,
-    footer: { text: "Limbo wager" },
-  });
+  await deliverEmbed(
+    {
+      title,
+      description: headline,
+      color: input.hit ? COLORS.limboHit : COLORS.limboMiss,
+      fields,
+      footer: { text: "Limbo wager" },
+    },
+    { nickname: input.nickname },
+  );
 }
 
 export async function reportRainOutcome(input: {
@@ -148,15 +159,18 @@ export async function reportRainOutcome(input: {
     fields.push({ name: "Note", value: detail.slice(0, 900), inline: false });
   }
 
-  await deliverEmbed({
-    title: input.success ? "Rain — Joined" : "Rain — Failed",
-    description: input.success
-      ? "Successfully entered the rain join window."
-      : "Could not join this rain batch.",
-    color: input.success ? COLORS.rainOk : COLORS.rainFail,
-    fields,
-    footer: { text: "Rain join" },
-  });
+  await deliverEmbed(
+    {
+      title: input.success ? "Rain — Joined" : "Rain — Failed",
+      description: input.success
+        ? "Successfully entered the rain join window."
+        : "Could not join this rain batch.",
+      color: input.success ? COLORS.rainOk : COLORS.rainFail,
+      fields,
+      footer: { text: "Rain join" },
+    },
+    { nickname: input.nickname },
+  );
 }
 
 export async function reportRainJoinSummary(detail: string | null): Promise<void> {
@@ -180,16 +194,19 @@ export async function reportLimboSkipped(input: {
   reason: string;
   rainId?: string | null;
 }): Promise<void> {
-  await deliverEmbed({
-    title: "Limbo — Skipped",
-    description: redactForDiscord(input.reason),
-    color: COLORS.limboSkip,
-    fields: [
-      { name: "Pilot", value: `**${input.nickname}**`, inline: true },
-      ...(input.rainId ? [{ name: "Rain", value: shortRainId(input.rainId), inline: true }] : []),
-    ],
-    footer: { text: "Post-rain limbo" },
-  });
+  await deliverEmbed(
+    {
+      title: "Limbo — Skipped",
+      description: redactForDiscord(input.reason),
+      color: COLORS.limboSkip,
+      fields: [
+        { name: "Pilot", value: `**${input.nickname}**`, inline: true },
+        ...(input.rainId ? [{ name: "Rain", value: shortRainId(input.rainId), inline: true }] : []),
+      ],
+      footer: { text: "Post-rain limbo" },
+    },
+    { nickname: input.nickname },
+  );
 }
 
 export async function reportCaptchaBalanceLow(input: {
@@ -256,12 +273,15 @@ export async function reportRainAlert(input: {
   if (input.rainId) fields.push({ name: "Rain", value: shortRainId(input.rainId), inline: true });
   fields.push({ name: "Detail", value: redactForDiscord(input.body).slice(0, 900), inline: false });
 
-  await deliverEmbed({
-    title: input.title,
-    color: COLORS.rainFail,
-    fields,
-    footer: { text: "Rain" },
-  });
+  await deliverEmbed(
+    {
+      title: input.title,
+      color: COLORS.rainFail,
+      fields,
+      footer: { text: "Rain" },
+    },
+    { nickname: input.nickname },
+  );
 }
 
 export async function reportAccountSnapshot(reason: string): Promise<void> {

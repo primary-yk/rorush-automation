@@ -27,6 +27,9 @@ import {
   setToggle,
   testLimboForDiscordUser,
 } from "./friends-commands.js";
+import { bindFriendsFeedClient, friendsServerFeedActive, postToHostLogChannel } from "./friends-feed.js";
+import { runFriendsServerSetup } from "./friends-server-setup.js";
+import { runSetupJoin } from "./friends-user-thread.js";
 import { isFriendsHostMode, notifyHostSlashError } from "./host-alerts.js";
 import { sanitizeDiscordOutbound } from "./sanitize-outbound.js";
 
@@ -38,7 +41,18 @@ let client: Client | null = null;
 
 function buildSlashCommands() {
   const core = [
-  new SlashCommandBuilder().setName("setup").setDescription("How Rush Pilot works in this server"),
+  new SlashCommandBuilder()
+    .setName("setup")
+    .setDescription("Private feed thread or host server layout")
+    .addSubcommand((sub) =>
+      sub.setName("join").setDescription("Open your private rain & limbo thread"),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("server")
+        .setDescription("Host: create roles, categories, channels, permissions"),
+    )
+    .addSubcommand((sub) => sub.setName("guide").setDescription("How Rush Pilot works here")),
   new SlashCommandBuilder().setName("help").setDescription("Slash commands for friends"),
   new SlashCommandBuilder().setName("status").setDescription("Is the host engine running?"),
   new SlashCommandBuilder().setName("accounts").setDescription("Your linked RoRush accounts"),
@@ -150,7 +164,7 @@ function buildSlashCommands() {
 
 function helpText(): string {
   const cmds = [
-    "`/setup` — how this server works",
+    "`/setup join` — your private rain & limbo thread",
     "`/account add` — save RoRush login (only you see it)",
     "`/account remove` — delete your account",
     "`/accounts` — balance, level, toggles",
@@ -183,8 +197,11 @@ function setupText(): string {
     "",
     "The host runs the engine on their machine. You only use Discord.",
     "",
-    "1. `/account add` — RoRush email/password (only you see it)",
-    "2. `/rain` · `/limbo` · `/cases`",
+    "1. **`/setup join`** — private thread for your rain & limbo updates",
+    "2. `/account add` — RoRush email/password (only you see it)",
+    "3. `/rain` · `/limbo` · `/cases`",
+    "",
+    "Host runs **`/setup server`** once to create channels & roles.",
   ].join("\n");
 }
 
@@ -214,6 +231,7 @@ export async function startFriendsDiscordBot(): Promise<void> {
   client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
   client.once(Events.ClientReady, async (c) => {
+    bindFriendsFeedClient(client);
     console.log(`[friends-bot] logged in as ${c.user.tag}`);
     const rest = new REST({ version: "10" }).setToken(token);
     const mode = isHostedSaasMode() ? "hosted SaaS (licenses on)" : "friends (no licenses)";
@@ -242,19 +260,70 @@ export async function startFriendsDiscordBot(): Promise<void> {
 export async function stopFriendsDiscordBot(): Promise<void> {
   await client?.destroy();
   client = null;
+  bindFriendsFeedClient(null);
 }
 
 async function handleInteraction(interaction: ChatInputCommandInteraction): Promise<void> {
+  const botToken = process.env.DISCORD_BOT_TOKEN?.trim() ?? "";
   try {
     const userId = interaction.user.id;
 
-    if (interaction.commandName === "setup" || interaction.commandName === "help") {
-      const body =
-        interaction.commandName === "help"
-          ? `${helpText()}\n\n${setupText()}`
-          : setupText();
-      await interaction.reply({ ephemeral: true, content: out(body) });
+    if (interaction.commandName === "help") {
+      await interaction.reply({ ephemeral: true, content: out(`${helpText()}\n\n${setupText()}`) });
       return;
+    }
+
+    if (interaction.commandName === "setup") {
+      const sub = interaction.options.getSubcommand();
+      if (sub === "guide") {
+        await interaction.reply({ ephemeral: true, content: out(setupText()) });
+        return;
+      }
+      if (sub === "server") {
+        if (!isHost(userId)) {
+          await interaction.reply({ ephemeral: true, content: "Host-only — ask the server owner." });
+          return;
+        }
+        const hostId = hostDiscordId();
+        if (!hostId) {
+          await interaction.reply({
+            ephemeral: true,
+            content: out("Set `HOST_DISCORD_USER_ID` in `.env` first."),
+          });
+          return;
+        }
+        await interaction.deferReply({ ephemeral: true });
+        if (!client || !interaction.guildId) {
+          await interaction.editReply(out("Run this command inside your Discord server."));
+          return;
+        }
+        const guild = await client.guilds.fetch(interaction.guildId);
+        const { summaryLines } = await runFriendsServerSetup({
+          guild,
+          botUserId: client.user!.id,
+          hostUserId: hostId,
+          botToken,
+        });
+        await interaction.editReply(out(summaryLines.join("\n")));
+        return;
+      }
+      if (sub === "join") {
+        await interaction.deferReply({ ephemeral: true });
+        if (!client || !interaction.guildId) {
+          await interaction.editReply(out("Run this inside the Rush Pilot Discord server."));
+          return;
+        }
+        const guild = await client.guilds.fetch(interaction.guildId);
+        const text = await runSetupJoin({
+          client,
+          guild,
+          token: botToken,
+          discordUserId: userId,
+          username: interaction.user.username,
+        });
+        await interaction.editReply(out(text));
+        return;
+      }
     }
 
     if (interaction.commandName === "status") {
@@ -470,12 +539,22 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (isFriendsHostMode() && !isHost(interaction.user.id)) {
-      void notifyHostSlashError({
-        command: interaction.commandName,
-        userId: interaction.user.id,
-        username: interaction.user.username,
-        detail: msg,
-      });
+      if (friendsServerFeedActive()) {
+        void postToHostLogChannel([
+          {
+            title: "Slash command error",
+            description: `\`/${interaction.commandName}\` · **${interaction.user.username}**\n\`\`\`\n${msg.slice(0, 900)}\n\`\`\``,
+            color: 0xef_44_44,
+          },
+        ]);
+      } else {
+        void notifyHostSlashError({
+          command: interaction.commandName,
+          userId: interaction.user.id,
+          username: interaction.user.username,
+          detail: msg,
+        });
+      }
     }
     const friendMsg =
       isFriendsHostMode() && !isHost(interaction.user.id)

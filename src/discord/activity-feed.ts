@@ -15,6 +15,10 @@ import {
 } from "./public-alert-filter.js";
 import { reportLimboSkipped, reportRainAlert, reportRainJoinSummary } from "./reporter.js";
 import {
+  friendsServerFeedActive,
+  postFriendsActivityLogs,
+} from "./friends-feed.js";
+import {
   dmHostEmbeds,
   isFriendsHostMode,
   publicActivityChannelAllowed,
@@ -164,6 +168,10 @@ async function flushQueue(): Promise<void> {
   if (queue.length === 0) return;
 
   const batch = queue.splice(0, 12);
+  if (friendsServerFeedActive()) {
+    await postFriendsActivityLogs(batch);
+    return;
+  }
   const byCategory = new Map<string, ActivityLogRow[]>();
   for (const log of batch) {
     const key = log.category;
