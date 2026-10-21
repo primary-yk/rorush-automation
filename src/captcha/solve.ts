@@ -259,7 +259,7 @@ async function pollTaskUntilReady(
   taskId: number | string,
   opts: { attempt: number; attempts: number; cancelAfterMs: number },
 ): Promise<string> {
-  const pollMs = Math.max(800, Number(process.env.CAPTCHA_POLL_MS ?? 1000) || 1000);
+  const pollMs = Math.max(400, Number(process.env.CAPTCHA_POLL_MS ?? 500) || 500);
   const maxPolls = Math.max(20, Number(process.env.CAPTCHA_MAX_POLLS ?? 180) || 180);
   const cancelAfterMs = opts.cancelAfterMs;
   const verbose = /^(1|true|yes|on)$/i.test(process.env.CAPTCHA_VERBOSE?.trim() ?? "");
@@ -394,7 +394,11 @@ async function createAndPoll(
       if (attempt < attempts && isCaptchaRetryableTaskError(err)) {
         const why = err instanceof Error ? err.message.split("\n")[0] : String(err);
         console.warn(`[captcha] retrying with new task (${attempt + 1}/${attempts}) after: ${why.slice(0, 100)}`);
-        await new Promise((r) => setTimeout(r, 1_500));
+        const retryDelayMs = Math.max(
+          400,
+          Number(process.env.CAPTCHA_RETRY_DELAY_MS ?? 800) || 800,
+        );
+        await new Promise((r) => setTimeout(r, retryDelayMs));
         continue;
       }
       throw err;

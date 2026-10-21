@@ -89,29 +89,36 @@ function isWorkerUnsolvableError(err: unknown): boolean {
   );
 }
 
+function rainCaptchaDualStartEnabled(): boolean {
+  const raw = process.env.CAPTCHA_RAIN_DUAL_START?.trim().toLowerCase();
+  if (raw === "0" || raw === "false" || raw === "off" || raw === "no") return false;
+  return true;
+}
+
 function rainCaptchaSolveOptions(): CaptchaSolveOptions {
   return {
     cancelAfterMs: Math.max(
-      35_000,
-      Number(process.env.CAPTCHA_RAIN_CANCEL_AFTER_MS ?? 55_000) || 55_000,
+      28_000,
+      Number(process.env.CAPTCHA_RAIN_CANCEL_AFTER_MS ?? 42_000) || 42_000,
     ),
-    taskAttempts: Math.max(2, Number(process.env.CAPTCHA_RAIN_TASK_ATTEMPTS ?? 4) || 4),
+    taskAttempts: Math.max(2, Number(process.env.CAPTCHA_RAIN_TASK_ATTEMPTS ?? 5) || 5),
   };
 }
 
-/** Start a second 2Captcha task if the first is still polling (queue stalls). */
+/** Parallel 2Captcha tasks — first token wins (dual-start + optional late hedge). */
 async function solveRainCaptchaWithHedge(): Promise<string | null> {
   const opts = rainCaptchaSolveOptions();
   const hedgeAfterMs = Math.max(
     0,
-    Number(process.env.CAPTCHA_RAIN_HEDGE_AFTER_MS ?? 40_000) || 40_000,
+    Number(process.env.CAPTCHA_RAIN_HEDGE_AFTER_MS ?? 12_000) || 12_000,
   );
-  if (hedgeAfterMs <= 0) {
-    return solveCaptcha("hcaptcha", opts);
-  }
+  const dualStart = rainCaptchaDualStartEnabled();
 
   return new Promise<string | null>((resolve, reject) => {
     let settled = false;
+    let tasksLaunched = 0;
+    let failures = 0;
+
     const finish = (token: string | null) => {
       if (settled || token == null) return;
       settled = true;
@@ -123,19 +130,26 @@ async function solveRainCaptchaWithHedge(): Promise<string | null> {
       reject(err instanceof Error ? err : new Error(String(err)));
     };
 
-    let failures = 0;
-    const onErr = (err: unknown) => {
-      failures++;
-      if (failures >= 2) fail(err);
+    const launch = (label?: string) => {
+      tasksLaunched++;
+      if (label) console.log(`[rain-captcha] ${label}`);
+      void solveCaptcha("hcaptcha", opts)
+        .then(finish)
+        .catch((err) => {
+          failures++;
+          if (!settled && failures >= tasksLaunched) fail(err);
+        });
     };
 
-    void solveCaptcha("hcaptcha", opts).then(finish).catch(onErr);
+    launch();
+    if (dualStart) launch("dual-start — 2 parallel 2Captcha tasks");
 
-    setTimeout(() => {
-      if (settled) return;
-      console.log("[rain-captcha] hedge solve — primary task still in flight");
-      void solveCaptcha("hcaptcha", { ...opts, taskAttempts: 2 }).then(finish).catch(onErr);
-    }, hedgeAfterMs);
+    if (hedgeAfterMs > 0) {
+      setTimeout(() => {
+        if (settled) return;
+        launch("hedge — extra task (queue still slow)");
+      }, hedgeAfterMs);
+    }
   });
 }
 
@@ -159,7 +173,11 @@ async function solveHcaptchaWithRetry(): Promise<string | null> {
           ? "captcha queue stall"
           : "network";
       console.warn(`[rain-captcha] retry ${attempt + 1}/${maxAttempts} after ${why}…`);
-      await new Promise((r) => setTimeout(r, 2_000));
+      const retryMs = Math.max(
+        400,
+        Number(process.env.CAPTCHA_RAIN_RETRY_MS ?? 800) || 800,
+      );
+      await new Promise((r) => setTimeout(r, retryMs));
     }
   }
   throw lastErr;
