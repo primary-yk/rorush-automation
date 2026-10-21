@@ -61,7 +61,7 @@ export function buildHelpEmbed(): EmbedBuilder {
       },
       {
         name: "Staff",
-        value: "`/server setup` · `/server earnings`\n`/pause` · `/resume`",
+        value: "`/server setup` · `/server earnings`\n`/jump` · `/thread restore`\n`/pause` · `/resume`",
         inline: true,
       },
     );
@@ -266,4 +266,33 @@ export function buildThreadWelcomeEmbed(): EmbedBuilder {
 
 export function buildErrorEmbed(message: string): EmbedBuilder {
   return baseEmbed(UI.error).setTitle("Something went wrong").setDescription(message);
+}
+
+export function buildHostJumpEmbed(input: { threadId: string; targetTag: string }): EmbedBuilder {
+  return baseEmbed(UI.accent)
+    .setTitle("Joined private feed")
+    .setDescription(`You were added to **${input.targetTag}**'s thread for support.`)
+    .addFields(
+      { name: "Thread", value: `<#${input.threadId}>`, inline: false },
+      {
+        name: "When you're done",
+        value: "Leave the thread from Discord's thread menu — staff are not added to new feeds automatically.",
+        inline: false,
+      },
+    );
+}
+
+export function buildThreadRestoreEmbed(input: {
+  threadId: string;
+  created: boolean;
+  roleRefreshed: boolean;
+  forSelf: boolean;
+}): EmbedBuilder {
+  const title = input.forSelf ? "Feed thread restored" : "Member feed restored";
+  const lines = [
+    input.created ? "Created a **new** private feed thread." : "Re-added to their **existing** feed thread.",
+    input.roleRefreshed ? "Rain Member role refreshed." : "",
+    `Open: <#${input.threadId}>`,
+  ].filter(Boolean);
+  return baseEmbed(UI.success).setTitle(title).setDescription(lines.join("\n"));
 }

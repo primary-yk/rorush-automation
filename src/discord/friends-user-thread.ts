@@ -1,5 +1,11 @@
-import { ChannelType, type Client, type Guild, type TextChannel } from "discord.js";
-import { getSettings, upsertDiscordUserThread } from "../db/repositories.js";
+import {
+  ChannelType,
+  type Client,
+  type Guild,
+  type PrivateThreadChannel,
+  type TextChannel,
+} from "discord.js";
+import { getDiscordUserThread, getSettings, upsertDiscordUserThread } from "../db/repositories.js";
 import { buildThreadWelcomeEmbed } from "./friends-ui.js";
 import { addGuildMemberRole } from "./friends-guild-roles.js";
 import { FRIENDS_ROLE_NAMES, parseFriendsServerLayout } from "./friends-layout.js";
@@ -18,6 +24,18 @@ export async function assignPilotRole(input: {
   });
 }
 
+/** Legacy opt-in: host auto-added to every new private feed thread. Default off. */
+export function hostAutoJoinPrivateThreads(): boolean {
+  const v = process.env.DISCORD_HOST_AUTO_JOIN_FEED_THREADS?.trim().toLowerCase();
+  return v === "1" || v === "true" || v === "yes" || v === "on";
+}
+
+async function ensurePrivateThreadMember(thread: PrivateThreadChannel, userId: string): Promise<void> {
+  const inGuild = await thread.guild.members.fetch(userId).catch(() => null);
+  if (!inGuild) return;
+  await thread.members.add(userId).catch(() => undefined);
+}
+
 export async function ensureUserPrivateFeedThread(input: {
   client: Client;
   guild: Guild;
@@ -30,13 +48,12 @@ export async function ensureUserPrivateFeedThread(input: {
     throw new Error("Server not configured yet. Staff must run **`/server setup`** first.");
   }
 
-  const { getDiscordUserThread } = await import("../db/repositories.js");
   const row = getDiscordUserThread(input.discordUserId);
   if (row?.thread_id) {
     const ch = await input.client.channels.fetch(row.thread_id).catch(() => null);
-    if (ch?.isTextBased()) {
-      await input.client.channels.fetch(row.thread_id);
-      return { threadId: row.thread_id, created: false };
+    if (ch?.isThread()) {
+      await ensurePrivateThreadMember(ch, input.discordUserId);
+      return { threadId: ch.id, created: false };
     }
   }
 
@@ -51,11 +68,10 @@ export async function ensureUserPrivateFeedThread(input: {
     invitable: false,
     reason: "Friend private feed",
   });
-  await thread.members.add(input.discordUserId).catch(() => undefined);
+  await ensurePrivateThreadMember(thread, input.discordUserId);
 
-  const layout = parseFriendsServerLayout(settings.discord_server_layout_json);
   const hostId = process.env.HOST_DISCORD_USER_ID?.trim();
-  if (hostId && hostId !== input.discordUserId) {
+  if (hostAutoJoinPrivateThreads() && hostId && hostId !== input.discordUserId) {
     await thread.members.add(hostId).catch(() => undefined);
   }
 
@@ -82,9 +98,57 @@ export async function runSetupJoin(input: {
       pilotRoleId: layout.roleIds.pilot,
     }).catch(() => undefined);
   }
-  /* Rain Member also applied here via REST — no Server Members Intent required */
 
   return ensureUserPrivateFeedThread(input);
+}
+
+/** Staff joins a member's existing private feed (not added by default on create). */
+export async function hostJumpToUserFeedThread(input: {
+  client: Client;
+  guild: Guild;
+  hostUserId: string;
+  targetUserId: string;
+}): Promise<{ threadId: string; targetTag: string }> {
+  const row = getDiscordUserThread(input.targetUserId);
+  if (!row?.thread_id) {
+    throw new Error("That member has no feed thread yet — ask them to run **`/connect`** first.");
+  }
+  const ch = await input.client.channels.fetch(row.thread_id).catch(() => null);
+  if (!ch?.isThread()) {
+    throw new Error("Their feed thread is missing — have them run **`/connect`** or use **`/thread restore`**.");
+  }
+  await ch.members.add(input.hostUserId).catch(() => undefined);
+  const member = await input.guild.members.fetch(input.targetUserId).catch(() => null);
+  const targetTag = member?.displayName ?? member?.user.username ?? "member";
+  return { threadId: ch.id, targetTag };
+}
+
+/** Re-add a member to their private feed (left thread or rejoined server). */
+export async function restoreUserFeedThread(input: {
+  client: Client;
+  guild: Guild;
+  token: string;
+  targetUserId: string;
+  username: string;
+}): Promise<{ threadId: string; created: boolean; roleRefreshed: boolean }> {
+  const layout = parseFriendsServerLayout(getSettings().discord_server_layout_json);
+  let roleRefreshed = false;
+  if (layout?.roleIds.pilot) {
+    await assignPilotRole({
+      token: input.token,
+      guildId: input.guild.id,
+      userId: input.targetUserId,
+      pilotRoleId: layout.roleIds.pilot,
+    }).catch(() => undefined);
+    roleRefreshed = true;
+  }
+  const result = await ensureUserPrivateFeedThread({
+    client: input.client,
+    guild: input.guild,
+    discordUserId: input.targetUserId,
+    username: input.username,
+  });
+  return { ...result, roleRefreshed };
 }
 
 /** @internal */

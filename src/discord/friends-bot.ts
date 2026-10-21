@@ -32,7 +32,7 @@ import {
 } from "./friends-commands.js";
 import { bindFriendsFeedClient, friendsServerFeedActive, postToHostLogChannel } from "./friends-feed.js";
 import { runFriendsServerSetup } from "./friends-server-setup.js";
-import { runSetupJoin } from "./friends-user-thread.js";
+import { hostJumpToUserFeedThread, restoreUserFeedThread, runSetupJoin } from "./friends-user-thread.js";
 import { isFriendsHostMode, notifyHostSlashError } from "./host-alerts.js";
 import { discordSupportLine } from "./friends-copy.js";
 import { ensureMemberRoleOnMember } from "./friends-guild-roles.js";
@@ -51,6 +51,8 @@ import {
   buildSetupJoinEmbed,
   buildSetupServerEmbed,
   buildStatusEmbed,
+  buildHostJumpEmbed,
+  buildThreadRestoreEmbed,
   buildUpdateEmbed,
 } from "./friends-ui.js";
 
@@ -104,6 +106,19 @@ function buildSlashCommands() {
     .setName("earnings")
     .setDescription("Your lifetime rain, cases, and code earnings on this host"),
   new SlashCommandBuilder().setName("status").setDescription("Automation engine status"),
+  new SlashCommandBuilder()
+    .setName("jump")
+    .setDescription("Staff: join a member's private feed thread for support")
+    .addUserOption((o) => o.setName("member").setDescription("Whose feed to open").setRequired(true)),
+  new SlashCommandBuilder()
+    .setName("thread")
+    .setDescription("Private feed thread")
+    .addSubcommand((sub) =>
+      sub
+        .setName("restore")
+        .setDescription("Re-add you (or a member) to a private feed thread")
+        .addUserOption((o) => o.setName("member").setDescription("Staff only — who to restore")),
+    ),
   new SlashCommandBuilder()
     .setName("account")
     .setDescription("Manage your RoRush login (ephemeral)")
@@ -207,8 +222,8 @@ function buildSlashCommands() {
         .addNumberOption((o) => o.setName("min_rain").setDescription("Skip join if pool below this (coins)").setMinValue(0))
         .addBooleanOption((o) => o.setName("pre_wager").setDescription("Small limbo before join window")),
     ),
-  new SlashCommandBuilder().setName("pause").setDescription("Staff: pause all automation"),
-  new SlashCommandBuilder().setName("resume").setDescription("Staff: resume automation"),
+  new SlashCommandBuilder().setName("pause").setDescription("Staff: pause entire engine (all accounts)"),
+  new SlashCommandBuilder().setName("resume").setDescription("Staff: resume entire engine"),
   ];
 
   if (isHostedSaasMode()) {
@@ -358,6 +373,85 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
     if (interaction.commandName === "help") {
       await replyEmbeds(interaction, [buildHelpEmbed(), buildSetupGuideEmbed()]);
       return;
+    }
+
+    if (interaction.commandName === "jump") {
+      if (!isHost(userId)) {
+        await interaction.reply({ ephemeral: true, content: "Staff only." });
+        return;
+      }
+      await interaction.deferReply({ ephemeral: true });
+      if (!client || !interaction.guildId) {
+        await editEmbeds(interaction, buildErrorEmbed("Run this inside your Discord server."));
+        return;
+      }
+      const target = interaction.options.getUser("member", true);
+      const guild = await client.guilds.fetch(interaction.guildId);
+      try {
+        const result = await hostJumpToUserFeedThread({
+          client,
+          guild,
+          hostUserId: userId,
+          targetUserId: target.id,
+        });
+        await editEmbeds(interaction, buildHostJumpEmbed(result));
+      } catch (err) {
+        await editEmbeds(
+          interaction,
+          buildErrorEmbed(err instanceof Error ? err.message : String(err)),
+        );
+      }
+      return;
+    }
+
+    if (interaction.commandName === "thread") {
+      const sub = interaction.options.getSubcommand();
+      if (sub === "restore") {
+        const targetUser = interaction.options.getUser("member");
+        if (targetUser && targetUser.id !== userId && !isHost(userId)) {
+          await interaction.reply({ ephemeral: true, content: "Only staff can restore another member's thread." });
+          return;
+        }
+        const restoreId = targetUser?.id ?? userId;
+        await interaction.deferReply({ ephemeral: true });
+        if (!client || !interaction.guildId) {
+          await editEmbeds(interaction, buildErrorEmbed("Run this inside your Discord server."));
+          return;
+        }
+        const guild = await client.guilds.fetch(interaction.guildId);
+        const member = await guild.members.fetch(restoreId).catch(() => null);
+        if (!member) {
+          await editEmbeds(
+            interaction,
+            buildErrorEmbed("That user is not in this server — they must rejoin the server first."),
+          );
+          return;
+        }
+        try {
+          const result = await restoreUserFeedThread({
+            client,
+            guild,
+            token: botToken,
+            targetUserId: restoreId,
+            username: member.user.username,
+          });
+          await editEmbeds(
+            interaction,
+            buildThreadRestoreEmbed({
+              threadId: result.threadId,
+              created: result.created,
+              roleRefreshed: result.roleRefreshed,
+              forSelf: restoreId === userId,
+            }),
+          );
+        } catch (err) {
+          await editEmbeds(
+            interaction,
+            buildErrorEmbed(err instanceof Error ? err.message : String(err)),
+          );
+        }
+        return;
+      }
     }
 
     if (interaction.commandName === "connect") {
