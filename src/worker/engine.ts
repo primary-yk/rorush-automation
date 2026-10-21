@@ -32,6 +32,7 @@ import { fetchCaptchaBalanceSnapshot } from "../captcha/balance-cache.js";
 import {
   reportCaptchaBalanceLow,
   reportRainJoinWindowOpen,
+  reportRainOutcome,
 } from "../discord/reporter.js";
 import {
   msUntilNextCaseUnlock,
@@ -576,6 +577,7 @@ export class AutomationEngine {
     const pauseMs = this.rainJoinInterAttemptMs();
     let tries = 0;
     let hub: Awaited<ReturnType<HubRegistry["ensure"]>> | null = null;
+    let lastReason = "Could not join this rain";
 
     while (tries < maxTries) {
       tries++;
@@ -645,13 +647,22 @@ export class AutomationEngine {
           rain: liveJoin,
           hub,
           captchaToken: accountCaptcha,
+          reportToDiscord: false,
         });
         if (result.success) {
           rainTelemetryAccountJoined(liveJoin.rainId, account.nickname);
           consumeRainCaptchaToken(liveJoin.rainId, account.id);
+          void reportRainOutcome({
+            nickname: account.nickname,
+            success: true,
+            message: result.reason,
+            rainId: liveJoin.rainId,
+            poolCoins: liveJoin.amount ?? undefined,
+          });
           return { retryable: false };
         }
 
+        lastReason = result.reason;
         rainTelemetryAccountFailed(liveJoin.rainId, account.nickname, result.reason);
         appendLog({
           accountId: account.id,
@@ -661,6 +672,13 @@ export class AutomationEngine {
         });
 
         if (isPermanentRainJoinFailure(result.reason)) {
+          void reportRainOutcome({
+            nickname: account.nickname,
+            success: false,
+            message: result.reason,
+            rainId: liveJoin.rainId,
+            poolCoins: liveJoin.amount ?? undefined,
+          });
           return { retryable: false };
         }
 
@@ -687,14 +705,26 @@ export class AutomationEngine {
     }
 
     const liveEnd = liveRain();
-    if (liveEnd && rainJoinWindowOpen(liveEnd) && !isRainJoined(account.id, rainId)) {
-      appendLog({
-        accountId: account.id,
-        category: "rain",
-        message: "Rain join missed (window closed or max tries)",
-        detail: `${account.nickname} · ${rainId.slice(0, 8)}… · ${tries} attempt(s)`,
-        force: true,
+    if (!isRainJoined(account.id, rainId)) {
+      const pool =
+        liveEnd?.amount ??
+        (this.activeRain?.rainId === rainId ? this.activeRain?.amount : undefined);
+      void reportRainOutcome({
+        nickname: account.nickname,
+        success: false,
+        message: lastReason,
+        rainId,
+        poolCoins: pool ?? undefined,
       });
+      if (liveEnd && rainJoinWindowOpen(liveEnd)) {
+        appendLog({
+          accountId: account.id,
+          category: "rain",
+          message: "Rain join missed (window closed or max tries)",
+          detail: `${account.nickname} · ${rainId.slice(0, 8)}… · ${tries} attempt(s)`,
+          force: true,
+        });
+      }
     }
     return { retryable: false };
   }

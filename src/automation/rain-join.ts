@@ -188,13 +188,21 @@ export async function joinRainForAccount(input: {
   rain: RainState;
   hub: RoRushHub;
   captchaToken?: string | null;
+  /** When false, caller reports to Discord (avoids “join failed” on captcha retries). */
+  reportToDiscord?: boolean;
 }): Promise<{ success: boolean; reason: string }> {
   const { accountId, rain, hub } = input;
   if (isRainJoined(accountId, rain.rainId)) {
     return { success: true, reason: "Already joined this rain" };
   }
   return trackJoinInflight(accountId, rain.rainId, () =>
-    joinRainForAccountOnce({ accountId, rain, hub, captchaToken: input.captchaToken }),
+    joinRainForAccountOnce({
+      accountId,
+      rain,
+      hub,
+      captchaToken: input.captchaToken,
+      reportToDiscord: input.reportToDiscord,
+    }),
   );
 }
 
@@ -203,6 +211,7 @@ async function joinRainForAccountOnce(input: {
   rain: RainState;
   hub: RoRushHub;
   captchaToken?: string | null;
+  reportToDiscord?: boolean;
 }): Promise<{ success: boolean; reason: string }> {
   const { accountId, rain, hub } = input;
   const { account, client } = await ensureAuthenticated(accountId);
@@ -374,13 +383,15 @@ async function joinRainForAccountOnce(input: {
       });
     }
 
-    void reportRainOutcome({
-      nickname: account.nickname,
-      success: outcome.ok,
-      message: outcome.message,
-      rainId: rain.rainId,
-      poolCoins: rainAmount,
-    });
+    if (input.reportToDiscord !== false) {
+      void reportRainOutcome({
+        nickname: account.nickname,
+        success: outcome.ok,
+        message: outcome.message,
+        rainId: rain.rainId,
+        poolCoins: rainAmount,
+      });
+    }
 
     return { success: outcome.ok, reason: outcome.message };
   } catch (err) {
