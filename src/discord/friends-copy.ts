@@ -40,7 +40,7 @@ export function friendCommandsChannelText(): string {
     "**Commands**",
     "• `/connect` — private feed",
     "• `/guide` — getting started",
-    "• `/account add` · `/account session` · `/account claim` · `/account list`",
+    "• `/account add` · `/account session` · `/account remove` · `/account list`",
     "• `/rain` · `/cases` · `/limbo`",
     "• `/status` · `/help`",
     "",
