@@ -47,7 +47,7 @@ import {
   replyEphemeralEmbed,
   replyEphemeralEmbeds,
 } from "./friends-interaction.js";
-import { encryptionKeyStatus, projectRoot } from "../config.js";
+import { botRuntimeLabel, encryptionKeyStatus, projectRoot } from "../config.js";
 import { sanitizeDiscordOutbound } from "./sanitize-outbound.js";
 import { engine } from "../worker/engine.js";
 import {
@@ -307,7 +307,7 @@ export async function startFriendsDiscordBot(): Promise<void> {
 
   client.once(Events.ClientReady, async (c) => {
     bindFriendsFeedClient(client);
-    console.log(`[friends-bot] logged in as ${c.user.tag} · project ${projectRoot()}`);
+    console.log(`[friends-bot] logged in as ${c.user.tag} · ${botRuntimeLabel()}`);
     const enc = encryptionKeyStatus();
     if (enc.ok) {
       console.log("[friends-bot] ENCRYPTION_KEY OK — /account add can save passwords");

@@ -1,3 +1,4 @@
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
@@ -111,13 +112,18 @@ export function encryptionKeyStatus(): { ok: true } | { ok: false; reason: strin
   return { ok: true };
 }
 
+export function botRuntimeLabel(): string {
+  return `${PROJECT_ROOT} · ${os.hostname()}`;
+}
+
 export function requireEncryptionKey(): Buffer {
   const status = encryptionKeyStatus();
   if (!status.ok) {
+    const where = botRuntimeLabel();
     throw new Error(
-      `${status.reason}. Project folder: ${PROJECT_ROOT}. ` +
-        "If `npm run doctor` shows the key as set but Discord fails, stop every `npm run dev` " +
-        "(WSL and Windows are separate — run bot only where you edited .env).",
+      `${status.reason}. This bot process: ${where}. ` +
+        "If your PC doctor shows ENCRYPTION_KEY OK but Discord shows a different folder (e.g. /workspace), " +
+        "another copy of the bot is online with the same DISCORD_BOT_TOKEN — reset the token in the Discord Developer Portal and put the new token only in your PC .env, then restart dev there.",
     );
   }
   const keyB64 = loadConfig().ENCRYPTION_KEY!.trim();

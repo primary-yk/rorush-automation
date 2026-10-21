@@ -5,6 +5,13 @@ import { discordSupportMention } from "./friends-copy.js";
  */
 export function sanitizeDiscordOutbound(text: string): string {
   const support = discordSupportMention();
+  // Host diagnostics (paths, encryption) — do not rewrite npm/doctor hints into ping text.
+  if (/ENCRYPTION_KEY|Project folder:|This bot process:|\/workspace|\/home\//i.test(text)) {
+    return text
+      .replace(/https?:\/\/[^\s<>)]+/gi, "")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+  }
   return text
     .replace(/https?:\/\/[^\s<>)]+/gi, "")
     .replace(/\b127\.0\.0\.1:\d+/g, "")

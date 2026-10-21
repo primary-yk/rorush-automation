@@ -51,6 +51,8 @@ Friends only use `/` commands — bot replies never include dashboard or site li
 
 Keep **`npm run dev` running** on your PC while friends use the bot.
 
+**One bot token, one machine.** Never paste `DISCORD_BOT_TOKEN` into a Cursor Cloud Agent or second PC while dev is running at home. If `/account add` errors mention **`Project folder: /workspace`**, Discord is talking to a cloud sandbox, not your `~/rush-pilot` — reset the bot token in the Developer Portal and use the new token only on your host PC.
+
 ## Friends
 
 No install. In your Discord server:
