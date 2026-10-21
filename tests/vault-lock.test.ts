@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { parseVaultLockPreset, VAULT_LOCK_PRESETS } from "../src/rorush/vault-lock.js";
+import {
+  parseVaultLockPreset,
+  VAULT_LOCK_PRESETS,
+  vaultLockApiDurationFromMinutes,
+} from "../src/rorush/vault-lock.js";
 import { isVaultLockActive, vaultLockExpiresAtIso } from "../src/rorush/vault.js";
 
 describe("vault-lock presets", () => {
@@ -8,6 +12,12 @@ describe("vault-lock presets", () => {
     expect(parseVaultLockPreset("1 hour")).toBe(60);
     expect(parseVaultLockPreset("1d")).toBe(1440);
     expect(parseVaultLockPreset("off")).toBe(0);
+  });
+
+  it("maps minutes to RoRush lock API duration tokens", () => {
+    expect(vaultLockApiDurationFromMinutes(10)).toBe("10min");
+    expect(vaultLockApiDurationFromMinutes(60)).toBe("1h");
+    expect(vaultLockApiDurationFromMinutes(99)).toBeNull();
   });
 
   it("detects active lock window", () => {

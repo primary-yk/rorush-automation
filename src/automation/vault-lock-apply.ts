@@ -20,8 +20,8 @@ export async function startVaultSession(input: {
   });
 
   const { client } = await ensureAuthenticated(account.id);
-  await lockVaultForMinutes(client, input.lockMinutes);
-  const expires = vaultLockExpiresAtIso(input.lockMinutes);
+  const lock = await lockVaultForMinutes(client, input.lockMinutes);
+  const expires = lock.unlockAt;
   updateAccount(account.id, { vault_lock_expires_at: expires });
 
   const label = formatVaultLockPreset(input.lockMinutes);

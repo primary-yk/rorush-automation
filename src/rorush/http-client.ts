@@ -71,10 +71,20 @@ export class RoRushHttpClient {
       );
 
       const text = await res.text();
-      const data = text ? (JSON.parse(text) as T) : ({} as T);
+      let data: T;
+      try {
+        data = text ? (JSON.parse(text) as T) : ({} as T);
+      } catch {
+        data = {} as T;
+      }
       if (!res.ok) {
-        const errBody = data as ApiErrorBody;
-        throw new Error(errBody.message ?? `HTTP ${res.status}`);
+        const errBody = data as ApiErrorBody & { error?: string; title?: string };
+        const detail =
+          errBody.message?.trim() ||
+          errBody.error?.trim() ||
+          errBody.title?.trim() ||
+          (text.length > 0 && text.length < 280 ? text : "");
+        throw new Error(detail || `RoRush HTTP ${res.status}`);
       }
       return data;
     } catch (err) {

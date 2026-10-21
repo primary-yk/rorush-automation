@@ -9,7 +9,25 @@ export const VAULT_LOCK_PRESETS = {
   "1d": 1440,
 } as const;
 
+/** Values RoRush `POST /vault/lock` expects (`duration` field on rorush.com). */
+export const VAULT_LOCK_API_DURATION: Record<keyof typeof VAULT_LOCK_PRESETS, string> = {
+  "10m": "10min",
+  "30m": "30min",
+  "1h": "1h",
+  "6h": "6h",
+  "12h": "12h",
+  "1d": "1d",
+};
+
 export type VaultLockPresetId = keyof typeof VAULT_LOCK_PRESETS;
+
+export function vaultLockApiDurationFromMinutes(minutes: number): string | null {
+  const rounded = Math.round(minutes);
+  const hit = (Object.entries(VAULT_LOCK_PRESETS) as Array<[VaultLockPresetId, number]>).find(
+    ([, m]) => m === rounded,
+  );
+  return hit ? VAULT_LOCK_API_DURATION[hit[0]] : null;
+}
 
 export function parseVaultLockPreset(raw: string): number | null {
   const t = raw.trim().toLowerCase().replace(/\s+/g, "");
