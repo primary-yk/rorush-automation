@@ -29,8 +29,8 @@ After adding the webhook line: `npm run setup-discord-webhook` once to verify.
 3. Right-click **your user** → Copy ID → `HOST_DISCORD_USER_ID`
 4. OAuth2 URL Generator: scopes `bot` + `applications.commands`, permissions **Send Messages**, **Use Slash Commands**, **Embed Links**, **Manage Channels**, **Manage Roles**, **Manage Threads**
 5. Bot settings: enable **Server Members Intent** (auto **Rain Member** when someone joins)
-5. `npm run discord-bot-doctor` then `npm run dev`
-6. In Discord (host): **`/setup server`** — creates roles, categories, channels, and permission overwrites (safe to re-run)
+6. `npm run discord-bot-doctor` then `npm run dev`
+7. In Discord (host): **`/setup server`** — creates roles, categories, channels, and permission overwrites (safe to re-run)
 
 Friends only use `/` commands — bot replies never include dashboard or site links.
 
