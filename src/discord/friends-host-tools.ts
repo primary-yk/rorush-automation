@@ -8,7 +8,7 @@ import {
   type TextChannel,
 } from "discord.js";
 import { getDiscordUserThread, listDiscordUserThreads } from "../db/repositories.js";
-import { COLORS, type RushEmbed } from "./embeds.js";
+import { COLORS, rainJoinEmbedCopy, type RushEmbed } from "./embeds.js";
 import { postToHostLogChannel, postToUserFeedThread } from "./friends-feed.js";
 import { buildErrorEmbed, buildHostLogToolsEmbed, buildPlainResultEmbed } from "./friends-ui.js";
 import { tagHostEmbed } from "./host-log-classify.js";
@@ -25,16 +25,17 @@ export const FRIENDS_HOST_BUTTON_IDS = new Set([
 ]);
 
 export function buildTestRainFeedEmbed(nickname: string): RushEmbed {
+  const copy = rainJoinEmbedCopy(true);
   return {
-    title: "Rain — Joined (test drill)",
-    description: "This is a **host test** — not a real rain. Real joins will look like this in your private feed.",
+    title: `${copy.title} (sample)`,
+    description: `${copy.description}\n\n_Host test only — not a live rain._`,
     color: COLORS.rainOk,
     fields: [
       { name: "Account", value: `**${nickname}**`, inline: true },
       { name: "Pool", value: "1,000.00 coins (sample)", inline: true },
-      { name: "Rain", value: "`test-drill`", inline: true },
+      { name: "Rain ID", value: "`test-drill`", inline: true },
     ],
-    footer: { text: "Host test — safe to ignore" },
+    footer: { text: "Rain · sample" },
   };
 }
 

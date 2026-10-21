@@ -25,6 +25,7 @@ describe("classifyEmbedRoute", () => {
   });
 
   it("routes joins to user when owner exists", () => {
-    expect(classifyEmbedRoute("Rain — Joined", true)).toBe("user");
+    expect(classifyEmbedRoute("Rain · Join confirmed", true)).toBe("user");
+    expect(classifyEmbedRoute("Limbo · Win", true)).toBe("user");
   });
 });

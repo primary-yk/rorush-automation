@@ -211,7 +211,7 @@ export function onActivityLog(log: ActivityLogRow): void {
   if (log.category === "rain" && /join failed|join error|pipeline error/i.test(log.message)) {
     void reportRainAlert({
       nickname: accountNickname(log.account_id),
-      title: "Rain — Issue",
+      title: "Rain · Issue",
       body: log.detail ? `${log.message}\n${log.detail}` : log.message,
       rainId: log.detail?.match(/[0-9a-f-]{36}/i)?.[0],
     });

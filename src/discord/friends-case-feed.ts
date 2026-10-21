@@ -27,10 +27,13 @@ export async function notifyCaseWinInUserFeed(input: {
 
   const embed: RushEmbed = withBrand(
     {
-      title: `${input.slotLabel} case opened`,
-      description: lines.join("\n") || "Case opened",
+      title: `Cases · ${input.slotLabel}`,
+      description: lines.join("\n") || "Reward case opened successfully.",
       color: COLORS.case,
-      footer: { text: account?.nickname ?? "Account" },
+      fields: account?.nickname
+        ? [{ name: "Account", value: `**${account.nickname}**`, inline: true }]
+        : undefined,
+      footer: { text: "Cases" },
     },
     COLORS.case,
   );

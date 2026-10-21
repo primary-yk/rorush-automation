@@ -1,5 +1,5 @@
 import { getAccount } from "../db/repositories.js";
-import { COLORS, withBrand, type RushEmbed } from "./embeds.js";
+import { COLORS, formatCoins, shortRainId, withBrand, type RushEmbed } from "./embeds.js";
 import { postToUserFeedThread } from "./friends-feed.js";
 
 export async function notifyVaultDepositInUserFeed(input: {
@@ -13,24 +13,29 @@ export async function notifyVaultDepositInUserFeed(input: {
   if (!owner) return;
 
   let embed: RushEmbed;
+  const nick = account?.nickname ?? "Account";
   if (input.skippedReason) {
     embed = withBrand(
       {
-        title: "Vault · skipped",
-        description: `**${account?.nickname ?? "Account"}** — ${input.skippedReason}`,
+        title: "Vault · Skipped",
+        description: input.skippedReason,
         color: COLORS.limboSkip,
-        footer: { text: "Rain vault" },
+        fields: [{ name: "Account", value: `**${nick}**`, inline: true }],
+        footer: { text: "Vault" },
       },
       COLORS.limboSkip,
     );
   } else {
     embed = withBrand(
       {
-        title: "Vault · rain profit saved",
-        description:
-          `**${account?.nickname ?? "Account"}** moved **${input.depositedCoins.toFixed(2)} coins** to RoRush vault.\n` +
-          `Rain \`${input.rainId.slice(0, 8)}…\``,
+        title: "Vault · Deposit",
+        description: `Rain profit moved to your RoRush vault.`,
         color: COLORS.rainOk,
+        fields: [
+          { name: "Account", value: `**${nick}**`, inline: true },
+          { name: "Amount", value: formatCoins(input.depositedCoins), inline: true },
+          { name: "Rain ID", value: shortRainId(input.rainId), inline: true },
+        ],
         footer: { text: "Withdraw on rorush.com when unlocked" },
       },
       COLORS.rainOk,

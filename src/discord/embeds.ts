@@ -42,6 +42,45 @@ export function formatCoins(n: number): string {
   return `${n.toFixed(2)} coins`;
 }
 
+export function formatMultiplier(mult: number): string {
+  return `${mult.toFixed(2)}×`;
+}
+
+/** User-facing rain join card (private feed). */
+export function rainJoinEmbedCopy(success: boolean): { title: string; description: string } {
+  if (success) {
+    return {
+      title: "Rain · Join confirmed",
+      description: "Your account entered the join window for this pool.",
+    };
+  }
+  return {
+    title: "Rain · Join failed",
+    description: "This account could not join the current rain.",
+  };
+}
+
+/** User-facing limbo result card — never uses “crash” wording. */
+export function limboOutcomeEmbedCopy(input: {
+  hit: boolean;
+  targetMultiplier: number;
+  resultMultiplier: number | null;
+}): { title: string; description: string } {
+  const set = formatMultiplier(input.targetMultiplier);
+  const result =
+    input.resultMultiplier != null ? formatMultiplier(input.resultMultiplier) : "—";
+  if (input.hit) {
+    return {
+      title: "Limbo · Win",
+      description: `Result **${result}** met your **${set}** target.`,
+    };
+  }
+  return {
+    title: "Limbo · Loss",
+    description: `Result **${result}** · target **${set}**.`,
+  };
+}
+
 export function formatBalanceChange(before: number, after: number): string {
   const delta = after - before;
   const sign = delta >= 0 ? "+" : "";

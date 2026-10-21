@@ -572,11 +572,11 @@ async function placeLimboWagerBet(
           typeof raw === "string" ? raw.slice(0, 400) : JSON.stringify(raw).slice(0, 400),
         );
       }
-      const crash =
-        parsed.crashMultiplier != null ? `${parsed.crashMultiplier.toFixed(2)}×` : "unknown";
+      const resultMult =
+        parsed.crashMultiplier != null ? `${parsed.crashMultiplier.toFixed(2)}×` : "—";
       const limboMessage = parsed.hit
-        ? `Limbo hit at ${crash} (target ${targetMult.toFixed(2)}×)`
-        : `Limbo miss — crashed at ${crash} (target ${targetMult.toFixed(2)}×)`;
+        ? `Limbo win · result ${resultMult} · set ${targetMult.toFixed(2)}×`
+        : `Limbo loss · result ${resultMult} · set ${targetMult.toFixed(2)}×`;
       void (async () => {
         let balanceAfterBet: number | null = null;
         try {

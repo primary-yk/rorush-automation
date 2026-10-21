@@ -16,7 +16,10 @@ import {
   COLORS,
   formatBalanceChange,
   formatCoins,
+  formatMultiplier,
+  limboOutcomeEmbedCopy,
   parseRainSummaryDetail,
+  rainJoinEmbedCopy,
   shortRainId,
   withBrand,
   type RushEmbed,
@@ -142,18 +145,19 @@ export async function reportLimboOutcome(input: {
   balanceAfter?: number | null;
   reasonLabel?: string | null;
 }): Promise<void> {
-  const crash =
-    input.crashMultiplier != null ? `${input.crashMultiplier.toFixed(2)}×` : "—";
-  const title = input.hit ? "Limbo — Hit" : "Limbo — Miss";
-  const headline = input.hit
-    ? `Crashed **${crash}** (needed **${input.targetMultiplier.toFixed(2)}×**).`
-    : `Crashed **${crash}** before **${input.targetMultiplier.toFixed(2)}×**.`;
+  const resultMult =
+    input.crashMultiplier != null ? formatMultiplier(input.crashMultiplier) : "—";
+  const { title, description: headline } = limboOutcomeEmbedCopy({
+    hit: input.hit,
+    targetMultiplier: input.targetMultiplier,
+    resultMultiplier: input.crashMultiplier ?? null,
+  });
 
   const fields: RushEmbed["fields"] = [
     { name: accountFieldLabel(), value: `**${input.nickname}**`, inline: true },
     { name: "Wager", value: formatCoins(input.betCoins), inline: true },
-    { name: "Target ×", value: `${input.targetMultiplier.toFixed(2)}×`, inline: true },
-    { name: "Outcome ×", value: crash, inline: true },
+    { name: "Set ×", value: formatMultiplier(input.targetMultiplier), inline: true },
+    { name: "Result ×", value: resultMult, inline: true },
   ];
 
   if (input.balanceBefore != null && input.balanceAfter != null) {
@@ -167,10 +171,10 @@ export async function reportLimboOutcome(input: {
   }
 
   if (input.reasonLabel) {
-    fields.push({ name: "Context", value: redactForDiscord(input.reasonLabel), inline: false });
+    fields.push({ name: "Note", value: redactForDiscord(input.reasonLabel), inline: false });
   }
   if (input.rainId && input.rainId !== "test-limbo") {
-    fields.push({ name: "Rain", value: shortRainId(input.rainId), inline: false });
+    fields.push({ name: "Rain ID", value: shortRainId(input.rainId), inline: false });
   }
 
   await deliverEmbed(
@@ -179,7 +183,7 @@ export async function reportLimboOutcome(input: {
       description: headline,
       color: input.hit ? COLORS.limboHit : COLORS.limboMiss,
       fields,
-      footer: { text: friendsDiscordBrandingEnabled() ? "Limbo wager" : "Limbo" },
+      footer: { text: "Limbo" },
     },
     { nickname: input.nickname },
   );
@@ -193,6 +197,7 @@ export async function reportRainOutcome(input: {
   poolCoins?: number;
 }): Promise<void> {
   const detail = redactForDiscord(input.message);
+  const rainCopy = rainJoinEmbedCopy(input.success);
   const fields: RushEmbed["fields"] = [
     { name: accountFieldLabel(), value: `**${input.nickname}**`, inline: true },
     {
@@ -200,7 +205,7 @@ export async function reportRainOutcome(input: {
       value: input.poolCoins != null ? formatCoins(input.poolCoins) : "—",
       inline: true,
     },
-    { name: "Rain", value: shortRainId(input.rainId), inline: true },
+    { name: "Rain ID", value: shortRainId(input.rainId), inline: true },
   ];
   if (detail && !/^joined rain/i.test(detail)) {
     fields.push({ name: "Note", value: detail.slice(0, 900), inline: false });
@@ -208,14 +213,12 @@ export async function reportRainOutcome(input: {
 
   await deliverEmbed(
     {
-      title: input.success ? "Rain — Joined" : "Rain — Failed",
-      description: input.success
-        ? "Successfully entered the rain join window."
-        : "Could not join this rain batch.",
+      title: rainCopy.title,
+      description: rainCopy.description,
       color: input.success ? COLORS.rainOk : COLORS.rainFail,
       fields,
-    footer: { text: friendsDiscordBrandingEnabled() ? "Rain join" : "Rain" },
-  },
+      footer: { text: "Rain" },
+    },
     { nickname: input.nickname },
   );
 }
@@ -228,11 +231,11 @@ export async function reportRainJoinSummary(detail: string | null): Promise<void
       : [{ name: "Summary", value: detail?.slice(0, 900) ?? "—", inline: false }];
 
   await deliverEmbed({
-    title: "Rain batch — Summary",
-    description: "End-of-rain join stats for this pool.",
+    title: "Rain · Batch summary",
+    description: "Join stats for the pool that just finished.",
     color: COLORS.rainSummary,
     fields,
-    footer: { text: "Rain telemetry" },
+    footer: { text: "Rain" },
   });
 }
 
@@ -243,14 +246,14 @@ export async function reportLimboSkipped(input: {
 }): Promise<void> {
   await deliverEmbed(
     {
-      title: "Limbo — Skipped",
+      title: "Limbo · Not placed",
       description: redactForDiscord(input.reason),
       color: COLORS.limboSkip,
       fields: [
         { name: accountFieldLabel(), value: `**${input.nickname}**`, inline: true },
-        ...(input.rainId ? [{ name: "Rain", value: shortRainId(input.rainId), inline: true }] : []),
+        ...(input.rainId ? [{ name: "Rain ID", value: shortRainId(input.rainId), inline: true }] : []),
       ],
-      footer: { text: "Post-rain limbo" },
+      footer: { text: "Limbo" },
     },
     { nickname: input.nickname },
   );

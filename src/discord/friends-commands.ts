@@ -301,9 +301,11 @@ export async function testLimboForDiscordUser(
   }
   const mult = multiplier ?? account.limbo_multiplier;
   const result = await engine.testLimbo(account.id, betCoins, mult);
+  const setMult = Math.max(LIMBO_MIN_MULTIPLIER, mult).toFixed(2);
+  const outcome = result.hit ? "Win" : "Loss";
   return (
-    `**${account.nickname}** · Test limbo **${result.hit ? "HIT" : "miss"}** · ` +
-    `${result.betCoins.toFixed(2)} coins @ ${Math.max(LIMBO_MIN_MULTIPLIER, mult).toFixed(2)}×`
+    `**${account.nickname}** · Test limbo **${outcome}** · ` +
+    `${result.betCoins.toFixed(2)} coins · set **${setMult}×**`
   );
 }
 
