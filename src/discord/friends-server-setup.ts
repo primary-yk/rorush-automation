@@ -1,8 +1,6 @@
 import {
   ChannelType,
   PermissionFlagsBits,
-  REST,
-  Routes,
   type CategoryChannel,
   type Guild,
   type Role,
@@ -19,6 +17,8 @@ import {
 } from "./friends-layout.js";
 import { friendCommandsChannelText, friendStartHereChannelText } from "./friends-copy.js";
 import { SETUP_SERVER_BOT_PERMISSIONS } from "./friends-feed.js";
+import { addGuildMemberRole, syncMemberRoleForAllMembers } from "./friends-guild-roles.js";
+import { LOCK_EVERYONE_DENY, MEMBER_FEEDS_DENY, MEMBER_INFO_DENY } from "./friends-permissions.js";
 
 const HOST_COLOR = 0x8b_5c_f6;
 const PILOT_COLOR = 0x06_b6_d4;
@@ -132,10 +132,11 @@ async function applyCategoryPerms(
     id: string;
     deny?: bigint[];
     allow?: bigint[];
-  }> = [{ id: everyoneId, deny: [PermissionFlagsBits.ViewChannel] }];
+  }> = [{ id: everyoneId, deny: LOCK_EVERYONE_DENY }];
 
   if (mode === "host") {
     overwrites.push(
+      { id: pilotRoleId, deny: [PermissionFlagsBits.ViewChannel] },
       { id: hostRoleId, allow: [bot, PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
       { id: botId, allow: [bot] },
     );
@@ -149,6 +150,7 @@ async function applyCategoryPerms(
           PermissionFlagsBits.SendMessagesInThreads,
           PermissionFlagsBits.ReadMessageHistory,
         ],
+        deny: MEMBER_FEEDS_DENY,
       },
       {
         id: hostRoleId,
@@ -166,6 +168,7 @@ async function applyCategoryPerms(
       {
         id: pilotRoleId,
         allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory],
+        deny: MEMBER_INFO_DENY,
       },
       {
         id: hostRoleId,
@@ -207,11 +210,12 @@ async function ensureTextChannel(input: {
 
   const bot = botAllow();
   const overwrites: Array<{ id: string; deny?: bigint[]; allow?: bigint[] }> = [
-    { id: input.everyoneId, deny: [PermissionFlagsBits.ViewChannel] },
+    { id: input.everyoneId, deny: LOCK_EVERYONE_DENY },
   ];
 
   if (input.mode === "host-log") {
     overwrites.push(
+      { id: input.pilotRoleId, deny: [PermissionFlagsBits.ViewChannel] },
       {
         id: input.hostRoleId,
         allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory],
@@ -228,6 +232,7 @@ async function ensureTextChannel(input: {
           PermissionFlagsBits.SendMessagesInThreads,
           PermissionFlagsBits.ReadMessageHistory,
         ],
+        deny: MEMBER_FEEDS_DENY,
       },
       {
         id: input.hostRoleId,
@@ -245,6 +250,7 @@ async function ensureTextChannel(input: {
       {
         id: input.pilotRoleId,
         allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory],
+        deny: MEMBER_INFO_DENY,
       },
       {
         id: input.hostRoleId,
@@ -260,11 +266,6 @@ async function ensureTextChannel(input: {
 
   await ch.permissionOverwrites.set(overwrites, "Discord /setup server");
   return ch;
-}
-
-async function assignRoleRest(token: string, guildId: string, userId: string, roleId: string): Promise<void> {
-  const rest = new REST({ version: "10" }).setToken(token);
-  await rest.put(Routes.guildMemberRole(guildId, userId, roleId));
 }
 
 async function seedChannelIntro(channel: TextChannel, content: string): Promise<void> {
@@ -348,7 +349,26 @@ export async function runFriendsServerSetup(input: {
     mode: "host-log",
   });
 
-  await assignRoleRest(input.botToken, input.guild.id, input.hostUserId, hostRole.id).catch(() => undefined);
+  await addGuildMemberRole({
+    token: input.botToken,
+    guildId: input.guild.id,
+    userId: input.hostUserId,
+    roleId: hostRole.id,
+  }).catch(() => undefined);
+
+  const botMember = await input.guild.members.fetchMe();
+  const botTopRole = botMember.roles.highest;
+  if (botTopRole.position <= pilotRole.position) {
+    throw new Error(
+      "Drag the **bot role above Rain Member** in Server Settings → Roles so it can assign roles on join.",
+    );
+  }
+
+  const membersTagged = await syncMemberRoleForAllMembers({
+    guild: input.guild,
+    botToken: input.botToken,
+    hostUserId: input.hostUserId,
+  });
 
   await seedChannelIntro(startHere, friendStartHereChannelText());
   await seedChannelIntro(commands, friendCommandsChannelText());
@@ -380,7 +400,9 @@ export async function runFriendsServerSetup(input: {
     `Feeds · ${feedsCat.name} → <#${rainFeeds.id}> (private threads per friend)`,
     `Host · ${hostCat.name} → <#${hostLog.id}> (captcha / join errors — not DMs)`,
     "",
-    "Tell friends: **`/setup join`** then **`/account add`**. Staff alerts → `#host-log` (not DMs unless `DISCORD_HOST_DM_ALERTS=1`).",
+    `Auto-role · **${FRIENDS_ROLE_NAMES.pilot}** on join (+ ${membersTagged} existing member(s) updated this run)`,
+    "",
+    "Friends: **`/setup join`** → **`/account add`**. Staff log → `#host-log`.",
   ];
 
   return { layout, summaryLines };

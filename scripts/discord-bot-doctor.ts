@@ -29,6 +29,7 @@ if (relay) {
 } else if (token && guild) {
   console.log("\nNext: npm run dev — look for [friends-bot] logged in (before rain engine finishes connecting).");
   console.log("Invite bot: OAuth2 → bot + applications.commands + Manage Channels/Roles/Threads");
+  console.log("Developer Portal → Bot → enable **Server Members Intent** (auto Rain Member on join)");
   console.log("Host: /setup server  ·  Friends: /setup join → /account add → /rain");
 } else if (webhook) {
   console.log("\nWebhook-only mode: [friends-bot] skipped is OK. Slash commands need DISCORD_BOT_TOKEN + DISCORD_GUILD_ID.");

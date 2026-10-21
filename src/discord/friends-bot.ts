@@ -32,6 +32,7 @@ import { runFriendsServerSetup } from "./friends-server-setup.js";
 import { runSetupJoin } from "./friends-user-thread.js";
 import { isFriendsHostMode, notifyHostSlashError } from "./host-alerts.js";
 import { discordSupportLine, friendSetupGuideLines } from "./friends-copy.js";
+import { ensureMemberRoleOnMember } from "./friends-guild-roles.js";
 import { sanitizeDiscordOutbound } from "./sanitize-outbound.js";
 
 function out(text: string): string {
@@ -219,7 +220,9 @@ export async function startFriendsDiscordBot(): Promise<void> {
   }
   if (client) return;
 
-  client = new Client({ intents: [GatewayIntentBits.Guilds] });
+  client = new Client({
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
+  });
 
   client.once(Events.ClientReady, async (c) => {
     bindFriendsFeedClient(client);
@@ -243,6 +246,20 @@ export async function startFriendsDiscordBot(): Promise<void> {
   client.on(Events.InteractionCreate, (interaction) => {
     if (!interaction.isChatInputCommand()) return;
     void handleInteraction(interaction);
+  });
+
+  client.on(Events.GuildMemberAdd, (member) => {
+    if (member.guild.id !== guildId) return;
+    void ensureMemberRoleOnMember({
+      member,
+      botToken: token,
+      hostUserId: hostDiscordId(),
+    }).catch((err) => {
+      console.warn(
+        "[friends-bot] member role on join:",
+        err instanceof Error ? err.message : String(err),
+      );
+    });
   });
 
   await client.login(token);

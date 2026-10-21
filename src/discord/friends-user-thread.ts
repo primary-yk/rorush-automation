@@ -1,7 +1,7 @@
 import { ChannelType, EmbedBuilder, type Client, type Guild, type TextChannel } from "discord.js";
-import { REST, Routes } from "discord.js";
 import { getSettings, upsertDiscordUserThread } from "../db/repositories.js";
 import { friendThreadWelcomeDescription } from "./friends-copy.js";
+import { addGuildMemberRole } from "./friends-guild-roles.js";
 import { FRIENDS_ROLE_NAMES, parseFriendsServerLayout } from "./friends-layout.js";
 
 export async function assignPilotRole(input: {
@@ -10,8 +10,12 @@ export async function assignPilotRole(input: {
   userId: string;
   pilotRoleId: string;
 }): Promise<void> {
-  const rest = new REST({ version: "10" }).setToken(input.token);
-  await rest.put(Routes.guildMemberRole(input.guildId, input.userId, input.pilotRoleId));
+  await addGuildMemberRole({
+    token: input.token,
+    guildId: input.guildId,
+    userId: input.userId,
+    roleId: input.pilotRoleId,
+  });
 }
 
 export async function ensureUserPrivateFeedThread(input: {
