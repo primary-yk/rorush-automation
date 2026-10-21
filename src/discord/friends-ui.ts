@@ -49,7 +49,7 @@ export function buildHelpEmbed(): EmbedBuilder {
       {
         name: "Accounts",
         value:
-          "`/account add` · `/account session`\n`/account list` · `/account refresh` · pause · resume · remove\nAccount picks use **dropdowns** (your saved nicknames)",
+          "`/dashboard` — balances + **Rain ON/OFF** buttons\n`/account add` · `/account session`\n`/account list` · refresh · pause · resume · remove",
         inline: true,
       },
       {
@@ -60,7 +60,8 @@ export function buildHelpEmbed(): EmbedBuilder {
       },
       {
         name: "Overview",
-        value: "`/status` — engine online?\n`/earnings` — lifetime totals\n`/help` — this menu",
+        value:
+          "`/dashboard` — account controls\n`/status` — engine online?\n`/earnings` — lifetime totals\n`/help` — this menu",
         inline: true,
       },
       {
@@ -84,7 +85,11 @@ export function buildSetupGuideEmbed(): EmbedBuilder {
           "`/account add` — email & password\n`/account session` — JWT from rorush.com (2FA / no password)",
         inline: false,
       },
-      { name: "Step 3", value: "`/rain` · `/limbo` · `/cases` — enable features", inline: false },
+      {
+        name: "Step 3",
+        value: "`/dashboard` or `/rain` · `/limbo` · `/cases` — turn automation on",
+        inline: false,
+      },
       supportField(),
     );
 }

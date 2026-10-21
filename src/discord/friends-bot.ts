@@ -56,6 +56,11 @@ import { botRuntimeLabel, encryptionKeyStatus, projectRoot } from "../config.js"
 import { sanitizeDiscordOutbound } from "./sanitize-outbound.js";
 import { engine } from "../worker/engine.js";
 import { handleVaultFlowButton, isVaultFlowButton } from "./friends-vault-flow.js";
+import {
+  buildAccountDashboardView,
+  handleDashboardInteraction,
+  isDashboardComponent,
+} from "./friends-dashboard.js";
 import { handleFriendsSlashAutocomplete } from "./friends-slash-autocomplete.js";
 import {
   savedAccountOption,
@@ -147,6 +152,9 @@ function buildSlashCommands() {
     .setName("earnings")
     .setDescription("Your lifetime rain, cases, and code earnings on this host"),
   new SlashCommandBuilder().setName("status").setDescription("Automation engine status"),
+  new SlashCommandBuilder()
+    .setName("dashboard")
+    .setDescription("Your accounts with rain, cases, and limbo controls"),
   new SlashCommandBuilder()
     .setName("jump")
     .setDescription("Staff: join a member's private feed thread for support")
@@ -436,6 +444,12 @@ export async function startFriendsDiscordBot(): Promise<void> {
     if (interaction.isChatInputCommand()) {
       void handleInteraction(interaction);
       return;
+    }
+    if (interaction.isButton() || interaction.isStringSelectMenu()) {
+      if (isDashboardComponent(interaction.customId)) {
+        void handleDashboardInteraction(interaction);
+        return;
+      }
     }
     if (interaction.isButton()) {
       if (interaction.customId === FRIENDS_CONNECT_BUTTON_ID) {
@@ -790,6 +804,22 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
       return;
     }
 
+    if (interaction.commandName === "dashboard") {
+      const block = requirePaidSeat(userId);
+      if (block) {
+        await replyEmbeds(interaction, [buildErrorEmbed(out(block))]);
+        return;
+      }
+      await interaction.deferReply({ ephemeral: true });
+      const owned = accountsForDiscordUser(userId);
+      if (owned.length > 0) {
+        await engine.refreshAccountStatsForIds(owned.map((a) => a.id));
+      }
+      const { embed, components } = buildAccountDashboardView(userId);
+      await replyEphemeralEmbeds(interaction, [embed], components);
+      return;
+    }
+
     if (interaction.commandName === "account") {
       const block = requirePaidSeat(userId);
       if (block) {
@@ -803,7 +833,8 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
         if (owned.length > 0) {
           await engine.refreshAccountStatsForIds(owned.map((a) => a.id));
         }
-        await editEmbeds(interaction, buildAccountsEmbed(userId));
+        const { embed, components } = buildAccountDashboardView(userId, undefined, "list");
+        await replyEphemeralEmbeds(interaction, [embed], components);
         return;
       }
       if (sub === "refresh") {

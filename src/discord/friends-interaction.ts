@@ -1,6 +1,8 @@
 import type {
+  ActionRowBuilder,
   ChatInputCommandInteraction,
   EmbedBuilder,
+  MessageActionRowComponentBuilder,
   MessageComponentInteraction,
 } from "discord.js";
 
@@ -27,15 +29,22 @@ export async function deferEphemeral(interaction: EphemeralInteraction): Promise
 export async function replyEphemeralEmbeds(
   interaction: EphemeralInteraction,
   embeds: EmbedBuilder[],
+  components?: ActionRowBuilder<MessageActionRowComponentBuilder>[],
 ): Promise<void> {
   const slice = embeds.slice(0, 10);
+  const rows = components?.slice(0, 5);
+  const payload = {
+    content: "",
+    embeds: slice,
+    components: rows?.length ? rows : [],
+  };
   if (interaction.deferred || interaction.replied) {
-    await interaction.editReply({ content: "", embeds: slice }).catch((err) => {
+    await interaction.editReply(payload).catch((err) => {
       if (!isInteractionAlreadyAcknowledged(err)) throw err;
     });
     return;
   }
-  await interaction.reply({ ephemeral: true, embeds: slice }).catch((err) => {
+  await interaction.reply({ ephemeral: true, ...payload }).catch((err) => {
     if (!isInteractionAlreadyAcknowledged(err)) throw err;
   });
 }
