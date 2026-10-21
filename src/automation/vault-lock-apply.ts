@@ -1,7 +1,7 @@
 import { ensureAuthenticated } from "../accounts/session-manager.js";
 import { appendLog, getAccount, updateAccount } from "../db/repositories.js";
 import { formatVaultLockPreset } from "../rorush/vault-lock.js";
-import { isVaultLockActive, lockVaultForMinutes, vaultLockExpiresAtIso } from "../rorush/vault.js";
+import { isVaultLockActive, lockVaultForMinutes } from "../rorush/vault.js";
 import { expireVaultSessionIfNeeded } from "./vault-session.js";
 
 /** Start a timed vault lock from `/rorush vault` (optional rain→vault for that window only). */

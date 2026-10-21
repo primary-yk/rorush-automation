@@ -2,6 +2,7 @@ import { parseBalanceCents } from "./balance-level.js";
 import type { RoRushHttpClient } from "./http-client.js";
 import { RORUSH_PATHS } from "./endpoints.js";
 import { vaultLockApiDurationFromMinutes } from "./vault-lock.js";
+import { parseVaultUnlockAt } from "./vault-unlock.js";
 
 export type VaultCurrency = "CRYPTO" | "ROBUX";
 
@@ -39,15 +40,26 @@ export async function lockVaultForMinutes(
       "Unsupported vault lock duration. Use 10m, 30m, 1h, 6h, 12h, or 1d (same as rorush.com).",
     );
   }
-  const data = await client.request<{ unlockAt?: string }>(RORUSH_PATHS.vault.lock, {
+  const data = await client.request<unknown>(RORUSH_PATHS.vault.lock, {
     method: "POST",
     body: JSON.stringify({ duration }),
   });
-  const unlockAt = data.unlockAt?.trim();
+  let unlockAt = parseVaultUnlockAt(data);
   if (!unlockAt) {
-    throw new Error("RoRush did not return a vault unlock time — try again on rorush.com.");
+    unlockAt = await fetchVaultUnlockAt(client);
+  }
+  if (!unlockAt) {
+    unlockAt = vaultLockExpiresAtIso(minutes);
   }
   return { unlockAt };
+}
+
+export async function fetchVaultUnlockAt(
+  client: RoRushHttpClient,
+  currency: VaultCurrency = "CRYPTO",
+): Promise<string | null> {
+  const info = await client.request<unknown>(`${RORUSH_PATHS.vault.info}?currency=${currency.toLowerCase()}`);
+  return parseVaultUnlockAt(info);
 }
 
 export function vaultLockExpiresAtIso(minutes: number, fromMs = Date.now()): string {
