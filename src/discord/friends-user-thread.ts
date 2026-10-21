@@ -1,6 +1,6 @@
-import { ChannelType, EmbedBuilder, type Client, type Guild, type TextChannel } from "discord.js";
+import { ChannelType, type Client, type Guild, type TextChannel } from "discord.js";
 import { getSettings, upsertDiscordUserThread } from "../db/repositories.js";
-import { friendThreadWelcomeDescription } from "./friends-copy.js";
+import { buildThreadWelcomeEmbed } from "./friends-ui.js";
 import { addGuildMemberRole } from "./friends-guild-roles.js";
 import { FRIENDS_ROLE_NAMES, parseFriendsServerLayout } from "./friends-layout.js";
 
@@ -61,12 +61,7 @@ export async function ensureUserPrivateFeedThread(input: {
 
   upsertDiscordUserThread({ discordUserId: input.discordUserId, threadId: thread.id });
 
-  const embed = new EmbedBuilder()
-    .setTitle("Your feed")
-    .setColor(0x8b5cf6)
-    .setDescription(friendThreadWelcomeDescription());
-
-  await thread.send({ embeds: [embed] }).catch(() => undefined);
+  await thread.send({ embeds: [buildThreadWelcomeEmbed()] }).catch(() => undefined);
 
   return { threadId: thread.id, created: true };
 }
@@ -77,7 +72,7 @@ export async function runSetupJoin(input: {
   token: string;
   discordUserId: string;
   username: string;
-}): Promise<string> {
+}): Promise<{ threadId: string; created: boolean }> {
   const layout = parseFriendsServerLayout(getSettings().discord_server_layout_json);
   if (layout?.roleIds.pilot) {
     await assignPilotRole({
@@ -89,14 +84,7 @@ export async function runSetupJoin(input: {
   }
   /* Rain Member also applied here via REST — no Server Members Intent required */
 
-  const { threadId, created } = await ensureUserPrivateFeedThread(input);
-  const verb = created ? "Created" : "Reopened";
-  return [
-    `${verb} your private feed: <#${threadId}>`,
-    "",
-    "Rain & limbo updates for your accounts post **in that thread**.",
-    "Next: **`/account add`** then **`/rain`**. Commands cheat sheet: `#commands`",
-  ].join("\n");
+  return ensureUserPrivateFeedThread(input);
 }
 
 /** @internal */

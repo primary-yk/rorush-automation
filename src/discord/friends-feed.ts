@@ -179,12 +179,13 @@ function activityLogToEmbed(log: ActivityLogRow): RushEmbed {
       : log.category === "limbo"
         ? COLORS.limboSkip
         : COLORS.activity;
+  const headline = log.category === "rain" ? "Rain" : log.category === "limbo" ? "Limbo" : log.category === "case" ? "Cases" : "Activity";
   return withBrand(
     {
-      title: `${emoji} ${nick} · ${t}`,
-      description: value.slice(0, 4096),
+      title: `${headline} · ${nick}`,
+      description: `${emoji} \`${t}\`\n${value.slice(0, 4000)}`,
       color,
-      footer: { text: "Rain feed" },
+      footer: { text: "Live feed" },
     },
     color,
   );

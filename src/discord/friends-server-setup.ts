@@ -15,7 +15,7 @@ import {
   type FriendsServerLayout,
   parseFriendsServerLayout,
 } from "./friends-layout.js";
-import { friendCommandsChannelText, friendStartHereChannelText } from "./friends-copy.js";
+import { buildCommandsChannelEmbed, buildStartHereEmbed } from "./friends-ui.js";
 import { SETUP_SERVER_BOT_PERMISSIONS } from "./friends-feed.js";
 import { addGuildMemberRole, syncMemberRoleForAllMembers } from "./friends-guild-roles.js";
 import { LOCK_EVERYONE_DENY, MEMBER_FEEDS_DENY, MEMBER_INFO_DENY } from "./friends-permissions.js";
@@ -268,10 +268,10 @@ async function ensureTextChannel(input: {
   return ch;
 }
 
-async function seedChannelIntro(channel: TextChannel, content: string): Promise<void> {
+async function seedChannelIntro(channel: TextChannel, embed: import("discord.js").EmbedBuilder): Promise<void> {
   const recent = await channel.messages.fetch({ limit: 5 }).catch(() => null);
   if (recent && recent.size > 0) return;
-  await channel.send({ content: content.slice(0, 2000) }).catch(() => undefined);
+  await channel.send({ embeds: [embed] }).catch(() => undefined);
 }
 
 export async function runFriendsServerSetup(input: {
@@ -370,8 +370,8 @@ export async function runFriendsServerSetup(input: {
     hostUserId: input.hostUserId,
   });
 
-  await seedChannelIntro(startHere, friendStartHereChannelText());
-  await seedChannelIntro(commands, friendCommandsChannelText());
+  await seedChannelIntro(startHere, buildStartHereEmbed());
+  await seedChannelIntro(commands, buildCommandsChannelEmbed());
 
   const layout: FriendsServerLayout = {
     version: FRIENDS_LAYOUT_VERSION,

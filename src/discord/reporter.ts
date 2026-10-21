@@ -137,7 +137,7 @@ export async function reportLimboOutcome(input: {
       description: headline,
       color: input.hit ? COLORS.limboHit : COLORS.limboMiss,
       fields,
-      footer: { text: "Limbo wager" },
+      footer: { text: friendsDiscordBrandingEnabled() ? "Limbo wager" : "Limbo" },
     },
     { nickname: input.nickname },
   );
@@ -172,8 +172,8 @@ export async function reportRainOutcome(input: {
         : "Could not join this rain batch.",
       color: input.success ? COLORS.rainOk : COLORS.rainFail,
       fields,
-      footer: { text: "Rain join" },
-    },
+    footer: { text: friendsDiscordBrandingEnabled() ? "Rain join" : "Rain" },
+  },
     { nickname: input.nickname },
   );
 }

@@ -6,6 +6,7 @@ import {
   Routes,
   SlashCommandBuilder,
   type ChatInputCommandInteraction,
+  type EmbedBuilder,
 } from "discord.js";
 import { LIMBO_MIN_MULTIPLIER } from "../config.js";
 import { updateSettings } from "../db/repositories.js";
@@ -19,8 +20,6 @@ import { issueLicenseKey } from "../license/issue.js";
 import { getLicenseStatus } from "../license/service.js";
 import {
   addAccountForDiscordUser,
-  engineStatusText,
-  formatAccountList,
   removeAccountForDiscordUser,
   setLimbo,
   setRainFilters,
@@ -31,13 +30,41 @@ import { bindFriendsFeedClient, friendsServerFeedActive, postToHostLogChannel } 
 import { runFriendsServerSetup } from "./friends-server-setup.js";
 import { runSetupJoin } from "./friends-user-thread.js";
 import { isFriendsHostMode, notifyHostSlashError } from "./host-alerts.js";
-import { discordSupportLine, friendSetupGuideLines } from "./friends-copy.js";
+import { discordSupportLine } from "./friends-copy.js";
 import { ensureMemberRoleOnMember } from "./friends-guild-roles.js";
 import { serverMembersIntentHelp, useServerMembersIntent } from "./friends-member-intent.js";
 import { sanitizeDiscordOutbound } from "./sanitize-outbound.js";
+import {
+  buildAccountsEmbed,
+  buildErrorEmbed,
+  buildHelpEmbed,
+  buildPlainResultEmbed,
+  buildSetupGuideEmbed,
+  buildSetupJoinEmbed,
+  buildSetupServerEmbed,
+  buildStatusEmbed,
+  buildUpdateEmbed,
+} from "./friends-ui.js";
 
 function out(text: string): string {
   return sanitizeDiscordOutbound(text);
+}
+
+async function replyEmbeds(
+  interaction: ChatInputCommandInteraction,
+  embeds: EmbedBuilder[],
+): Promise<void> {
+  await interaction.reply({ ephemeral: true, embeds: embeds.slice(0, 10) });
+}
+
+async function editEmbeds(interaction: ChatInputCommandInteraction, embed: EmbedBuilder): Promise<void> {
+  await interaction.editReply({ content: "", embeds: [embed] });
+}
+
+function resultEmbed(text: string): EmbedBuilder {
+  const body = out(text);
+  const fail = /no account|not linked|required|must be|license|host-only/i.test(body);
+  return buildPlainResultEmbed(body, !fail);
 }
 
 let client: Client | null = null;
@@ -165,39 +192,6 @@ function buildSlashCommands() {
   return core.map((c) => c.toJSON());
 }
 
-function helpText(): string {
-  const cmds = [
-    "`/setup join` — your private rain & limbo thread",
-    "`/account add` — save RoRush login (only you see it)",
-    "`/account remove` — delete your account",
-    "`/accounts` — balance, level, toggles",
-    "`/rain` · `/cases` · `/limbo set` · `/limbo test` · `/limbo filters`",
-    "`/status` — is automation online?",
-    "`/pause` · `/resume` — host only (global stop/start)",
-  ];
-  if (isHostedSaasMode()) {
-    cmds.splice(1, 0, "`/license redeem` — activate your purchase key");
-  }
-  return ["**Commands**", "", ...cmds.map((l) => `• ${l}`)].join("\n");
-}
-
-function setupText(): string {
-  if (isHostedSaasMode()) {
-    return [
-      "**Rush Pilot (hosted)**",
-      "",
-      "You do **not** install anything. Everything runs on the seller's server.",
-      "",
-      "1. `/license redeem` — paste the key from your purchase",
-      "2. `/account add` — RoRush login (only you see it)",
-      "3. `/rain` · `/limbo` · `/cases`",
-      "",
-      "Activity shows in your DMs/ephemeral replies and the server log channel.",
-    ].join("\n");
-  }
-  return friendSetupGuideLines().join("\n");
-}
-
 function hostDiscordId(): string | null {
   return process.env.HOST_DISCORD_USER_ID?.trim() || null;
 }
@@ -306,14 +300,14 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
     const userId = interaction.user.id;
 
     if (interaction.commandName === "help") {
-      await interaction.reply({ ephemeral: true, content: out(`${helpText()}\n\n${setupText()}`) });
+      await replyEmbeds(interaction, [buildHelpEmbed(), buildSetupGuideEmbed()]);
       return;
     }
 
     if (interaction.commandName === "setup") {
       const sub = interaction.options.getSubcommand();
       if (sub === "guide") {
-        await interaction.reply({ ephemeral: true, content: out(setupText()) });
+        await replyEmbeds(interaction, [buildSetupGuideEmbed()]);
         return;
       }
       if (sub === "server") {
@@ -341,40 +335,40 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
           hostUserId: hostId,
           botToken,
         });
-        await interaction.editReply(out(summaryLines.join("\n")));
+        await editEmbeds(interaction, buildSetupServerEmbed(summaryLines));
         return;
       }
       if (sub === "join") {
         await interaction.deferReply({ ephemeral: true });
         if (!client || !interaction.guildId) {
-          await interaction.editReply(out("Run this inside your Discord server."));
+          await editEmbeds(interaction, buildErrorEmbed("Run this inside your Discord server."));
           return;
         }
         const guild = await client.guilds.fetch(interaction.guildId);
-        const text = await runSetupJoin({
+        const joinResult = await runSetupJoin({
           client,
           guild,
           token: botToken,
           discordUserId: userId,
           username: interaction.user.username,
         });
-        await interaction.editReply(out(text));
+        await editEmbeds(interaction, buildSetupJoinEmbed(joinResult));
         return;
       }
     }
 
     if (interaction.commandName === "status") {
-      await interaction.reply({ ephemeral: true, content: out(engineStatusText()) });
+      await replyEmbeds(interaction, [buildStatusEmbed()]);
       return;
     }
 
     if (interaction.commandName === "accounts") {
       const block = requirePaidSeat(userId);
       if (block) {
-        await interaction.reply({ ephemeral: true, content: out(block) });
+        await replyEmbeds(interaction, [buildErrorEmbed(out(block))]);
         return;
       }
-      await interaction.reply({ ephemeral: true, content: out(formatAccountList(userId)) });
+      await replyEmbeds(interaction, [buildAccountsEmbed(userId)]);
       return;
     }
 
@@ -393,7 +387,7 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
           email: interaction.options.getString("email", true),
           password: interaction.options.getString("password", true),
         });
-        await interaction.editReply(out(text));
+        await editEmbeds(interaction, resultEmbed(text));
         return;
       }
       if (sub === "remove") {
@@ -401,7 +395,7 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
           userId,
           interaction.options.getString("nickname", true),
         );
-        await interaction.editReply(out(text));
+        await editEmbeds(interaction, resultEmbed(text));
         return;
       }
     }
@@ -419,7 +413,7 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
         "join_rain",
         interaction.options.getBoolean("on", true),
       );
-      await interaction.editReply(out(text));
+      await editEmbeds(interaction, resultEmbed(text));
       return;
     }
 
@@ -436,7 +430,7 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
         "auto_open_cases",
         interaction.options.getBoolean("on", true),
       );
-      await interaction.editReply(out(text));
+      await editEmbeds(interaction, resultEmbed(text));
       return;
     }
 
@@ -455,7 +449,7 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
           multiplier: interaction.options.getNumber("multiplier") ?? undefined,
           betCoins: interaction.options.getNumber("bet") ?? undefined,
         });
-        await interaction.editReply(out(text));
+        await editEmbeds(interaction, resultEmbed(text));
         return;
       }
       if (sub === "test") {
@@ -465,7 +459,7 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
           interaction.options.getNumber("bet", true),
           interaction.options.getNumber("multiplier") ?? undefined,
         );
-        await interaction.editReply(out(text));
+        await editEmbeds(interaction, resultEmbed(text));
         return;
       }
       if (sub === "filters") {
@@ -475,7 +469,7 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
           minRainCoins: minRain ?? undefined,
           preWagerBeforeRain: preWager ?? undefined,
         });
-        await interaction.editReply(out(text));
+        await editEmbeds(interaction, resultEmbed(text));
         return;
       }
     }
@@ -567,10 +561,13 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
         return;
       }
       updateSettings({ global_pause: interaction.commandName === "pause" ? 1 : 0 });
-      await interaction.reply({
-        ephemeral: true,
-        content: interaction.commandName === "pause" ? "Automation **paused**." : "Automation **resumed**.",
-      });
+      const paused = interaction.commandName === "pause";
+      await replyEmbeds(interaction, [
+        buildUpdateEmbed({
+          title: paused ? "Automation paused" : "Automation resumed",
+          lines: [paused ? "All accounts stop until you `/resume`." : "Rain and cases will run again."],
+        }),
+      ]);
       return;
     }
   } catch (err) {
@@ -597,10 +594,11 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
       isFriendsHostMode() && !isHost(interaction.user.id)
         ? `Something went wrong — ${discordSupportLine()}`
         : msg;
+    const errEmbed = buildErrorEmbed(out(friendMsg));
     if (interaction.deferred || interaction.replied) {
-      await interaction.editReply({ content: out(friendMsg) }).catch(() => undefined);
+      await interaction.editReply({ content: "", embeds: [errEmbed] }).catch(() => undefined);
     } else {
-      await interaction.reply({ ephemeral: true, content: out(friendMsg) }).catch(() => undefined);
+      await interaction.reply({ ephemeral: true, embeds: [errEmbed] }).catch(() => undefined);
     }
   }
 }
