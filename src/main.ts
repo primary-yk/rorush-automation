@@ -2,7 +2,7 @@ import "./bootstrap-env.js";
 import { closeDb, getDb } from "./db/database.js";
 import { startApiServer } from "./api/server.js";
 import { engine } from "./worker/engine.js";
-import { captchaApiKey, loadConfig, projectRoot } from "./config.js";
+import { captchaApiKey, encryptionKeyStatus, loadConfig, projectRoot, reloadEnv } from "./config.js";
 import { listAccounts } from "./db/repositories.js";
 import { activateLicense } from "./license/service.js";
 import { applyDiscordWebhookFromEnv } from "./discord/report-webhook.js";
@@ -18,6 +18,7 @@ process.on("unhandledRejection", (err) => {
 });
 
 async function main() {
+  reloadEnv();
   getDb();
   applyDiscordWebhookFromEnv();
   const envLicense = process.env.RUSH_PILOT_LICENSE?.trim();
@@ -35,8 +36,11 @@ async function main() {
   const accounts = listAccounts();
   const nickList = accounts.map((a) => `#${a.id} ${a.nickname}`).join(", ") || "(none)";
   console.log(`Database: ${cfg.DATABASE_PATH} (${accounts.length} account(s): ${nickList})`);
-  if (!cfg.ENCRYPTION_KEY?.trim()) {
-    console.warn("WARNING: ENCRYPTION_KEY missing in .env — you cannot save RoRush accounts until it is set.");
+  const enc = encryptionKeyStatus();
+  if (enc.ok) {
+    console.log(`ENCRYPTION_KEY: OK (${projectRoot()})`);
+  } else {
+    console.warn(`WARNING: ${enc.reason} — /account add and dashboard saves will fail until fixed.`);
   }
   const rainAccounts = listAccounts().filter((a) => a.join_rain);
   if (rainAccounts.length > 0 && !captchaApiKey(cfg)) {

@@ -47,6 +47,7 @@ import {
   replyEphemeralEmbed,
   replyEphemeralEmbeds,
 } from "./friends-interaction.js";
+import { encryptionKeyStatus, projectRoot } from "../config.js";
 import { sanitizeDiscordOutbound } from "./sanitize-outbound.js";
 import { engine } from "../worker/engine.js";
 import {
@@ -306,7 +307,13 @@ export async function startFriendsDiscordBot(): Promise<void> {
 
   client.once(Events.ClientReady, async (c) => {
     bindFriendsFeedClient(client);
-    console.log(`[friends-bot] logged in as ${c.user.tag}`);
+    console.log(`[friends-bot] logged in as ${c.user.tag} · project ${projectRoot()}`);
+    const enc = encryptionKeyStatus();
+    if (enc.ok) {
+      console.log("[friends-bot] ENCRYPTION_KEY OK — /account add can save passwords");
+    } else {
+      console.error(`[friends-bot] ${enc.reason} — /account add will fail until .env is fixed and dev restarted`);
+    }
     const rest = new REST({ version: "10" }).setToken(token);
     const mode = isHostedSaasMode() ? "hosted SaaS (licenses on)" : "friends (no licenses)";
     try {

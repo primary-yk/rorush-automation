@@ -1,5 +1,11 @@
 import express from "express";
-import { captchaApiKey, LIMBO_MIN_MULTIPLIER, loadConfig, projectRoot } from "../config.js";
+import {
+  captchaApiKey,
+  encryptionKeyStatus,
+  LIMBO_MIN_MULTIPLIER,
+  loadConfig,
+  projectRoot,
+} from "../config.js";
 import {
   deleteAccount,
   getPilotStats,
@@ -35,12 +41,14 @@ export function createApiServer() {
 
   app.get("/health", (_req, res) => {
     const cfg = loadConfig();
+    const enc = encryptionKeyStatus();
     res.json({
       ok: true,
       projectRoot: projectRoot(),
       databasePath: cfg.DATABASE_PATH,
       accountCount: listAccounts().length,
-      encryptionConfigured: !!cfg.ENCRYPTION_KEY?.trim(),
+      encryptionConfigured: enc.ok,
+      encryptionDetail: enc.ok ? undefined : enc.reason,
       captchaConfigured: !!captchaApiKey(cfg),
       capmonsterConfigured: !!captchaApiKey(cfg),
       accounts: listAccounts().map((a) => ({ id: a.id, nickname: a.nickname, joinRain: !!a.join_rain })),

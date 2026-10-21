@@ -92,15 +92,34 @@ export function loadConfig(): AppConfig {
   return cached;
 }
 
-export function requireEncryptionKey(): Buffer {
+export function encryptionKeyStatus(): { ok: true } | { ok: false; reason: string } {
   reloadEnv();
-  const keyB64 = loadConfig().ENCRYPTION_KEY;
+  const keyB64 = loadConfig().ENCRYPTION_KEY?.trim();
   if (!keyB64) {
-    throw new Error("ENCRYPTION_KEY is required in .env (32-byte base64 key).");
+    return {
+      ok: false,
+      reason: `ENCRYPTION_KEY missing in ${path.join(PROJECT_ROOT, ".env")}`,
+    };
   }
   const key = Buffer.from(keyB64, "base64");
   if (key.length !== 32) {
-    throw new Error("ENCRYPTION_KEY must decode to exactly 32 bytes.");
+    return {
+      ok: false,
+      reason: `ENCRYPTION_KEY must decode to 32 bytes (got ${key.length}) — run: openssl rand -base64 32`,
+    };
   }
-  return key;
+  return { ok: true };
+}
+
+export function requireEncryptionKey(): Buffer {
+  const status = encryptionKeyStatus();
+  if (!status.ok) {
+    throw new Error(
+      `${status.reason}. Project folder: ${PROJECT_ROOT}. ` +
+        "If `npm run doctor` shows the key as set but Discord fails, stop every `npm run dev` " +
+        "(WSL and Windows are separate — run bot only where you edited .env).",
+    );
+  }
+  const keyB64 = loadConfig().ENCRYPTION_KEY!.trim();
+  return Buffer.from(keyB64, "base64");
 }

@@ -2,11 +2,17 @@
  * Quick checks when accounts won't save or tests see an empty DB.
  *   npm run doctor
  */
+import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import "../src/bootstrap-env.js";
 import { ENV_FALLBACK_FILES } from "../src/bootstrap-env.js";
-import { captchaApiKey, loadConfig, projectRoot, requireEncryptionKey } from "../src/config.js";
+import {
+  captchaApiKey,
+  encryptionKeyStatus,
+  loadConfig,
+  projectRoot,
+} from "../src/config.js";
 import { getDb } from "../src/db/database.js";
 import { listAccounts } from "../src/db/repositories.js";
 import { automationApiOrigin } from "../lib/automation-url.js";
@@ -35,16 +41,8 @@ async function main() {
   }
   console.log("Database file:", cfg.DATABASE_PATH);
   console.log("Database exists:", fs.existsSync(cfg.DATABASE_PATH) ? "yes" : "no (will be created on first write)");
-  let encLine = "MISSING — accounts cannot be saved";
-  if (cfg.ENCRYPTION_KEY?.trim()) {
-    try {
-      requireEncryptionKey();
-      encLine = "set (32-byte key OK)";
-    } catch (e) {
-      encLine = `INVALID — ${e instanceof Error ? e.message : String(e)}`;
-    }
-  }
-  console.log("ENCRYPTION_KEY:", encLine);
+  const enc = encryptionKeyStatus();
+  console.log("ENCRYPTION_KEY:", enc.ok ? "set (32-byte key OK)" : enc.reason);
   const capKey = captchaApiKey(cfg);
   console.log(
     "Captcha API key (CAPTCHA_API_KEY):",
@@ -64,10 +62,33 @@ async function main() {
   try {
     const res = await fetch(`${api}/health`, { signal: AbortSignal.timeout(5000) });
     const body = (await res.json()) as Record<string, unknown>;
-    console.log("API reachable:", res.ok ? "yes" : "no", body);
+    console.log("API reachable:", res.ok ? "yes" : "no");
+    console.log("  Live encryptionConfigured:", body.encryptionConfigured);
+    if (body.encryptionDetail) console.log("  Live detail:", body.encryptionDetail);
+    console.log("  Live projectRoot:", body.projectRoot);
+    console.log("  Accounts (live):", body.accountCount);
   } catch (e) {
-    console.log("API reachable: NO — run `npm run dev` and keep it open");
+    console.log("API reachable: NO — start `npm run dev`, then run doctor again in another tab");
     console.log(" ", e instanceof Error ? e.message : String(e));
+    console.log(
+      "  Discord can still reply from an OLD bot process — if /account add fails, kill all dev windows (WSL + Windows).",
+    );
+  }
+
+  try {
+    const ps = execSync('pgrep -af "tsx watch src/main|dist/main.js" 2>/dev/null || true', {
+      encoding: "utf8",
+    }).trim();
+    if (ps) {
+      const lines = ps.split("\n").filter(Boolean);
+      console.log("\nRunning dev process(es):", lines.length);
+      for (const line of lines.slice(0, 5)) console.log(" ", line.slice(0, 120));
+      if (lines.length > 1) {
+        console.log("  ^ More than one — stop extras or /account add may hit a bot without your .env");
+      }
+    }
+  } catch {
+    /* ignore */
   }
 
   console.log("\n--- Tips ---");
