@@ -74,6 +74,25 @@ Optional env for captcha site keys (copy from DevTools when hCaptcha / Turnstile
 | Discord | Optional read-only channel poll; redeems new codes on opted-in accounts |
 | Safety | Per-request rate limit, exponential backoff, stop after 3 failures |
 
+## Discord bot (friends test your server)
+
+Friends **do not** install Rush Pilot. You run `npm run dev` on your PC/VPS; the **friends bot** starts automatically when these are set in `.env`:
+
+```env
+DISCORD_BOT_TOKEN=...
+DISCORD_GUILD_ID=...
+HOST_DISCORD_USER_ID=...   # your Discord user id — /pause and /resume
+```
+
+Do **not** set `DISCORD_BOT_RELAY_URL` (that’s a different vendor/relay mode).
+
+1. [Discord Developer Portal](https://discord.com/developers/applications) → Bot token + invite with **applications.commands**
+2. `npm run discord-bot-doctor`
+3. `npm run dev` → look for `[friends-bot] logged in`
+4. Friends use `/account add`, `/rain`, `/cases`, `/help` (replies are ephemeral for passwords)
+
+Full walkthrough: **[docs/FRIENDS-HOST.md](docs/FRIENDS-HOST.md)**
+
 ## Tests
 
 ```bash

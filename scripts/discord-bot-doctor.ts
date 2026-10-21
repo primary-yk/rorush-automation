@@ -28,6 +28,8 @@ if (relay) {
   console.log("\nRelay mode: friends slash bot in npm run dev is OFF. Use npm run discord-bot + relay host.");
 } else if (token && guild) {
   console.log("\nNext: npm run dev — look for [friends-bot] logged in (before rain engine finishes connecting).");
+  console.log("Invite bot: Developer Portal → OAuth2 → URL Generator → scopes bot + applications.commands");
+  console.log("Friends try: /help → /account add → /rain account:Nick on:true");
 } else if (webhook) {
   console.log("\nWebhook-only mode: [friends-bot] skipped is OK. Slash commands need DISCORD_BOT_TOKEN + DISCORD_GUILD_ID.");
 } else {

@@ -36,6 +36,7 @@ let client: Client | null = null;
 function buildSlashCommands() {
   const core = [
   new SlashCommandBuilder().setName("setup").setDescription("How Rush Pilot works in this server"),
+  new SlashCommandBuilder().setName("help").setDescription("Slash commands for friends"),
   new SlashCommandBuilder().setName("status").setDescription("Is the host engine running?"),
   new SlashCommandBuilder().setName("accounts").setDescription("Your linked RoRush accounts"),
   new SlashCommandBuilder()
@@ -111,6 +112,22 @@ function buildSlashCommands() {
   }
 
   return core.map((c) => c.toJSON());
+}
+
+function helpText(): string {
+  const cmds = [
+    "`/setup` — how this server works",
+    "`/account add` — save RoRush login (only you see it)",
+    "`/account remove` — delete your account",
+    "`/accounts` — balance, level, toggles",
+    "`/rain` · `/cases` · `/limbo` — automation toggles",
+    "`/status` — is the host engine running?",
+    "`/pause` · `/resume` — host only (global stop/start)",
+  ];
+  if (isHostedSaasMode()) {
+    cmds.splice(1, 0, "`/license redeem` — activate your purchase key");
+  }
+  return ["**Commands**", "", ...cmds.map((l) => `• ${l}`)].join("\n");
 }
 
 function setupText(): string {
@@ -197,8 +214,12 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
   try {
     const userId = interaction.user.id;
 
-    if (interaction.commandName === "setup") {
-      await interaction.reply({ ephemeral: true, content: out(setupText()) });
+    if (interaction.commandName === "setup" || interaction.commandName === "help") {
+      const body =
+        interaction.commandName === "help"
+          ? `${helpText()}\n\n${setupText()}`
+          : setupText();
+      await interaction.reply({ ephemeral: true, content: out(body) });
       return;
     }
 
