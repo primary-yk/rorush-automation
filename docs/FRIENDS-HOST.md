@@ -41,8 +41,9 @@ Friends only use `/` commands — bot replies never include dashboard or site li
 2. `.env` must include:
    - `ENCRYPTION_KEY`, `CAPTCHA_API_KEY`, `CAPTCHA_PROVIDER=2captcha`
    - `DISCORD_BOT_TOKEN`, `DISCORD_GUILD_ID`
-   - `HOST_DISCORD_USER_ID` (your Discord user id — for `/pause` `/resume`)
-   - Optional: `DISCORD_ACTIVITY_CHANNEL_ID` for a public rain/error log channel
+   - `HOST_DISCORD_USER_ID` (your Discord user id — host DMs for rain/captcha/errors, plus `/pause` `/resume`)
+   - Optional: `DISCORD_REPORT_WEBHOOK` to a **private** channel only you can read (same alerts as DMs)
+   - Skip `DISCORD_ACTIVITY_CHANNEL_ID` unless you set `DISCORD_ACTIVITY_PUBLIC=1` on purpose
 3. Open dashboard (`npm run show-urls`) to **add/remove any account**, inspect logs, global pause.
 
 Keep **`npm run dev` running** on your PC while friends use the bot.
