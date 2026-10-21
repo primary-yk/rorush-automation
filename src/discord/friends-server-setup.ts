@@ -17,6 +17,7 @@ import {
   type FriendsServerLayout,
   parseFriendsServerLayout,
 } from "./friends-layout.js";
+import { friendCommandsChannelText, friendStartHereChannelText } from "./friends-copy.js";
 import { SETUP_SERVER_BOT_PERMISSIONS } from "./friends-feed.js";
 
 const HOST_COLOR = 0x8b_5c_f6;
@@ -86,14 +87,16 @@ async function findTextChannel(
 async function ensureRole(guild: Guild, name: string, color: number, existingId?: string): Promise<Role> {
   const found = await findRole(guild, existingId, name);
   if (found) {
-    await found.edit({ color, mentionable: false, reason: "Rush Pilot /setup server" }).catch(() => undefined);
+    await found
+      .edit({ name, color, mentionable: false, reason: "Discord /setup server" })
+      .catch(() => undefined);
     return found;
   }
   return guild.roles.create({
     name,
     color,
     mentionable: false,
-    reason: "Rush Pilot /setup server",
+    reason: "Discord /setup server",
   });
 }
 
@@ -103,11 +106,16 @@ async function ensureCategory(
   existingId?: string,
 ): Promise<CategoryChannel> {
   const found = await findCategory(guild, existingId, name);
-  if (found) return found;
+  if (found) {
+    if (found.name !== name) {
+      await found.setName(name, "Discord /setup server").catch(() => undefined);
+    }
+    return found;
+  }
   return guild.channels.create({
     name,
     type: ChannelType.GuildCategory,
-    reason: "Rush Pilot /setup server",
+    reason: "Discord /setup server",
   });
 }
 
@@ -171,7 +179,7 @@ async function applyCategoryPerms(
     );
   }
 
-  await category.permissionOverwrites.set(overwrites, "Rush Pilot /setup server");
+  await category.permissionOverwrites.set(overwrites, "Discord /setup server");
 }
 
 async function ensureTextChannel(input: {
@@ -191,10 +199,10 @@ async function ensureTextChannel(input: {
       name: input.name,
       type: ChannelType.GuildText,
       parent: input.parent.id,
-      reason: "Rush Pilot /setup server",
+      reason: "Discord /setup server",
     });
   } else if (ch.parentId !== input.parent.id) {
-    await ch.setParent(input.parent.id, { reason: "Rush Pilot /setup server" }).catch(() => undefined);
+    await ch.setParent(input.parent.id, { reason: "Discord /setup server" }).catch(() => undefined);
   }
 
   const bot = botAllow();
@@ -250,7 +258,7 @@ async function ensureTextChannel(input: {
     );
   }
 
-  await ch.permissionOverwrites.set(overwrites, "Rush Pilot /setup server");
+  await ch.permissionOverwrites.set(overwrites, "Discord /setup server");
   return ch;
 }
 
@@ -342,35 +350,8 @@ export async function runFriendsServerSetup(input: {
 
   await assignRoleRest(input.botToken, input.guild.id, input.hostUserId, hostRole.id).catch(() => undefined);
 
-  await seedChannelIntro(
-    startHere,
-    [
-      "**Welcome to Rush Pilot (friends mode)**",
-      "",
-      "The host runs the engine on their PC. You do not install anything.",
-      "",
-      "1. Run **`/setup join`** — opens your **private** rain & limbo thread",
-      "2. **`/account add`** — RoRush login (only you see it)",
-      "3. **`/rain`** · **`/limbo`** · **`/cases`**",
-      "",
-      "Questions? Ask the host — errors go to them, not this channel.",
-    ].join("\n"),
-  );
-
-  await seedChannelIntro(
-    commands,
-    [
-      "**Slash commands**",
-      "• `/setup join` — your private feed thread",
-      "• `/account add` · `/account remove`",
-      "• `/accounts` — balance & toggles",
-      "• `/rain` · `/cases`",
-      "• `/limbo set` · `/limbo test` · `/limbo filters`",
-      "• `/status` · `/help`",
-      "",
-      "Host only: `/setup server` · `/pause` · `/resume`",
-    ].join("\n"),
-  );
+  await seedChannelIntro(startHere, friendStartHereChannelText());
+  await seedChannelIntro(commands, friendCommandsChannelText());
 
   const layout: FriendsServerLayout = {
     version: FRIENDS_LAYOUT_VERSION,
@@ -399,7 +380,7 @@ export async function runFriendsServerSetup(input: {
     `Feeds · ${feedsCat.name} → <#${rainFeeds.id}> (private threads per friend)`,
     `Host · ${hostCat.name} → <#${hostLog.id}> (captcha / join errors — not DMs)`,
     "",
-    "Tell friends: **`/setup join`** then **`/account add`**. Host alerts use `#host-log` unless you set `DISCORD_HOST_DM_ALERTS=1`.",
+    "Tell friends: **`/setup join`** then **`/account add`**. Staff alerts → `#host-log` (not DMs unless `DISCORD_HOST_DM_ALERTS=1`).",
   ];
 
   return { layout, summaryLines };

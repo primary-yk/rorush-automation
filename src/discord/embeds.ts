@@ -1,4 +1,6 @@
-/** Shared Discord embed styling for Rush Pilot reports. */
+/** Shared Discord embed styling for automation reports. */
+
+import { friendsDiscordBrandingEnabled } from "./friends-branding.js";
 
 export type RushEmbed = {
   title: string;
@@ -63,12 +65,14 @@ export function categoryEmoji(category: string, message: string): string {
 
 export function withBrand(embed: RushEmbed, accent: keyof typeof COLORS | number): RushEmbed {
   const color = typeof accent === "number" ? accent : COLORS[accent];
+  const stamped: RushEmbed = { ...embed, color, timestamp: embed.timestamp ?? new Date().toISOString() };
+  if (!friendsDiscordBrandingEnabled()) {
+    return stamped;
+  }
   return {
-    ...embed,
-    color,
+    ...stamped,
     author: embed.author ?? { name: BRAND.name },
     footer: embed.footer ?? { text: BRAND.footer },
-    timestamp: embed.timestamp ?? new Date().toISOString(),
   };
 }
 

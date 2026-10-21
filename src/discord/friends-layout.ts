@@ -3,14 +3,14 @@
 export const FRIENDS_LAYOUT_VERSION = 1 as const;
 
 export const FRIENDS_ROLE_NAMES = {
-  host: "Rush Host",
-  pilot: "Rush Pilot",
+  host: "Rain Staff",
+  pilot: "Rain Member",
 } as const;
 
 export const FRIENDS_CATEGORY_NAMES = {
-  info: "RUSH PILOT · INFO",
-  feeds: "RUSH PILOT · FEEDS",
-  host: "RUSH PILOT · HOST",
+  info: "INFO",
+  feeds: "PRIVATE FEEDS",
+  host: "STAFF",
 } as const;
 
 export const FRIENDS_CHANNEL_NAMES = {

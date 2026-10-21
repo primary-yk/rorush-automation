@@ -7,6 +7,6 @@ describe("sanitizeDiscordOutbound", () => {
     const out = sanitizeDiscordOutbound(raw);
     expect(out).not.toMatch(/https?:\/\//);
     expect(out).not.toMatch(/43123/);
-    expect(out).toMatch(/ask the host/i);
+    expect(out).toMatch(/@28ub/i);
   });
 });

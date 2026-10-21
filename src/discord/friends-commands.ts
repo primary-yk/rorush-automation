@@ -169,8 +169,8 @@ export function engineStatusText(): string {
   const accounts = listAccounts();
   const friends = new Set(accounts.map((a) => a.owner_discord_id).filter(Boolean));
   return [
-    "**Rush Pilot**",
-    "Engine is **online**.",
+    "**Status**",
+    "Automation is **online**.",
     `Accounts: **${accounts.length}** · **${friends.size}** Discord user(s) linked`,
     "Use `/accounts`, `/rain`, `/limbo`, `/cases`.",
   ].join("\n");

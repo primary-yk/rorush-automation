@@ -2,6 +2,7 @@ import { fetch } from "undici";
 import { listAccounts } from "../db/repositories.js";
 import { isRelayConnected, sendPilotEvent } from "../relay/pilot-client.js";
 import { redactForDiscord } from "./public-alert-filter.js";
+import { friendsDiscordBrandingEnabled } from "./friends-branding.js";
 import { deliverFriendsReporterEmbed, friendsServerFeedActive } from "./friends-feed.js";
 import { dmHostEmbeds, isFriendsHostMode } from "./host-alerts.js";
 import { resolveDiscordReportWebhookUrl } from "./report-webhook.js";
@@ -17,6 +18,10 @@ import {
 
 function webhookConfigured(): string | null {
   return resolveDiscordReportWebhookUrl();
+}
+
+function accountFieldLabel(): string {
+  return friendsDiscordBrandingEnabled() ? "Pilot" : "Account";
 }
 
 async function deliverEmbed(
@@ -103,7 +108,7 @@ export async function reportLimboOutcome(input: {
     : `Crashed **${crash}** before **${input.targetMultiplier.toFixed(2)}×**.`;
 
   const fields: RushEmbed["fields"] = [
-    { name: "Pilot", value: `**${input.nickname}**`, inline: true },
+    { name: accountFieldLabel(), value: `**${input.nickname}**`, inline: true },
     { name: "Wager", value: formatCoins(input.betCoins), inline: true },
     { name: "Target ×", value: `${input.targetMultiplier.toFixed(2)}×`, inline: true },
     { name: "Outcome ×", value: crash, inline: true },
@@ -147,7 +152,7 @@ export async function reportRainOutcome(input: {
 }): Promise<void> {
   const detail = redactForDiscord(input.message);
   const fields: RushEmbed["fields"] = [
-    { name: "Pilot", value: `**${input.nickname}**`, inline: true },
+    { name: accountFieldLabel(), value: `**${input.nickname}**`, inline: true },
     {
       name: "Pool",
       value: input.poolCoins != null ? formatCoins(input.poolCoins) : "—",
@@ -200,7 +205,7 @@ export async function reportLimboSkipped(input: {
       description: redactForDiscord(input.reason),
       color: COLORS.limboSkip,
       fields: [
-        { name: "Pilot", value: `**${input.nickname}**`, inline: true },
+        { name: accountFieldLabel(), value: `**${input.nickname}**`, inline: true },
         ...(input.rainId ? [{ name: "Rain", value: shortRainId(input.rainId), inline: true }] : []),
       ],
       footer: { text: "Post-rain limbo" },
@@ -269,7 +274,9 @@ export async function reportRainAlert(input: {
   rainId?: string | null;
 }): Promise<void> {
   const fields: RushEmbed["fields"] = [];
-  if (input.nickname) fields.push({ name: "Pilot", value: `**${input.nickname}**`, inline: true });
+  if (input.nickname) {
+    fields.push({ name: accountFieldLabel(), value: `**${input.nickname}**`, inline: true });
+  }
   if (input.rainId) fields.push({ name: "Rain", value: shortRainId(input.rainId), inline: true });
   fields.push({ name: "Detail", value: redactForDiscord(input.body).slice(0, 900), inline: false });
 

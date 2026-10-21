@@ -31,6 +31,7 @@ import { bindFriendsFeedClient, friendsServerFeedActive, postToHostLogChannel } 
 import { runFriendsServerSetup } from "./friends-server-setup.js";
 import { runSetupJoin } from "./friends-user-thread.js";
 import { isFriendsHostMode, notifyHostSlashError } from "./host-alerts.js";
+import { discordSupportLine, friendSetupGuideLines } from "./friends-copy.js";
 import { sanitizeDiscordOutbound } from "./sanitize-outbound.js";
 
 function out(text: string): string {
@@ -52,7 +53,7 @@ function buildSlashCommands() {
         .setName("server")
         .setDescription("Host: create roles, categories, channels, permissions"),
     )
-    .addSubcommand((sub) => sub.setName("guide").setDescription("How Rush Pilot works here")),
+    .addSubcommand((sub) => sub.setName("guide").setDescription("How automation works here")),
   new SlashCommandBuilder().setName("help").setDescription("Slash commands for friends"),
   new SlashCommandBuilder().setName("status").setDescription("Is the host engine running?"),
   new SlashCommandBuilder().setName("accounts").setDescription("Your linked RoRush accounts"),
@@ -169,7 +170,7 @@ function helpText(): string {
     "`/account remove` — delete your account",
     "`/accounts` — balance, level, toggles",
     "`/rain` · `/cases` · `/limbo set` · `/limbo test` · `/limbo filters`",
-    "`/status` — is the host engine running?",
+    "`/status` — is automation online?",
     "`/pause` · `/resume` — host only (global stop/start)",
   ];
   if (isHostedSaasMode()) {
@@ -192,17 +193,7 @@ function setupText(): string {
       "Activity shows in your DMs/ephemeral replies and the server log channel.",
     ].join("\n");
   }
-  return [
-    "**Rush Pilot — friends mode**",
-    "",
-    "The host runs the engine on their machine. You only use Discord.",
-    "",
-    "1. **`/setup join`** — private thread for your rain & limbo updates",
-    "2. `/account add` — RoRush email/password (only you see it)",
-    "3. `/rain` · `/limbo` · `/cases`",
-    "",
-    "Host runs **`/setup server`** once to create channels & roles.",
-  ].join("\n");
+  return friendSetupGuideLines().join("\n");
 }
 
 function hostDiscordId(): string | null {
@@ -310,7 +301,7 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
       if (sub === "join") {
         await interaction.deferReply({ ephemeral: true });
         if (!client || !interaction.guildId) {
-          await interaction.editReply(out("Run this inside the Rush Pilot Discord server."));
+          await interaction.editReply(out("Run this inside your Discord server."));
           return;
         }
         const guild = await client.guilds.fetch(interaction.guildId);
@@ -558,7 +549,7 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
     }
     const friendMsg =
       isFriendsHostMode() && !isHost(interaction.user.id)
-        ? "Something went wrong — the host was notified."
+        ? `Something went wrong — ${discordSupportLine()}`
         : msg;
     if (interaction.deferred || interaction.replied) {
       await interaction.editReply({ content: out(friendMsg) }).catch(() => undefined);

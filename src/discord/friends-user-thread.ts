@@ -1,6 +1,7 @@
 import { ChannelType, EmbedBuilder, type Client, type Guild, type TextChannel } from "discord.js";
 import { REST, Routes } from "discord.js";
 import { getSettings, upsertDiscordUserThread } from "../db/repositories.js";
+import { friendThreadWelcomeDescription } from "./friends-copy.js";
 import { FRIENDS_ROLE_NAMES, parseFriendsServerLayout } from "./friends-layout.js";
 
 export async function assignPilotRole(input: {
@@ -44,7 +45,7 @@ export async function ensureUserPrivateFeedThread(input: {
     name: `pilot-${input.username}`.slice(0, 100),
     type: ChannelType.PrivateThread,
     invitable: false,
-    reason: "Rush Pilot friend feed",
+    reason: "Friend private feed",
   });
   await thread.members.add(input.discordUserId).catch(() => undefined);
 
@@ -57,20 +58,9 @@ export async function ensureUserPrivateFeedThread(input: {
   upsertDiscordUserThread({ discordUserId: input.discordUserId, threadId: thread.id });
 
   const embed = new EmbedBuilder()
-    .setTitle("Your Rush Pilot feed")
+    .setTitle("Your feed")
     .setColor(0x8b5cf6)
-    .setDescription(
-      [
-        "Rain joins, limbo wagers, and case opens for **your accounts** show up here.",
-        "",
-        "Next steps:",
-        "1. **`/account add`** — RoRush login (ephemeral)",
-        "2. **`/rain account:… on:true`**",
-        "3. **`/limbo set`** · **`/limbo filters`** as needed",
-        "",
-        "Use **`/help`** for the full list. Host sees captcha/engine issues in `#host-log`, not here.",
-      ].join("\n"),
-    );
+    .setDescription(friendThreadWelcomeDescription());
 
   await thread.send({ embeds: [embed] }).catch(() => undefined);
 

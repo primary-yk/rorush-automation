@@ -162,7 +162,7 @@ export async function postFriendsActivityLogs(logs: ActivityLogRow[]): Promise<v
 function activityLogToEmbed(log: ActivityLogRow): RushEmbed {
   const nick =
     log.account_id != null
-      ? (listAccounts().find((a) => a.id === log.account_id)?.nickname ?? "Pilot")
+      ? (listAccounts().find((a) => a.id === log.account_id)?.nickname ?? "Account")
       : "Engine";
   const t = log.created_at.slice(11, 19);
   const emoji = categoryEmoji(log.category, log.message);
@@ -184,7 +184,7 @@ function activityLogToEmbed(log: ActivityLogRow): RushEmbed {
       title: `${emoji} ${nick} · ${t}`,
       description: value.slice(0, 4096),
       color,
-      footer: { text: "Rush Pilot" },
+      footer: { text: "Rain feed" },
     },
     color,
   );
