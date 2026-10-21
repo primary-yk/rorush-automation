@@ -38,6 +38,12 @@ import { discordSupportLine } from "./friends-copy.js";
 import { ensureMemberRoleOnMember } from "./friends-guild-roles.js";
 import { serverMembersIntentHelp, useServerMembersIntent } from "./friends-member-intent.js";
 import { appendSessionHintIfNeeded } from "./friends-auth-hints.js";
+import {
+  deferEphemeral,
+  isInteractionAlreadyAcknowledged,
+  replyEphemeralEmbed,
+  replyEphemeralEmbeds,
+} from "./friends-interaction.js";
 import { sanitizeDiscordOutbound } from "./sanitize-outbound.js";
 import { engine } from "../worker/engine.js";
 import {
@@ -64,11 +70,11 @@ async function replyEmbeds(
   interaction: ChatInputCommandInteraction,
   embeds: EmbedBuilder[],
 ): Promise<void> {
-  await interaction.reply({ ephemeral: true, embeds: embeds.slice(0, 10) });
+  await replyEphemeralEmbeds(interaction, embeds);
 }
 
 async function editEmbeds(interaction: ChatInputCommandInteraction, embed: EmbedBuilder): Promise<void> {
-  await interaction.editReply({ content: "", embeds: [embed] });
+  await replyEphemeralEmbed(interaction, embed);
 }
 
 function resultEmbed(text: string): EmbedBuilder {
@@ -455,7 +461,13 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
     }
 
     if (interaction.commandName === "connect") {
-      await interaction.deferReply({ ephemeral: true });
+      const ack = await deferEphemeral(interaction);
+      if (!ack) {
+        console.warn(
+          `[friends-bot] /connect skipped reply — interaction already handled (duplicate bot process?)`,
+        );
+        return;
+      }
       if (!client || !interaction.guildId) {
         await editEmbeds(interaction, buildErrorEmbed("Run this inside your Discord server."));
         return;
@@ -764,7 +776,8 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (isFriendsHostMode() && !isHost(interaction.user.id)) {
+    const dupAck = isInteractionAlreadyAcknowledged(err);
+    if (!dupAck && isFriendsHostMode() && !isHost(interaction.user.id)) {
       if (friendsServerFeedActive()) {
         void postToHostLogChannel([
           {
@@ -781,16 +794,17 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
           detail: msg,
         });
       }
+    } else if (dupAck) {
+      console.warn(
+        `[friends-bot] /${interaction.commandName} — interaction already acknowledged (stop duplicate npm run dev?)`,
+      );
     }
+    if (dupAck) return;
     const friendMsg =
       isFriendsHostMode() && !isHost(interaction.user.id)
         ? `Something went wrong — ${discordSupportLine()}`
         : msg;
     const errEmbed = buildErrorEmbed(out(friendMsg));
-    if (interaction.deferred || interaction.replied) {
-      await interaction.editReply({ content: "", embeds: [errEmbed] }).catch(() => undefined);
-    } else {
-      await interaction.reply({ ephemeral: true, embeds: [errEmbed] }).catch(() => undefined);
-    }
+    await replyEphemeralEmbed(interaction, errEmbed);
   }
 }
