@@ -23,6 +23,7 @@
     "show-urls": "tsx scripts/show-dashboard-url.ts",
     "setup-discord-webhook": "tsx scripts/setup-discord-webhook.ts",
     "discord-bot-doctor": "tsx scripts/discord-bot-doctor.ts",
+    "discord-login-smoke": "tsx scripts/discord-login-smoke.ts",
     "build": "next build && tsc -p tsconfig.server.json",
     "start": "NODE_ENV=production concurrently -k \"node dist/main.js\" \"next start -p 43123 -H 0.0.0.0\"",
     "test": "vitest run",
