@@ -14,6 +14,7 @@ export const FRIENDS_CATEGORY_NAMES = {
 } as const;
 
 export const FRIENDS_CHANNEL_NAMES = {
+  connect: "connect",
   startHere: "start-here",
   commands: "commands",
   rainFeeds: "rain-feeds",
@@ -25,6 +26,7 @@ export type FriendsServerLayout = {
   roleIds: { host: string; pilot: string };
   categoryIds: { info: string; feeds: string; host: string };
   channelIds: {
+    connect?: string;
     startHere: string;
     commands: string;
     rainFeeds: string;

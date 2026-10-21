@@ -236,14 +236,24 @@ export function buildSetupServerEmbed(summaryLines: string[]): EmbedBuilder {
   return baseEmbed(UI.success).setTitle(title).addFields(fields.slice(0, 12));
 }
 
+export function buildConnectChannelEmbed(): EmbedBuilder {
+  return baseEmbed(UI.accent)
+    .setTitle("Get your private feed")
+    .setDescription(
+      "You **don't** type `/connect` as a normal chat message — that won't work.\n\n" +
+        "**Tap the button below**, or press **`/`** next to the message box → pick this bot → **`connect`**.\n\n" +
+        "The bot replies privately. Rain and limbo updates then show in **your thread** under `#rain-feeds`.",
+    );
+}
+
 export function buildStartHereEmbed(): EmbedBuilder {
   return baseEmbed(UI.primary)
     .setTitle("Welcome")
     .setDescription(
-      "You can run slash commands **in this channel** (or anywhere in the server). Start with **`/connect`** — only you see the reply.",
+      "Open **`#connect`** and tap **Create my private feed**, or use **`/` → connect** anywhere in the server. Only you see the bot reply.",
     )
     .addFields(
-      { name: "Start", value: "`/connect` → `/account add` or `/account session`", inline: true },
+      { name: "Start", value: "`#connect` button → `/account add` or `/account session`", inline: true },
       { name: "Automate", value: "`/rain` · `/limbo` · `/cases`", inline: true },
       { name: "Help", value: "`/guide` · `/help`", inline: true },
       supportField(),

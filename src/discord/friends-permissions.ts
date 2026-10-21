@@ -18,6 +18,7 @@ export const LOCK_EVERYONE_DENY: bigint[] = [
 export const EVERYONE_INFO_ALLOW: bigint[] = [
   PermissionFlagsBits.ViewChannel,
   PermissionFlagsBits.ReadMessageHistory,
+  PermissionFlagsBits.UseApplicationCommands,
 ];
 
 export const EVERYONE_INFO_DENY: bigint[] = [

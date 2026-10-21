@@ -29,8 +29,9 @@ After adding the webhook line: `npm run setup-discord-webhook` once to verify.
 3. Right-click **your user** → Copy ID → `HOST_DISCORD_USER_ID`
 4. OAuth2 URL Generator: scopes `bot` + `applications.commands`, permissions **Send Messages**, **Use Slash Commands**, **Embed Links**, **Manage Channels**, **Manage Roles**, **Manage Threads**
 5. `npm run discord-bot-doctor` then `npm run dev` — console must show **`[friends-bot] logged in`**
-6. In Discord (staff): **`/server setup`** — creates roles, categories, channels, and permission overwrites. **Re-run** deletes previous bot-made channels/categories (including old `RUSH PILOT · …` names) and builds a fresh layout; friends run **`/connect`** again for new private feeds.
-7. Auto **Rain Member** when someone joins: Developer Portal → **Server Members Intent** ON, then **restart** `npm run dev` (friends bots use GuildMembers by default). Set `DISCORD_SERVER_MEMBERS_INTENT=0` only if the Portal toggle is off. Friends always get the role via **`/connect`** too.
+6. In Discord (staff): **`/server setup`** — creates roles, categories, channels, and permission overwrites. **Re-run** deletes previous bot-made channels/categories (including old `RUSH PILOT · …` names) and builds a fresh layout; friends open **`#connect`** again for new private feeds.
+7. Auto **Rain Member** when someone joins: Developer Portal → **Server Members Intent** ON, then **restart** `npm run dev` (friends bots use GuildMembers by default). Set `DISCORD_SERVER_MEMBERS_INTENT=0` only if the Portal toggle is off. Friends always get the role via **`#connect`** / **`/connect`** too.
+8. By default the bot **auto-creates a private feed when someone joins** (needs Server Members Intent + **`/server setup`** done). Set `DISCORD_AUTO_CONNECT_ON_JOIN=0` if you want them to use **`#connect`** only.
 
 Friends only use `/` commands — bot replies never include dashboard or site links.
 
@@ -56,7 +57,7 @@ No install. In your Discord server:
 
 | Command | What it does |
 |---------|----------------|
-| `/connect` | **Rain Member** role + private thread in `#rain-feeds` |
+| `#connect` button or `/connect` | **Rain Member** role + private thread in `#rain-feeds` (slash is **`/` → connect**, not a chat message) |
 | `/guide` | Getting started (ephemeral) |
 | `/help` | Full command reference |
 | `/server setup` | **Staff only** — full server layout (see below) |
@@ -90,8 +91,8 @@ Re-run anytime to **replace** the bot layout (old INFO / FEEDS / STAFF channels 
 |--------|---------|
 | **Role `Rush Host`** | You — see `#host-log`, manage info channels |
 | **Role `Rain Member`** | Friends after `/connect` |
-| **Category `INFO`** | `#start-here`, `#commands` — **visible to everyone** (read-only) so new members can run **`/connect`** |
-| **Category `PRIVATE FEEDS`** | `#rain-feeds` — **Rain Member only**; private threads created by **`/connect`** |
+| **Category `INFO`** | `#connect` (button), `#start-here`, `#commands` — **visible to everyone** (read-only) |
+| **Category `PRIVATE FEEDS`** | `#rain-feeds` — **Rain Member only**; private threads from **`#connect`** / **`/connect`** |
 | **Category `RUSH PILOT · HOST`** | `#host-log` — captcha failures, join errors, engine issues |
 
 `@everyone` is denied view on all of the above; only the roles + bot can see the matching channels.

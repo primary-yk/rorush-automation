@@ -5,6 +5,7 @@ import {
   REST,
   Routes,
   SlashCommandBuilder,
+  type ButtonInteraction,
   type ChatInputCommandInteraction,
   type EmbedBuilder,
 } from "discord.js";
@@ -32,6 +33,8 @@ import {
 } from "./friends-commands.js";
 import { bindFriendsFeedClient, notifyStaffSlashError } from "./friends-feed.js";
 import { runFriendsServerSetup } from "./friends-server-setup.js";
+import { autoConnectFeedOnJoin } from "./friends-auto-connect.js";
+import { executeConnectForUser, FRIENDS_CONNECT_BUTTON_ID } from "./friends-connect.js";
 import { hostJumpToUserFeedThread, restoreUserFeedThread, runSetupJoin } from "./friends-user-thread.js";
 import { isFriendsHostMode } from "./host-alerts.js";
 import { discordSupportLine } from "./friends-copy.js";
@@ -73,7 +76,10 @@ async function replyEmbeds(
   await replyEphemeralEmbeds(interaction, embeds);
 }
 
-async function editEmbeds(interaction: ChatInputCommandInteraction, embed: EmbedBuilder): Promise<void> {
+async function editEmbeds(
+  interaction: ChatInputCommandInteraction | ButtonInteraction,
+  embed: EmbedBuilder,
+): Promise<void> {
   await replyEphemeralEmbed(interaction, embed);
 }
 
@@ -318,24 +324,53 @@ export async function startFriendsDiscordBot(): Promise<void> {
   });
 
   client.on(Events.InteractionCreate, (interaction) => {
-    if (!interaction.isChatInputCommand()) return;
-    void handleInteraction(interaction);
+    if (interaction.isChatInputCommand()) {
+      void handleInteraction(interaction);
+      return;
+    }
+    if (interaction.isButton() && interaction.customId === FRIENDS_CONNECT_BUTTON_ID) {
+      void handleConnectButton(interaction);
+    }
   });
+
+  if (autoConnectFeedOnJoin()) {
+    console.log(
+      "[friends-bot] Private feed auto-connect on join: ON (set DISCORD_AUTO_CONNECT_ON_JOIN=0 to require #connect button)",
+    );
+  }
 
   if (membersIntent) {
     console.log("[friends-bot] Rain Member auto-role on join: ON (GuildMembers intent)");
     client.on(Events.GuildMemberAdd, (member) => {
       if (member.guild.id !== guildId) return;
-      void ensureMemberRoleOnMember({
-        member,
-        botToken: token,
-        hostUserId: hostDiscordId(),
-      }).catch((err) => {
-        console.warn(
-          "[friends-bot] member role on join:",
-          err instanceof Error ? err.message : String(err),
-        );
-      });
+      void (async () => {
+        await ensureMemberRoleOnMember({
+          member,
+          botToken: token,
+          hostUserId: hostDiscordId(),
+        }).catch((err) => {
+          console.warn(
+            "[friends-bot] member role on join:",
+            err instanceof Error ? err.message : String(err),
+          );
+        });
+        if (!autoConnectFeedOnJoin() || !client) return;
+        try {
+          await executeConnectForUser({
+            client,
+            guild: member.guild,
+            botToken: token,
+            discordUserId: member.id,
+            username: member.user.username,
+          });
+          console.log(`[friends-bot] auto-connect feed for ${member.user.tag}`);
+        } catch (err) {
+          console.warn(
+            "[friends-bot] auto-connect on join:",
+            err instanceof Error ? err.message : String(err),
+          );
+        }
+      })();
     });
   } else {
     console.log(
@@ -369,6 +404,45 @@ export async function stopFriendsDiscordBot(): Promise<void> {
   await client?.destroy();
   client = null;
   bindFriendsFeedClient(null);
+}
+
+async function handleConnectButton(interaction: ButtonInteraction): Promise<void> {
+  const botToken = process.env.DISCORD_BOT_TOKEN?.trim() ?? "";
+  try {
+    const ack = await deferEphemeral(interaction);
+    if (!ack) {
+      console.warn(
+        "[friends-bot] connect button skipped — interaction already handled (duplicate bot process?)",
+      );
+      return;
+    }
+    if (!client || !interaction.guildId) {
+      await editEmbeds(interaction, buildErrorEmbed("Run this inside your Discord server."));
+      return;
+    }
+    const guild = await client.guilds.fetch(interaction.guildId);
+    const joinResult = await executeConnectForUser({
+      client,
+      guild,
+      botToken,
+      discordUserId: interaction.user.id,
+      username: interaction.user.username,
+    });
+    await editEmbeds(interaction, buildSetupJoinEmbed(joinResult));
+  } catch (err) {
+    if (isInteractionAlreadyAcknowledged(err)) return;
+    const msg = err instanceof Error ? err.message : String(err);
+    if (isFriendsHostMode() && !isHost(interaction.user.id)) {
+      void notifyStaffSlashError({
+        command: "connect (button)",
+        username: interaction.user.username,
+        detail: msg,
+      });
+    }
+    if (interaction.deferred || interaction.replied) {
+      await editEmbeds(interaction, buildErrorEmbed(msg)).catch(() => undefined);
+    }
+  }
 }
 
 async function handleInteraction(interaction: ChatInputCommandInteraction): Promise<void> {

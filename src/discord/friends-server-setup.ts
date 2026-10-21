@@ -1,4 +1,7 @@
 import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   ChannelType,
   PermissionFlagsBits,
   type CategoryChannel,
@@ -17,7 +20,8 @@ import {
   type FriendsServerLayout,
   parseFriendsServerLayout,
 } from "./friends-layout.js";
-import { buildCommandsChannelEmbed, buildStartHereEmbed } from "./friends-ui.js";
+import { FRIENDS_CONNECT_BUTTON_ID } from "./friends-connect.js";
+import { buildCommandsChannelEmbed, buildConnectChannelEmbed, buildStartHereEmbed } from "./friends-ui.js";
 import { SETUP_SERVER_BOT_PERMISSIONS } from "./friends-feed.js";
 import { addGuildMemberRole, syncMemberRoleForAllMembers } from "./friends-guild-roles.js";
 import {
@@ -292,6 +296,29 @@ async function seedChannelIntro(
   await channel.send({ embeds: [embed] }).catch(() => undefined);
 }
 
+async function seedConnectChannel(channel: TextChannel, force = false): Promise<void> {
+  if (!force) {
+    const recent = await channel.messages.fetch({ limit: 10 }).catch(() => null);
+    const hasButton = recent?.some((m) =>
+      m.components.some((row) =>
+        row.components.some(
+          (c) => "customId" in c && c.customId === FRIENDS_CONNECT_BUTTON_ID,
+        ),
+      ),
+    );
+    if (hasButton) return;
+  }
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(FRIENDS_CONNECT_BUTTON_ID)
+      .setLabel("Create my private feed")
+      .setStyle(ButtonStyle.Primary),
+  );
+  await channel
+    .send({ embeds: [buildConnectChannelEmbed()], components: [row] })
+    .catch(() => undefined);
+}
+
 export async function runFriendsServerSetup(input: {
   guild: Guild;
   botUserId: string;
@@ -345,6 +372,13 @@ export async function runFriendsServerSetup(input: {
     botId: input.botUserId,
   };
 
+  const connectCh = await ensureTextChannel({
+    ...common,
+    name: FRIENDS_CHANNEL_NAMES.connect,
+    parent: infoCat,
+    existingId: prior?.channelIds.connect,
+    mode: "info-readonly",
+  });
   const startHere = await ensureTextChannel({
     ...common,
     name: FRIENDS_CHANNEL_NAMES.startHere,
@@ -395,6 +429,7 @@ export async function runFriendsServerSetup(input: {
     hostUserId: input.hostUserId,
   });
 
+  await seedConnectChannel(connectCh, purgedChannels > 0);
   await seedChannelIntro(startHere, buildStartHereEmbed(), purgedChannels > 0);
   await seedChannelIntro(commands, buildCommandsChannelEmbed(), purgedChannels > 0);
 
@@ -403,6 +438,7 @@ export async function runFriendsServerSetup(input: {
     roleIds: { host: hostRole.id, pilot: pilotRole.id },
     categoryIds: { info: infoCat.id, feeds: feedsCat.id, host: hostCat.id },
     channelIds: {
+      connect: connectCh.id,
       startHere: startHere.id,
       commands: commands.id,
       rainFeeds: rainFeeds.id,
@@ -433,7 +469,7 @@ export async function runFriendsServerSetup(input: {
     purgeLine,
     "",
     `Roles · **${FRIENDS_ROLE_NAMES.host}** · **${FRIENDS_ROLE_NAMES.pilot}**`,
-    `Info · ${infoCat.name} → <#${startHere.id}> · <#${commands.id}> (visible to @everyone — run \`/connect\` here)`,
+    `Info · ${infoCat.name} → <#${connectCh.id}> (**button or /connect**) · <#${startHere.id}> · <#${commands.id}>`,
     `Feeds · ${feedsCat.name} → <#${rainFeeds.id}> (Rain Member only · private threads via \`/connect\`)`,
     `Host · ${hostCat.name} → <#${hostLog.id}> (captcha / join errors — not DMs)`,
     "",

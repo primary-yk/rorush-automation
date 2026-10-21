@@ -1,4 +1,10 @@
-import type { ChatInputCommandInteraction, EmbedBuilder } from "discord.js";
+import type {
+  ChatInputCommandInteraction,
+  EmbedBuilder,
+  MessageComponentInteraction,
+} from "discord.js";
+
+type EphemeralInteraction = ChatInputCommandInteraction | MessageComponentInteraction;
 
 export function isInteractionAlreadyAcknowledged(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
@@ -7,7 +13,7 @@ export function isInteractionAlreadyAcknowledged(err: unknown): boolean {
 }
 
 /** Defer ephemeral once; returns false if another process already handled this interaction. */
-export async function deferEphemeral(interaction: ChatInputCommandInteraction): Promise<boolean> {
+export async function deferEphemeral(interaction: EphemeralInteraction): Promise<boolean> {
   if (interaction.deferred || interaction.replied) return true;
   try {
     await interaction.deferReply({ ephemeral: true });
@@ -19,7 +25,7 @@ export async function deferEphemeral(interaction: ChatInputCommandInteraction): 
 }
 
 export async function replyEphemeralEmbeds(
-  interaction: ChatInputCommandInteraction,
+  interaction: EphemeralInteraction,
   embeds: EmbedBuilder[],
 ): Promise<void> {
   const slice = embeds.slice(0, 10);
@@ -35,7 +41,7 @@ export async function replyEphemeralEmbeds(
 }
 
 export async function replyEphemeralEmbed(
-  interaction: ChatInputCommandInteraction,
+  interaction: EphemeralInteraction,
   embed: EmbedBuilder,
 ): Promise<void> {
   await replyEphemeralEmbeds(interaction, [embed]);

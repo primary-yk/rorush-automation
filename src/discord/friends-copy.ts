@@ -13,7 +13,7 @@ export function friendSetupGuideLines(): string[] {
   return [
     "**Getting started**",
     "",
-    "1. Open **`#start-here`** or **`#commands`**, run **`/connect`** — private feed thread",
+    "1. Open **`#connect`** → tap **Create my private feed** (or **`/` → connect**)",
     "2. **`/account add`** or **`/account session`** — login (only you see it)",
     "3. **`/rain`** · **`/limbo`** · **`/cases`**",
     "",
@@ -27,7 +27,7 @@ export function friendStartHereChannelText(): string {
     "",
     "Automation runs from this Discord server.",
     "",
-    "1. **`/connect`** — your private feed thread",
+    "1. **`#connect`** — button or **`/connect`** for your private feed thread",
     "2. **`/account add`** or **`/account session`** — login (ephemeral)",
     "3. **`/rain`** · **`/limbo`** · **`/cases`**",
     "",
