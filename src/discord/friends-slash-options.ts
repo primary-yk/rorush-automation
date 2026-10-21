@@ -49,7 +49,7 @@ export function vaultRainDuringLockOption(
   return option
     .setName("vault_rain")
     .setDescription(
-      "Auto-vault rain profit — with a lock: until timer ends; without a lock: stays on (same as /account vault on)",
+      "Auto-vault rain profit. With lock: until timer ends. No lock: always on (like /account vault).",
     )
     .setRequired(false);
 }
