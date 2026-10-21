@@ -90,8 +90,8 @@ Re-run anytime to **replace** the bot layout (old INFO / FEEDS / STAFF channels 
 |--------|---------|
 | **Role `Rush Host`** | You — see `#host-log`, manage info channels |
 | **Role `Rain Member`** | Friends after `/connect` |
-| **Category `RUSH PILOT · INFO`** | `#start-here` (read-only), `#commands` cheat sheet |
-| **Category `RUSH PILOT · FEEDS`** | `#rain-feeds` — parent for **private threads** (one per friend) |
+| **Category `INFO`** | `#start-here`, `#commands` — **visible to everyone** (read-only) so new members can run **`/connect`** |
+| **Category `PRIVATE FEEDS`** | `#rain-feeds` — **Rain Member only**; private threads created by **`/connect`** |
 | **Category `RUSH PILOT · HOST`** | `#host-log` — captcha failures, join errors, engine issues |
 
 `@everyone` is denied view on all of the above; only the roles + bot can see the matching channels.

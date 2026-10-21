@@ -14,6 +14,22 @@ export const LOCK_EVERYONE_DENY: bigint[] = [
   PermissionFlagsBits.EmbedLinks,
 ];
 
+/** @everyone can read INFO before they have Rain Member (so they can run `/connect`). */
+export const EVERYONE_INFO_ALLOW: bigint[] = [
+  PermissionFlagsBits.ViewChannel,
+  PermissionFlagsBits.ReadMessageHistory,
+];
+
+export const EVERYONE_INFO_DENY: bigint[] = [
+  PermissionFlagsBits.SendMessages,
+  PermissionFlagsBits.SendMessagesInThreads,
+  PermissionFlagsBits.CreatePublicThreads,
+  PermissionFlagsBits.CreatePrivateThreads,
+  PermissionFlagsBits.AddReactions,
+  PermissionFlagsBits.ManageThreads,
+  PermissionFlagsBits.AttachFiles,
+];
+
 /** Read-only info channels for Rain Member. */
 export const MEMBER_INFO_DENY: bigint[] = [
   PermissionFlagsBits.SendMessages,

@@ -20,7 +20,13 @@ import {
 import { buildCommandsChannelEmbed, buildStartHereEmbed } from "./friends-ui.js";
 import { SETUP_SERVER_BOT_PERMISSIONS } from "./friends-feed.js";
 import { addGuildMemberRole, syncMemberRoleForAllMembers } from "./friends-guild-roles.js";
-import { LOCK_EVERYONE_DENY, MEMBER_FEEDS_DENY, MEMBER_INFO_DENY } from "./friends-permissions.js";
+import {
+  EVERYONE_INFO_ALLOW,
+  EVERYONE_INFO_DENY,
+  LOCK_EVERYONE_DENY,
+  MEMBER_FEEDS_DENY,
+  MEMBER_INFO_DENY,
+} from "./friends-permissions.js";
 
 const HOST_COLOR = 0x8b_5c_f6;
 const PILOT_COLOR = 0x06_b6_d4;
@@ -134,7 +140,10 @@ async function applyCategoryPerms(
     id: string;
     deny?: bigint[];
     allow?: bigint[];
-  }> = [{ id: everyoneId, deny: LOCK_EVERYONE_DENY }];
+  }> =
+    mode === "info"
+      ? [{ id: everyoneId, allow: EVERYONE_INFO_ALLOW, deny: EVERYONE_INFO_DENY }]
+      : [{ id: everyoneId, deny: LOCK_EVERYONE_DENY }];
 
   if (mode === "host") {
     overwrites.push(
@@ -211,9 +220,10 @@ async function ensureTextChannel(input: {
   }
 
   const bot = botAllow();
-  const overwrites: Array<{ id: string; deny?: bigint[]; allow?: bigint[] }> = [
-    { id: input.everyoneId, deny: LOCK_EVERYONE_DENY },
-  ];
+  const overwrites: Array<{ id: string; deny?: bigint[]; allow?: bigint[] }> =
+    input.mode === "info-readonly"
+      ? [{ id: input.everyoneId, allow: EVERYONE_INFO_ALLOW, deny: EVERYONE_INFO_DENY }]
+      : [{ id: input.everyoneId, deny: LOCK_EVERYONE_DENY }];
 
   if (input.mode === "host-log") {
     overwrites.push(
@@ -423,8 +433,8 @@ export async function runFriendsServerSetup(input: {
     purgeLine,
     "",
     `Roles · **${FRIENDS_ROLE_NAMES.host}** · **${FRIENDS_ROLE_NAMES.pilot}**`,
-    `Info · ${infoCat.name} → <#${startHere.id}> · <#${commands.id}>`,
-    `Feeds · ${feedsCat.name} → <#${rainFeeds.id}> (private threads per friend)`,
+    `Info · ${infoCat.name} → <#${startHere.id}> · <#${commands.id}> (visible to @everyone — run \`/connect\` here)`,
+    `Feeds · ${feedsCat.name} → <#${rainFeeds.id}> (Rain Member only · private threads via \`/connect\`)`,
     `Host · ${hostCat.name} → <#${hostLog.id}> (captcha / join errors — not DMs)`,
     "",
     ...autoRole.lines,

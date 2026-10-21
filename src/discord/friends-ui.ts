@@ -239,7 +239,9 @@ export function buildSetupServerEmbed(summaryLines: string[]): EmbedBuilder {
 export function buildStartHereEmbed(): EmbedBuilder {
   return baseEmbed(UI.primary)
     .setTitle("Welcome")
-    .setDescription("Rain automation for this server.")
+    .setDescription(
+      "You can run slash commands **in this channel** (or anywhere in the server). Start with **`/connect`** — only you see the reply.",
+    )
     .addFields(
       { name: "Start", value: "`/connect` → `/account add` or `/account session`", inline: true },
       { name: "Automate", value: "`/rain` · `/limbo` · `/cases`", inline: true },

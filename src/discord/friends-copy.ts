@@ -13,7 +13,7 @@ export function friendSetupGuideLines(): string[] {
   return [
     "**Getting started**",
     "",
-    "1. **`/connect`** — private rain & limbo feed thread",
+    "1. Open **`#start-here`** or **`#commands`**, run **`/connect`** — private feed thread",
     "2. **`/account add`** or **`/account session`** — login (only you see it)",
     "3. **`/rain`** · **`/limbo`** · **`/cases`**",
     "",
