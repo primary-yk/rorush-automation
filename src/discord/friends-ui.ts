@@ -2,6 +2,8 @@ import { EmbedBuilder, type APIEmbedField } from "discord.js";
 import { listAccounts, type AccountRow } from "../db/repositories.js";
 import { accountsForDiscordUser } from "./friends-commands.js";
 import { discordSupportLine } from "./friends-copy.js";
+import { isAccountAutomationPaused } from "../accounts/account-automation.js";
+import { appendSessionHintIfNeeded } from "./friends-auth-hints.js";
 import {
   formatLifetimeShort,
   lifetimeBreakdown,
@@ -43,7 +45,8 @@ export function buildHelpEmbed(): EmbedBuilder {
       },
       {
         name: "Accounts",
-        value: "`/account add` · `/account session`\n`/account remove` · `/account list`",
+        value:
+          "`/account add` · `/account session`\n`/account list` (auto-refresh) · `/account refresh`\n`/account pause` · `/account resume` · `/account remove`",
         inline: true,
       },
       {
@@ -128,9 +131,12 @@ function accountRowField(a: AccountRow): APIEmbedField {
     .filter(Boolean)
     .join(" · ") || "All automation off";
   const life = formatLifetimeShort(lifetimeBreakdown(a));
+  const paused = isAccountAutomationPaused(a) ? "\n**Automation paused** — `/account resume` or staff override" : "";
+  let value = `Balance **${bal}** · Level **${lvl}**\n${life}\n${toggles}\nStatus: \`${a.status}\`${paused}`;
+  value = appendSessionHintIfNeeded(value, a);
   return {
     name: a.nickname,
-    value: `Balance **${bal}** · Level **${lvl}**\n${life}\n${toggles}\nStatus: \`${a.status}\``,
+    value,
     inline: false,
   };
 }

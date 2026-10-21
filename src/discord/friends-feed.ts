@@ -15,6 +15,7 @@ import {
 import { categoryEmoji, COLORS, withBrand, type RushEmbed } from "./embeds.js";
 import { isFriendsHostMode } from "./host-alerts.js";
 import { parseFriendsServerLayout, type FriendsServerLayout } from "./friends-layout.js";
+import { classifyHostIssue, groupHostLogEmbeds, tagHostEmbed, bucketLabel } from "./host-log-classify.js";
 import { redactForDiscord, type ActivityLogRow } from "./public-alert-filter.js";
 
 let clientRef: Client | null = null;
@@ -69,7 +70,8 @@ async function sendEmbedsToChannel(channelId: string, embeds: RushEmbed[]): Prom
 export async function postToHostLogChannel(embeds: RushEmbed[]): Promise<void> {
   const hostLogId = getSettings().discord_host_log_channel_id?.trim();
   if (!hostLogId || embeds.length === 0) return;
-  await sendEmbedsToChannel(hostLogId, embeds);
+  const grouped = groupHostLogEmbeds(embeds);
+  await sendEmbedsToChannel(hostLogId, grouped);
 }
 
 export async function postToUserFeedThread(discordUserId: string, embeds: RushEmbed[]): Promise<void> {
@@ -120,7 +122,7 @@ export async function deliverFriendsReporterEmbed(
   if (!friendsServerFeedActive()) return false;
   const route = routeReporterEmbed(embed, ctx);
   if (route === "skip") return false;
-  if (route === "host" || route === "both") await postToHostLogChannel([embed]);
+  if (route === "host" || route === "both") await postToHostLogChannel([tagHostEmbed(embed)]);
   if (route === "user" || route === "both") {
     const owner =
       ownerForAccountId(ctx?.accountId) ?? ownerForNickname(ctx?.nickname ?? undefined);
@@ -180,9 +182,10 @@ function activityLogToEmbed(log: ActivityLogRow): RushEmbed {
         ? COLORS.limboSkip
         : COLORS.activity;
   const headline = log.category === "rain" ? "Rain" : log.category === "limbo" ? "Limbo" : log.category === "case" ? "Cases" : "Activity";
+  const bucket = classifyHostIssue(`${log.message} ${log.detail ?? ""}`);
   return withBrand(
     {
-      title: `${headline} · ${nick}`,
+      title: `[${bucketLabel(bucket)}] ${headline} · ${nick}`,
       description: `${emoji} \`${t}\`\n${value.slice(0, 4000)}`,
       color,
       footer: { text: "Live feed" },

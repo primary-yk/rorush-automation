@@ -40,6 +40,7 @@ import {
 } from "../automation/case-scheduler.js";
 import { pollDiscordChannel } from "../discord/watcher.js";
 import { isIgnorableCaseError } from "../automation/case-errors.js";
+import { accountEligibleForRain } from "../accounts/account-automation.js";
 import { ensureAuthenticated } from "../accounts/session-manager.js";
 import { SIGNALR } from "../rorush/endpoints.js";
 import { RoRushHub } from "../rorush/signalr-hub.js";
@@ -105,7 +106,7 @@ export class AutomationEngine {
 
   /** Join-enabled accounts all marked joined for this rain — ignore further join triggers. */
   private joinEnabledAllInRain(rainId: string): boolean {
-    const joinEnabled = listAccounts().filter((a) => Number(a.join_rain) !== 0);
+    const joinEnabled = listAccounts().filter((a) => accountEligibleForRain(a));
     if (joinEnabled.length === 0) return false;
     return joinEnabled.every((a) => isRainJoined(a.id, rainId));
   }
@@ -151,6 +152,17 @@ export class AutomationEngine {
     await this.refreshAccountStats();
   }
 
+  async refreshAccountStatsForIds(
+    accountIds: number[],
+  ): Promise<Array<{ accountId: number; ok: boolean; error?: string }>> {
+    const ids = [...new Set(accountIds.filter((id) => Number.isFinite(id)))];
+    const results: Array<{ accountId: number; ok: boolean; error?: string }> = [];
+    for (const id of ids) {
+      results.push(await this.refreshOneAccountStats(id));
+    }
+    return results;
+  }
+
   async stop(): Promise<void> {
     this.running = false;
     if (this.caseTimer) clearTimeout(this.caseTimer);
@@ -191,7 +203,7 @@ export class AutomationEngine {
   }
 
   private joinRainEnabledAccounts(): AccountRow[] {
-    return listAccounts().filter((a) => Number(a.join_rain) !== 0);
+    return listAccounts().filter((a) => accountEligibleForRain(a));
   }
 
   private joinRainEligibleAccounts(rain: RainState): AccountRow[] {
@@ -716,7 +728,7 @@ export class AutomationEngine {
       return;
     }
 
-    const joinEnabled = listAccounts().filter((a) => Number(a.join_rain) !== 0);
+    const joinEnabled = listAccounts().filter((a) => accountEligibleForRain(a));
     const accounts = joinEnabled.filter((a) => !isRainJoined(a.id, rain.rainId));
     if (joinEnabled.length === 0) {
       appendLog({
@@ -797,38 +809,47 @@ export class AutomationEngine {
     });
   }
 
+  private async refreshOneAccountStats(
+    accountId: number,
+  ): Promise<{ accountId: number; ok: boolean; error?: string }> {
+    const account = listAccounts().find((a) => a.id === accountId);
+    if (!account) return { accountId, ok: false, error: "Account not found" };
+    try {
+      const { client } = await ensureAuthenticated(account.id);
+      const [balanceRaw, levelRaw] = await Promise.all([client.getBalance(), client.getLevel()]);
+      const balanceRawAmount = parseBalanceCents(balanceRaw);
+      const level = parseLevel(levelRaw);
+      const patch: Parameters<typeof updateAccount>[1] = {};
+      if (balanceRawAmount != null) {
+        patch.balance =
+          Number.isInteger(balanceRawAmount) && Math.abs(balanceRawAmount) >= 100
+            ? balanceRawAmount / 100
+            : balanceRawAmount;
+      }
+      if (level != null) patch.level = level;
+      const row = listAccounts().find((a) => a.id === account.id);
+      if (row?.last_error && isIgnorableCaseError(row.last_error)) {
+        patch.last_error = null;
+        patch.status = "idle";
+      }
+      updateAccount(account.id, patch);
+      return { accountId, ok: true };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      updateAccount(account.id, { status: "error", last_error: message });
+      appendLog({
+        accountId: account.id,
+        category: "system",
+        message: "Could not refresh balance/level",
+        detail: message,
+      });
+      return { accountId, ok: false, error: message };
+    }
+  }
+
   private async refreshAccountStats(): Promise<void> {
     for (const account of listAccounts()) {
-      try {
-        const { client } = await ensureAuthenticated(account.id);
-        const [balanceRaw, levelRaw] = await Promise.all([
-          client.getBalance(),
-          client.getLevel(),
-        ]);
-        const balanceRawAmount = parseBalanceCents(balanceRaw);
-        const level = parseLevel(levelRaw);
-        const patch: Parameters<typeof updateAccount>[1] = {};
-        if (balanceRawAmount != null) {
-          patch.balance =
-            Number.isInteger(balanceRawAmount) && Math.abs(balanceRawAmount) >= 100
-              ? balanceRawAmount / 100
-              : balanceRawAmount;
-        }
-        if (level != null) patch.level = level;
-        const row = listAccounts().find((a) => a.id === account.id);
-        if (row?.last_error && isIgnorableCaseError(row.last_error)) {
-          patch.last_error = null;
-          patch.status = "idle";
-        }
-        updateAccount(account.id, patch);
-      } catch (err) {
-        appendLog({
-          accountId: account.id,
-          category: "system",
-          message: "Could not refresh balance/level",
-          detail: err instanceof Error ? err.message : String(err),
-        });
-      }
+      await this.refreshOneAccountStats(account.id);
     }
   }
 

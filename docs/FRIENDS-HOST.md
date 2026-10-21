@@ -63,7 +63,9 @@ No install. In your Discord server:
 | `/account add` | Email + password (only they see it) |
 | `/account session` | **Advanced** — session JWT from rorush.com (2FA, no password stored) |
 | `/account remove` | Remove their account |
-| `/account list` | Balance, level, toggles |
+| `/account list` | Balance, level, lifetime, toggles (auto-refreshes from RoRush) |
+| `/account refresh` | Manual balance/level refresh (one nickname or all yours) |
+| `/account pause` / `resume` | Pause **one account** (host: any nickname; friends: own only) |
 | `/rain` / `/cases` | Turn automation on/off |
 | `/limbo set` | Wager on/off + multiplier + fallback bet |
 | `/limbo test` | One manual test bet (real balance) |

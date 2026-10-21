@@ -19,6 +19,7 @@ export type AccountRow = {
   limbo_multiplier: number;
   limbo_bet_coins: number;
   pre_wager_before_rain: number;
+  automation_paused: number;
   status: string;
   last_error: string | null;
   balance: number | null;
@@ -180,12 +181,13 @@ export function updateAccount(
   const next = { ...current, ...cleanPatch, updated_at: new Date().toISOString() };
   next.join_rain = Number(next.join_rain) !== 0 ? 1 : 0;
   next.pre_wager_before_rain = Number(next.pre_wager_before_rain) !== 0 ? 1 : 0;
+  next.automation_paused = Number(next.automation_paused) !== 0 ? 1 : 0;
   getDb()
     .prepare(
       `UPDATE accounts SET nickname = ?, owner_discord_id = ?, username = ?, password_enc = ?, session_jwt_enc = ?, api_key_enc = ?,
        proxy_url = ?, join_rain = ?, min_rain_amount = ?, auto_open_cases = ?, auto_redeem_codes = ?,
        min_code_level = ?, limbo_wager_enabled = ?, limbo_multiplier = ?, limbo_bet_coins = ?,
-       pre_wager_before_rain = ?,
+       pre_wager_before_rain = ?, automation_paused = ?,
        status = ?, last_error = ?, balance = ?, level = ?,
        lifetime_rain = ?, lifetime_cases = ?, lifetime_codes = ?, updated_at = ?
        WHERE id = ?`,
@@ -207,6 +209,7 @@ export function updateAccount(
       next.limbo_multiplier,
       next.limbo_bet_coins,
       next.pre_wager_before_rain ?? 0,
+      next.automation_paused ?? 0,
       next.status,
       next.last_error,
       next.balance,

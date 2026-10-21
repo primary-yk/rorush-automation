@@ -19,9 +19,12 @@ import {
 import { issueLicenseKey } from "../license/issue.js";
 import { getLicenseStatus } from "../license/service.js";
 import {
+  accountsForDiscordUser,
   addAccountForDiscordUser,
   addAccountSessionForDiscordUser,
+  refreshAccountsForDiscordUser,
   removeAccountForDiscordUser,
+  setAccountAutomationPaused,
   setLimbo,
   setRainFilters,
   setToggle,
@@ -34,7 +37,9 @@ import { isFriendsHostMode, notifyHostSlashError } from "./host-alerts.js";
 import { discordSupportLine } from "./friends-copy.js";
 import { ensureMemberRoleOnMember } from "./friends-guild-roles.js";
 import { serverMembersIntentHelp, useServerMembersIntent } from "./friends-member-intent.js";
+import { appendSessionHintIfNeeded } from "./friends-auth-hints.js";
 import { sanitizeDiscordOutbound } from "./sanitize-outbound.js";
+import { engine } from "../worker/engine.js";
 import {
   buildAccountsEmbed,
   buildErrorEmbed,
@@ -65,9 +70,9 @@ async function editEmbeds(interaction: ChatInputCommandInteraction, embed: Embed
 }
 
 function resultEmbed(text: string): EmbedBuilder {
-  const body = out(text);
+  const body = out(appendSessionHintIfNeeded(text));
   const fail =
-    /no account|not saved|required|must be|license|host-only|invalid|expired|incomplete|could not verify/i.test(
+    /no account|not saved|required|must be|license|host-only|invalid|expired|incomplete|could not verify|failed|refresh failed/i.test(
       body,
     );
   return buildPlainResultEmbed(body, !fail);
@@ -129,7 +134,29 @@ function buildSlashCommands() {
         .setDescription("Remove a saved account")
         .addStringOption((o) => o.setName("nickname").setDescription("Nickname to remove").setRequired(true)),
     )
-    .addSubcommand((sub) => sub.setName("list").setDescription("Balances, levels, and toggles")),
+    .addSubcommand((sub) =>
+      sub.setName("list").setDescription("Balances, levels, lifetime — refreshes stats first"),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("refresh")
+        .setDescription("Refresh balance and level from RoRush")
+        .addStringOption((o) =>
+          o.setName("nickname").setDescription("One account (omit for all of yours)"),
+        ),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("pause")
+        .setDescription("Pause automation for one account (host: any nickname)")
+        .addStringOption((o) => o.setName("nickname").setDescription("Account nickname").setRequired(true)),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("resume")
+        .setDescription("Resume automation for one account")
+        .addStringOption((o) => o.setName("nickname").setDescription("Account nickname").setRequired(true)),
+    ),
   new SlashCommandBuilder()
     .setName("rain")
     .setDescription("Turn auto rain join on or off")
@@ -414,7 +441,30 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
       }
       const sub = interaction.options.getSubcommand();
       if (sub === "list") {
-        await replyEmbeds(interaction, [buildAccountsEmbed(userId)]);
+        await interaction.deferReply({ ephemeral: true });
+        const owned = accountsForDiscordUser(userId);
+        if (owned.length > 0) {
+          await engine.refreshAccountStatsForIds(owned.map((a) => a.id));
+        }
+        await editEmbeds(interaction, buildAccountsEmbed(userId));
+        return;
+      }
+      if (sub === "refresh") {
+        await interaction.deferReply({ ephemeral: true });
+        const nick = interaction.options.getString("nickname");
+        const text = await refreshAccountsForDiscordUser(userId, nick ?? undefined);
+        await editEmbeds(interaction, resultEmbed(text));
+        return;
+      }
+      if (sub === "pause" || sub === "resume") {
+        await interaction.deferReply({ ephemeral: true });
+        const text = await setAccountAutomationPaused({
+          actorUserId: userId,
+          isHost: isHost(userId),
+          nickname: interaction.options.getString("nickname", true),
+          paused: sub === "pause",
+        });
+        await editEmbeds(interaction, resultEmbed(text));
         return;
       }
       await interaction.deferReply({ ephemeral: true });

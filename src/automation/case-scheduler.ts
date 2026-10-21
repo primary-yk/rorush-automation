@@ -14,6 +14,7 @@ import {
 import { AUTO_OPEN_CASE_KINDS, CASE_KIND } from "../rorush/endpoints.js";
 import { RoRushHub } from "../rorush/signalr-hub.js";
 import { ensureAuthenticated } from "../accounts/session-manager.js";
+import { accountEligibleForCases } from "../accounts/account-automation.js";
 import { isIgnorableCaseError } from "./case-errors.js";
 
 function parseUnlockMs(value: unknown): number | null {
@@ -87,7 +88,7 @@ export async function openDueCases(accountHubs: Map<number, RoRushHub>): Promise
     }
 
     const account = listAccounts().find((a) => a.id === row.account_id);
-    if (!account?.auto_open_cases) {
+    if (!account || !accountEligibleForCases(account)) {
       removeCaseSchedule(row.account_id, row.case_id);
       continue;
     }

@@ -10,6 +10,8 @@ import {
 } from "../db/repositories.js";
 import { LIMBO_MIN_MULTIPLIER } from "../config.js";
 import { engine } from "../worker/engine.js";
+import { isAccountAutomationPaused } from "../accounts/account-automation.js";
+import { appendSessionHintIfNeeded } from "./friends-auth-hints.js";
 import { formatLifetimeShort, lifetimeBreakdown } from "./friends-lifetime.js";
 
 export function accountsForDiscordUser(discordUserId: string): AccountRow[] {
@@ -19,6 +21,59 @@ export function accountsForDiscordUser(discordUserId: string): AccountRow[] {
 export function findOwnedAccount(discordUserId: string, nickname: string): AccountRow | undefined {
   const q = nickname.trim().toLowerCase();
   return accountsForDiscordUser(discordUserId).find((a) => a.nickname.toLowerCase() === q);
+}
+
+function findAccountByNickname(nickname: string): AccountRow | undefined {
+  const q = nickname.trim().toLowerCase();
+  return listAccounts().find((a) => a.nickname.toLowerCase() === q);
+}
+
+export async function refreshAccountsForDiscordUser(
+  discordUserId: string,
+  nickname?: string,
+): Promise<string> {
+  const targets = nickname
+    ? [findOwnedAccount(discordUserId, nickname)].filter((a): a is AccountRow => !!a)
+    : accountsForDiscordUser(discordUserId);
+  if (nickname && targets.length === 0) {
+    return `No account **${nickname}** saved for you. Use \`/account add\`.`;
+  }
+  if (targets.length === 0) {
+    return "No accounts to refresh. Use `/account add` or `/account session`.";
+  }
+  const results = await engine.refreshAccountStatsForIds(targets.map((a) => a.id));
+  const lines: string[] = ["**Refreshed balance & level**", ""];
+  for (const r of results) {
+    const row = getAccount(r.accountId);
+    if (!row) continue;
+    if (r.ok) {
+      const bal = row.balance != null ? `${row.balance.toFixed(2)} coins` : "—";
+      const lvl = row.level != null ? String(row.level) : "—";
+      lines.push(`• **${row.nickname}** · ${bal} · lvl ${lvl}`);
+    } else {
+      lines.push(appendSessionHintIfNeeded(`• **${row.nickname}** · refresh failed — ${r.error ?? "unknown"}`, row));
+    }
+  }
+  return lines.join("\n");
+}
+
+export async function setAccountAutomationPaused(input: {
+  actorUserId: string;
+  isHost: boolean;
+  nickname: string;
+  paused: boolean;
+}): Promise<string> {
+  const account = findAccountByNickname(input.nickname);
+  if (!account) return `No account **${input.nickname}** on this host.`;
+  const owner = account.owner_discord_id?.trim();
+  if (!input.isHost && owner !== input.actorUserId) {
+    return "You can only pause **your** accounts. Staff can pause any nickname.";
+  }
+  updateAccount(account.id, { automation_paused: input.paused ? 1 : 0 });
+  await engine.reloadAccounts();
+  const state = input.paused ? "**paused**" : "**resumed**";
+  const scope = input.isHost && owner && owner !== input.actorUserId ? " (host override)" : "";
+  return `**${account.nickname}** automation ${state}${scope} — rain/cases/limbo skip until resumed. Global \`/pause\` still stops everyone.`;
 }
 
 export async function addAccountForDiscordUser(input: {
@@ -120,7 +175,10 @@ function formatOneAccount(a: AccountRow): string {
     .filter(Boolean)
     .join(", ");
   const life = formatLifetimeShort(lifetimeBreakdown(a));
-  return `• **${a.nickname}** · ${bal} coins · lvl ${lvl}\n  ${life}\n  ${flags || "all automation off"} · ${a.status}`;
+  const paused = isAccountAutomationPaused(a) ? " · **automation paused**" : "";
+  let line = `• **${a.nickname}** · ${bal} coins · lvl ${lvl}${paused}\n  ${life}\n  ${flags || "all automation off"} · ${a.status}`;
+  line = appendSessionHintIfNeeded(line, a);
+  return line;
 }
 
 export async function setToggle(
