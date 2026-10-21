@@ -88,7 +88,7 @@ async function ensureRole(guild: Guild, name: string, color: number, existingId?
   const found = await findRole(guild, existingId, name);
   if (found) {
     await found
-      .edit({ name, color, mentionable: false, reason: "Discord /setup server" })
+      .edit({ name, color, mentionable: false, reason: "Discord /server setup" })
       .catch(() => undefined);
     return found;
   }
@@ -96,7 +96,7 @@ async function ensureRole(guild: Guild, name: string, color: number, existingId?
     name,
     color,
     mentionable: false,
-    reason: "Discord /setup server",
+    reason: "Discord /server setup",
   });
 }
 
@@ -108,14 +108,14 @@ async function ensureCategory(
   const found = await findCategory(guild, existingId, name);
   if (found) {
     if (found.name !== name) {
-      await found.setName(name, "Discord /setup server").catch(() => undefined);
+      await found.setName(name, "Discord /server setup").catch(() => undefined);
     }
     return found;
   }
   return guild.channels.create({
     name,
     type: ChannelType.GuildCategory,
-    reason: "Discord /setup server",
+    reason: "Discord /server setup",
   });
 }
 
@@ -182,7 +182,7 @@ async function applyCategoryPerms(
     );
   }
 
-  await category.permissionOverwrites.set(overwrites, "Discord /setup server");
+  await category.permissionOverwrites.set(overwrites, "Discord /server setup");
 }
 
 async function ensureTextChannel(input: {
@@ -202,10 +202,10 @@ async function ensureTextChannel(input: {
       name: input.name,
       type: ChannelType.GuildText,
       parent: input.parent.id,
-      reason: "Discord /setup server",
+      reason: "Discord /server setup",
     });
   } else if (ch.parentId !== input.parent.id) {
-    await ch.setParent(input.parent.id, { reason: "Discord /setup server" }).catch(() => undefined);
+    await ch.setParent(input.parent.id, { reason: "Discord /server setup" }).catch(() => undefined);
   }
 
   const bot = botAllow();
@@ -264,7 +264,7 @@ async function ensureTextChannel(input: {
     );
   }
 
-  await ch.permissionOverwrites.set(overwrites, "Discord /setup server");
+  await ch.permissionOverwrites.set(overwrites, "Discord /server setup");
   return ch;
 }
 

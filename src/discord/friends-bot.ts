@@ -63,7 +63,7 @@ async function editEmbeds(interaction: ChatInputCommandInteraction, embed: Embed
 
 function resultEmbed(text: string): EmbedBuilder {
   const body = out(text);
-  const fail = /no account|not linked|required|must be|license|host-only/i.test(body);
+  const fail = /no account|not saved|required|must be|license|host-only/i.test(body);
   return buildPlainResultEmbed(body, !fail);
 }
 

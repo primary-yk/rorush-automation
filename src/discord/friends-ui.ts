@@ -94,13 +94,13 @@ export function buildSetupJoinEmbed(input: {
 
 export function buildStatusEmbed(): EmbedBuilder {
   const accounts = listAccounts();
-  const linked = new Set(accounts.map((a) => a.owner_discord_id).filter(Boolean));
+  const withAccounts = new Set(accounts.map((a) => a.owner_discord_id).filter(Boolean));
   return baseEmbed(UI.primary)
     .setTitle("System status")
     .addFields(
       { name: "Engine", value: "Online", inline: true },
       { name: "Accounts", value: String(accounts.length), inline: true },
-      { name: "Linked users", value: String(linked.size), inline: true },
+      { name: "Members", value: String(withAccounts.size), inline: true },
     );
 }
 

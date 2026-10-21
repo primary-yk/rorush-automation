@@ -48,7 +48,7 @@ export async function removeAccountForDiscordUser(
   nickname: string,
 ): Promise<string> {
   const account = findOwnedAccount(discordUserId, nickname);
-  if (!account) return `No account **${nickname}** linked to you.`;
+  if (!account) return `No account **${nickname}** saved for you. Use \`/account add\`.`;
   deleteAccount(account.id);
   await engine.reloadAccounts();
   return `Removed **${account.nickname}**.`;
@@ -84,7 +84,7 @@ export async function setToggle(
   enabled: boolean,
 ): Promise<string> {
   const account = findOwnedAccount(discordUserId, nickname);
-  if (!account) return `No account **${nickname}** linked to you.`;
+  if (!account) return `No account **${nickname}** saved for you. Use \`/account add\`.`;
   updateAccount(
     account.id,
     { [field]: enabled ? 1 : 0 },
@@ -101,7 +101,7 @@ export async function setLimbo(
   input: { enabled: boolean; multiplier?: number; betCoins?: number },
 ): Promise<string> {
   const account = findOwnedAccount(discordUserId, nickname);
-  if (!account) return `No account **${nickname}** linked to you.`;
+  if (!account) return `No account **${nickname}** saved for you. Use \`/account add\`.`;
   const patch: Parameters<typeof updateAccount>[1] = {
     limbo_wager_enabled: input.enabled ? 1 : 0,
   };
@@ -126,7 +126,7 @@ export async function setRainFilters(
   input: { minRainCoins?: number; preWagerBeforeRain?: boolean },
 ): Promise<string> {
   const account = findOwnedAccount(discordUserId, nickname);
-  if (!account) return `No account **${nickname}** linked to you.`;
+  if (!account) return `No account **${nickname}** saved for you. Use \`/account add\`.`;
   const patch: Parameters<typeof updateAccount>[1] = {};
   if (input.minRainCoins != null) {
     patch.min_rain_amount = Math.max(0, input.minRainCoins);
@@ -153,7 +153,7 @@ export async function testLimboForDiscordUser(
   multiplier?: number,
 ): Promise<string> {
   const account = findOwnedAccount(discordUserId, nickname);
-  if (!account) return `No account **${nickname}** linked to you.`;
+  if (!account) return `No account **${nickname}** saved for you. Use \`/account add\`.`;
   if (!Number.isFinite(betCoins) || betCoins < 0.01) {
     return "Bet must be at least **0.01** coins.";
   }
@@ -171,7 +171,7 @@ export function engineStatusText(): string {
   return [
     "**Status**",
     "Automation is **online**.",
-    `Accounts: **${accounts.length}** · **${friends.size}** Discord user(s) linked`,
+    `Accounts: **${accounts.length}** · **${friends.size}** member(s) with saved logins`,
     "Use `/account list`, `/rain`, `/limbo`, `/cases`.",
   ].join("\n");
 }

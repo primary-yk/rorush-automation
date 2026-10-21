@@ -38,7 +38,7 @@ export async function ensureMemberRoleOnMember(input: {
   return true;
 }
 
-/** Grant Rain Member to every non-bot in guild (run after /setup server). */
+/** Grant Rain Member to every non-bot in guild (run after /server setup). */
 export async function syncMemberRoleForAllMembers(input: {
   guild: Guild;
   botToken: string;

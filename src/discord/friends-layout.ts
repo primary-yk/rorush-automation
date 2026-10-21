@@ -1,4 +1,4 @@
-/** IDs persisted after `/setup server` — used to repair permissions on re-run. */
+/** IDs persisted after `/server setup` — used to repair permissions on re-run. */
 
 export const FRIENDS_LAYOUT_VERSION = 1 as const;
 
