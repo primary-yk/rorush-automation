@@ -409,7 +409,7 @@ export async function runFriendsServerSetup(input: {
 
   const purgeLine =
     purgedChannels > 0
-      ? `Removed **${purgedChannels}** old channel(s)/thread(s) from the previous layout. Friends should run **`/connect`** again for a new private feed.`
+      ? `Removed **${purgedChannels}** old channel(s)/thread(s) from the previous layout. Friends should run **/connect** again for a new private feed.`
       : "No prior bot channels to remove (first setup).";
 
   const memberSyncLine =
