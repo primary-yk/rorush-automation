@@ -24,17 +24,22 @@ export function bindFriendsFeedClient(client: Client | null): void {
   clientRef = client;
 }
 
+export function hostLogChannelConfigured(settings: SettingsRow = getSettings()): boolean {
+  if (!isFriendsHostMode()) return false;
+  return !!settings.discord_host_log_channel_id?.trim();
+}
+
 export function friendsServerFeedActive(settings: SettingsRow = getSettings()): boolean {
   if (!isFriendsHostMode()) return false;
   return !!(settings.discord_thread_parent_id?.trim() && settings.discord_host_log_channel_id?.trim());
 }
 
-/** Host DMs only when explicitly enabled or no server layout yet. */
+/** Host DMs only when explicitly enabled or `#host-log` is not configured yet. */
 export function hostDmAlertsEnabled(): boolean {
   const v = process.env.DISCORD_HOST_DM_ALERTS?.trim().toLowerCase();
   if (v === "1" || v === "true" || v === "yes" || v === "on") return true;
   if (v === "0" || v === "false" || v === "no" || v === "off") return false;
-  return !friendsServerFeedActive();
+  return !hostLogChannelConfigured();
 }
 
 function rushToDiscordEmbed(embed: RushEmbed): EmbedBuilder {
@@ -72,6 +77,30 @@ export async function postToHostLogChannel(embeds: RushEmbed[]): Promise<void> {
   if (!hostLogId || embeds.length === 0) return;
   const grouped = groupHostLogEmbeds(embeds);
   await sendEmbedsToChannel(hostLogId, grouped);
+}
+
+/** Staff alerts: `#host-log` when configured; DMs only if `DISCORD_HOST_DM_ALERTS=1` or no host log yet. */
+export async function notifyStaffSlashError(input: {
+  command: string;
+  username: string;
+  detail: string;
+}): Promise<void> {
+  if (!isFriendsHostMode()) return;
+  const embed = tagHostEmbed({
+    title: "Slash command error",
+    description: `\`/${input.command}\` · **${input.username}**\n\`\`\`\n${input.detail.slice(0, 900)}\n\`\`\``,
+    color: 0xef_44_44,
+  });
+  if (hostLogChannelConfigured()) {
+    await postToHostLogChannel([embed]);
+    return;
+  }
+  const { dmHostText } = await import("./host-alerts.js");
+  if (hostDmAlertsEnabled()) {
+    await dmHostText(
+      `**Slash command error** · \`/${input.command}\` · ${input.username}\n\`\`\`\n${input.detail.slice(0, 900)}\n\`\`\``,
+    );
+  }
 }
 
 export async function postToUserFeedThread(discordUserId: string, embeds: RushEmbed[]): Promise<void> {

@@ -3,7 +3,12 @@ import { listAccounts } from "../db/repositories.js";
 import { isRelayConnected, sendPilotEvent } from "../relay/pilot-client.js";
 import { redactForDiscord } from "./public-alert-filter.js";
 import { friendsDiscordBrandingEnabled } from "./friends-branding.js";
-import { deliverFriendsReporterEmbed, friendsServerFeedActive } from "./friends-feed.js";
+import {
+  deliverFriendsReporterEmbed,
+  friendsServerFeedActive,
+  hostLogChannelConfigured,
+  postToHostLogChannel,
+} from "./friends-feed.js";
 import { dmHostEmbeds, isFriendsHostMode } from "./host-alerts.js";
 import { resolveDiscordReportWebhookUrl } from "./report-webhook.js";
 import {
@@ -47,7 +52,14 @@ async function deliverEmbed(
   }
   const url = webhookConfigured();
   if (!url) {
-    if (isFriendsHostMode()) await dmHostEmbeds([payload]);
+    if (isFriendsHostMode()) {
+      if (hostLogChannelConfigured()) {
+        await postToHostLogChannel([payload]);
+      } else {
+        await dmHostEmbeds([payload]);
+      }
+      return;
+    }
     return;
   }
   try {
@@ -75,7 +87,14 @@ export async function deliverEmbeds(embeds: RushEmbed[]): Promise<void> {
   }
   const url = webhookConfigured();
   if (!url) {
-    if (isFriendsHostMode()) await dmHostEmbeds(stamped);
+    if (isFriendsHostMode()) {
+      if (hostLogChannelConfigured()) {
+        await postToHostLogChannel(stamped);
+      } else {
+        await dmHostEmbeds(stamped);
+      }
+      return;
+    }
     return;
   }
   try {

@@ -100,8 +100,6 @@ export async function notifyHostSlashError(input: {
   username: string;
   detail: string;
 }): Promise<void> {
-  if (!isFriendsHostMode()) return;
-  await dmHostText(
-    `**Pilot slash error** · \`/${input.command}\` · ${input.username}\n\`\`\`\n${input.detail.slice(0, 900)}\n\`\`\``,
-  );
+  const { notifyStaffSlashError } = await import("./friends-feed.js");
+  await notifyStaffSlashError(input);
 }

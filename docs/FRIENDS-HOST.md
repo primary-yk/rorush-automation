@@ -44,7 +44,7 @@ Friends only use `/` commands — bot replies never include dashboard or site li
    - `ENCRYPTION_KEY`, `CAPTCHA_API_KEY`, `CAPTCHA_PROVIDER=2captcha`
    - `DISCORD_BOT_TOKEN`, `DISCORD_GUILD_ID`
    - `HOST_DISCORD_USER_ID` (your Discord user id — `/server setup` + `/pause` `/resume`)
-   - After **`/server setup`**, captcha/join errors go to **`#host-log`** (not your DMs). Set `DISCORD_HOST_DM_ALERTS=1` only if you still want DMs.
+   - After **`/server setup`**, staff alerts (captcha, join errors, friend slash failures) go to **`#host-log`**, not DMs. Set `DISCORD_HOST_DM_ALERTS=1` only if you want **both** DMs and `#host-log`.
    - Optional legacy: `DISCORD_REPORT_WEBHOOK` if you skip `/server setup`
 3. Open dashboard (`npm run show-urls`) to **add/remove any account**, inspect logs, global pause.
 

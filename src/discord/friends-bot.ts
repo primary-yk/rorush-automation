@@ -30,10 +30,10 @@ import {
   setToggle,
   testLimboForDiscordUser,
 } from "./friends-commands.js";
-import { bindFriendsFeedClient, friendsServerFeedActive, postToHostLogChannel } from "./friends-feed.js";
+import { bindFriendsFeedClient, notifyStaffSlashError } from "./friends-feed.js";
 import { runFriendsServerSetup } from "./friends-server-setup.js";
 import { hostJumpToUserFeedThread, restoreUserFeedThread, runSetupJoin } from "./friends-user-thread.js";
-import { isFriendsHostMode, notifyHostSlashError } from "./host-alerts.js";
+import { isFriendsHostMode } from "./host-alerts.js";
 import { discordSupportLine } from "./friends-copy.js";
 import { ensureMemberRoleOnMember } from "./friends-guild-roles.js";
 import { serverMembersIntentHelp, useServerMembersIntent } from "./friends-member-intent.js";
@@ -778,22 +778,11 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
     const msg = err instanceof Error ? err.message : String(err);
     const dupAck = isInteractionAlreadyAcknowledged(err);
     if (!dupAck && isFriendsHostMode() && !isHost(interaction.user.id)) {
-      if (friendsServerFeedActive()) {
-        void postToHostLogChannel([
-          {
-            title: "Slash command error",
-            description: `\`/${interaction.commandName}\` · **${interaction.user.username}**\n\`\`\`\n${msg.slice(0, 900)}\n\`\`\``,
-            color: 0xef_44_44,
-          },
-        ]);
-      } else {
-        void notifyHostSlashError({
-          command: interaction.commandName,
-          userId: interaction.user.id,
-          username: interaction.user.username,
-          detail: msg,
-        });
-      }
+      void notifyStaffSlashError({
+        command: interaction.commandName,
+        username: interaction.user.username,
+        detail: msg,
+      });
     } else if (dupAck) {
       console.warn(
         `[friends-bot] /${interaction.commandName} — interaction already acknowledged (stop duplicate npm run dev?)`,
