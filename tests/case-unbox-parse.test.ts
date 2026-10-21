@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { parseCaseUnboxingPayload } from "../src/rorush/case-unbox-parse.js";
+import {
+  normalizeCaseItemImageUrl,
+  parseCaseUnboxingPayload,
+} from "../src/rorush/case-unbox-parse.js";
 
 describe("parseCaseUnboxingPayload", () => {
   it("matches reqId and parses roundResults", () => {
@@ -27,5 +30,24 @@ describe("parseCaseUnboxingPayload", () => {
   it("ignores other reqIds", () => {
     const parsed = parseCaseUnboxingPayload({ reqId: "other", result: {} }, "mine");
     expect(parsed.matched).toBe(false);
+  });
+
+  it("normalizes protocol-relative and site-relative image URLs", () => {
+    expect(normalizeCaseItemImageUrl("//cdn.example/skin.png")).toBe("https://cdn.example/skin.png");
+    expect(normalizeCaseItemImageUrl("/assets/item.webp")).toBe("https://rorush.com/assets/item.webp");
+  });
+
+  it("reads wonItems on result root", () => {
+    const parsed = parseCaseUnboxingPayload(
+      {
+        reqId: "x",
+        result: {
+          wonItems: [{ name: "Knife", imageUrl: "https://cdn.example/k.png", price: 5000 }],
+        },
+      },
+      "x",
+    );
+    expect(parsed.items[0]?.name).toBe("Knife");
+    expect(parsed.items[0]?.priceCoins).toBe(50);
   });
 });
