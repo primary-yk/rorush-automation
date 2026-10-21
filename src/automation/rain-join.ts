@@ -26,10 +26,14 @@ import { SIGNALR } from "../rorush/endpoints.js";
 import { RoRushHub } from "../rorush/signalr-hub.js";
 import type { RainState } from "../rorush/types.js";
 import { ensureAuthenticated } from "../accounts/session-manager.js";
-import { reportLimboOutcome, reportRainOutcome } from "../discord/reporter.js";
+import {
+  reportLimboOutcome,
+  reportRainOutcome,
+  reportRainWagerClearing,
+} from "../discord/reporter.js";
 
 const WAGER_HINT =
-  /wager|play.?through|recent|activity|requirement|bet/i;
+  /wager|play.?through|recent|activity|requirement|must bet|bet before|wager lock|playthrough/i;
 
 /** Balance (coins) before join — used to compute real rain earnings when the pool finishes. */
 const rainBalanceBeforeJoin = new Map<string, number>();
@@ -151,6 +155,31 @@ export function isWagerRejection(message: string): boolean {
   return WAGER_HINT.test(message);
 }
 
+export type RainJoinFailureKind =
+  | "captcha"
+  | "wager"
+  | "wager_limbo_off"
+  | "wager_after_limbo"
+  | "pool_filter"
+  | "other";
+
+/** User-facing bucket for rain join failures (wager before captcha when limbo was tried). */
+export function classifyRainJoinFailure(
+  message: string,
+  ctx?: { wagerClearAttempted?: boolean },
+): RainJoinFailureKind {
+  if (/wager required but limbo wager is off/i.test(message)) return "wager_limbo_off";
+  if (/below filter|pool below|below minimum|join rain disabled/i.test(message)) {
+    return "pool_filter";
+  }
+  if (isWagerRejection(message)) return "wager";
+  if (ctx?.wagerClearAttempted) return "wager_after_limbo";
+  if (/captcha|hcaptcha|complete the captcha|captcha again|token missing/i.test(message)) {
+    return "captcha";
+  }
+  return "other";
+}
+
 /** Do not keep burning captcha/join attempts for these (same rain window). */
 export function isPermanentRainJoinFailure(message: string): boolean {
   const m = message.trim();
@@ -159,6 +188,7 @@ export function isPermanentRainJoinFailure(message: string): boolean {
   if (/join rain disabled for account/i.test(m)) return true;
   if (/rain amount.*below filter|below filter|pool below minimum|below minimum/i.test(m)) return true;
   if (/wager required but limbo wager is off/i.test(m)) return true;
+  if (/enable `\/limbo set on:true`/i.test(m)) return true;
   if (/account (is )?banned|permanently banned|disabled account/i.test(m)) return true;
   return false;
 }
@@ -190,7 +220,7 @@ export async function joinRainForAccount(input: {
   captchaToken?: string | null;
   /** When false, caller reports to Discord (avoids “join failed” on captcha retries). */
   reportToDiscord?: boolean;
-}): Promise<{ success: boolean; reason: string }> {
+}): Promise<{ success: boolean; reason: string; wagerClearAttempted?: boolean }> {
   const { accountId, rain, hub } = input;
   if (isRainJoined(accountId, rain.rainId)) {
     return { success: true, reason: "Already joined this rain" };
@@ -212,9 +242,10 @@ async function joinRainForAccountOnce(input: {
   hub: RoRushHub;
   captchaToken?: string | null;
   reportToDiscord?: boolean;
-}): Promise<{ success: boolean; reason: string }> {
+}): Promise<{ success: boolean; reason: string; wagerClearAttempted?: boolean }> {
   const { accountId, rain, hub } = input;
   const { account, client } = await ensureAuthenticated(accountId);
+  let wagerClearAttempted = false;
 
   if (!account.join_rain) {
     return { success: false, reason: "Join rain disabled for account" };
@@ -306,6 +337,13 @@ async function joinRainForAccountOnce(input: {
         message: "Wager requirement detected; placing limbo bet",
         detail: outcome.message,
       });
+      void reportRainWagerClearing({
+        nickname: account.nickname,
+        rainId: rain.rainId,
+        poolCoins: rainAmount,
+        siteMessage: outcome.message,
+      });
+      wagerClearAttempted = true;
       await placeLimboWagerBet(accountId, client, hub, account, rainAmount, account.nickname, rain.rainId);
       const retryReq = uuid();
       let retryOutcome = await joinOnce(hub, retryReq, rain.rainId, accountId);
@@ -337,6 +375,10 @@ async function joinRainForAccountOnce(input: {
         message: "Wager required but limbo wager is off for this account",
         detail: outcome.message,
       });
+      outcome = {
+        ok: false,
+        message: "Wager required but limbo wager is off for this account — use `/limbo set on:true`",
+      };
     }
 
     let balanceBeforeCoins: number | null = null;
@@ -390,10 +432,11 @@ async function joinRainForAccountOnce(input: {
         message: outcome.message,
         rainId: rain.rainId,
         poolCoins: rainAmount,
+        wagerClearAttempted,
       });
     }
 
-    return { success: outcome.ok, reason: outcome.message };
+    return { success: outcome.ok, reason: outcome.message, wagerClearAttempted };
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     if (

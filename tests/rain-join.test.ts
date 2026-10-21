@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  classifyRainJoinFailure,
   isPermanentRainJoinFailure,
   isRetryableRainFailure,
   isWagerRejection,
@@ -40,6 +41,24 @@ describe("isWagerRejection", () => {
     expect(isWagerRejection("You need to wager 100 more coins")).toBe(true);
     expect(isWagerRejection("Play through requirement not met")).toBe(true);
     expect(isWagerRejection("Captcha invalid")).toBe(false);
+  });
+});
+
+describe("classifyRainJoinFailure", () => {
+  it("labels captcha when no limbo was tried", () => {
+    expect(classifyRainJoinFailure("Please complete the CAPTCHA again and retry.")).toBe("captcha");
+  });
+
+  it("labels wager after limbo even if site says captcha", () => {
+    expect(
+      classifyRainJoinFailure("Please complete the CAPTCHA again and retry.", {
+        wagerClearAttempted: true,
+      }),
+    ).toBe("wager_after_limbo");
+  });
+
+  it("labels wager when RoRush message mentions wager", () => {
+    expect(classifyRainJoinFailure("You must wager before joining")).toBe("wager");
   });
 });
 

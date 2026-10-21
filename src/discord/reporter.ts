@@ -12,6 +12,7 @@ import {
 import { dmHostEmbeds, isFriendsHostMode } from "./host-alerts.js";
 import { preferFriendsBotFeedsOverWebhook } from "./friends-reporting.js";
 import { resolveDiscordReportWebhookUrl } from "./report-webhook.js";
+import { classifyRainJoinFailure, type RainJoinFailureKind } from "../automation/rain-join.js";
 import {
   COLORS,
   formatBalanceChange,
@@ -24,6 +25,55 @@ import {
   withBrand,
   type RushEmbed,
 } from "./embeds.js";
+
+function rainJoinFailureEmbedCopy(kind: RainJoinFailureKind): {
+  title: string;
+  description: string;
+  color: number;
+} {
+  switch (kind) {
+    case "wager":
+      return {
+        title: "Rain · Wager required",
+        description:
+          "RoRush blocked join until wager is cleared. An automatic **limbo** bet is being placed, then join retries.",
+        color: COLORS.rainSummary,
+      };
+    case "wager_after_limbo":
+      return {
+        title: "Rain · Join failed (wager)",
+        description:
+          "Join is still blocked **after** an automatic limbo wager. Check balance, limbo multiplier (min 1.3×), or try a manual `/limbo test`.",
+        color: COLORS.rainFail,
+      };
+    case "wager_limbo_off":
+      return {
+        title: "Rain · Join blocked (wager)",
+        description:
+          "This account needs a wager before rain join. Turn on **`/limbo set on:true`** (or enable pre-rain wager in **`/limbo filters`**).",
+        color: COLORS.rainFail,
+      };
+    case "captcha":
+      return {
+        title: "Rain · Captcha retry",
+        description:
+          "Captcha was rejected or expired. A new solve is queued automatically — this is **not** a wager issue.",
+        color: COLORS.rainFail,
+      };
+    case "pool_filter":
+      return {
+        title: "Rain · Skipped (pool filter)",
+        description: "Pool size is below this account’s minimum rain filter.",
+        color: COLORS.limboSkip,
+      };
+    default:
+      return {
+        title: "Rain · Join failed",
+        description: "This account could not join the current rain.",
+        color: COLORS.rainFail,
+      };
+  }
+}
 
 function webhookConfigured(): string | null {
   return resolveDiscordReportWebhookUrl();
@@ -189,15 +239,13 @@ export async function reportLimboOutcome(input: {
   );
 }
 
-export async function reportRainOutcome(input: {
+export async function reportRainWagerClearing(input: {
   nickname: string;
-  success: boolean;
-  message: string;
   rainId: string;
   poolCoins?: number;
+  siteMessage?: string;
 }): Promise<void> {
-  const detail = redactForDiscord(input.message);
-  const rainCopy = rainJoinEmbedCopy(input.success);
+  const copy = rainJoinFailureEmbedCopy("wager");
   const fields: RushEmbed["fields"] = [
     { name: accountFieldLabel(), value: `**${input.nickname}**`, inline: true },
     {
@@ -207,15 +255,82 @@ export async function reportRainOutcome(input: {
     },
     { name: "Rain ID", value: shortRainId(input.rainId), inline: true },
   ];
-  if (detail && !/^joined rain/i.test(detail)) {
-    fields.push({ name: "Note", value: detail.slice(0, 900), inline: false });
+  const site = input.siteMessage ? redactForDiscord(input.siteMessage) : "";
+  if (site && !isWagerSiteMessage(site)) {
+    fields.push({ name: "RoRush", value: site.slice(0, 400), inline: false });
   }
 
   await deliverEmbed(
     {
-      title: rainCopy.title,
-      description: rainCopy.description,
-      color: input.success ? COLORS.rainOk : COLORS.rainFail,
+      title: copy.title,
+      description: copy.description,
+      color: copy.color,
+      fields,
+      footer: { text: "Rain · wager" },
+    },
+    { nickname: input.nickname },
+  );
+}
+
+function isWagerSiteMessage(message: string): boolean {
+  return /wager|play.?through|requirement|must bet|bet before/i.test(message);
+}
+
+export async function reportRainOutcome(input: {
+  nickname: string;
+  success: boolean;
+  message: string;
+  rainId: string;
+  poolCoins?: number;
+  wagerClearAttempted?: boolean;
+}): Promise<void> {
+  const detail = redactForDiscord(input.message);
+  const fields: RushEmbed["fields"] = [
+    { name: accountFieldLabel(), value: `**${input.nickname}**`, inline: true },
+    {
+      name: "Pool",
+      value: input.poolCoins != null ? formatCoins(input.poolCoins) : "—",
+      inline: true,
+    },
+    { name: "Rain ID", value: shortRainId(input.rainId), inline: true },
+  ];
+
+  let title: string;
+  let description: string;
+  let color: number;
+
+  if (input.success) {
+    const rainCopy = rainJoinEmbedCopy(true);
+    title = rainCopy.title;
+    description = rainCopy.description;
+    color = COLORS.rainOk;
+    if (detail && !/^joined rain/i.test(detail)) {
+      fields.push({ name: "Note", value: detail.slice(0, 900), inline: false });
+    }
+  } else {
+    const kind = classifyRainJoinFailure(detail, {
+      wagerClearAttempted: input.wagerClearAttempted,
+    });
+    const failCopy = rainJoinFailureEmbedCopy(kind);
+    title = failCopy.title;
+    description = failCopy.description;
+    color = failCopy.color;
+    const noteLabel =
+      kind === "captcha"
+        ? "Site message"
+        : kind === "wager" || kind === "wager_after_limbo" || kind === "wager_limbo_off"
+          ? "RoRush"
+          : "Note";
+    if (detail && !/^joined rain/i.test(detail)) {
+      fields.push({ name: noteLabel, value: detail.slice(0, 900), inline: false });
+    }
+  }
+
+  await deliverEmbed(
+    {
+      title,
+      description,
+      color,
       fields,
       footer: { text: "Rain" },
     },

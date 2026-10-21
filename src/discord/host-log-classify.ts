@@ -18,6 +18,13 @@ const BUCKET_COLOR: Record<HostIssueBucket, number> = {
 
 export function classifyHostIssue(text: string): HostIssueBucket {
   const m = text.toLowerCase();
+  if (
+    /wager required|join blocked \(wager\)|join failed \(wager\)|wager clear|limbo wager|play.?through|must bet|rain · wager/.test(
+      m,
+    )
+  ) {
+    return "join";
+  }
   if (/captcha|2captcha|solve|token missing|hcaptcha|recaptcha|turnstile/.test(m)) return "captcha";
   if (
     /session expired|invalid token|unauthorized|not authenticated|login failed|2fa|credentials|401|403|jwt|re-login|password/.test(

@@ -578,6 +578,7 @@ export class AutomationEngine {
     let tries = 0;
     let hub: Awaited<ReturnType<HubRegistry["ensure"]>> | null = null;
     let lastReason = "Could not join this rain";
+    let lastWagerClearAttempted = false;
 
     while (tries < maxTries) {
       tries++;
@@ -658,11 +659,13 @@ export class AutomationEngine {
             message: result.reason,
             rainId: liveJoin.rainId,
             poolCoins: liveJoin.amount ?? undefined,
+            wagerClearAttempted: result.wagerClearAttempted,
           });
           return { retryable: false };
         }
 
         lastReason = result.reason;
+        if (result.wagerClearAttempted) lastWagerClearAttempted = true;
         rainTelemetryAccountFailed(liveJoin.rainId, account.nickname, result.reason);
         appendLog({
           accountId: account.id,
@@ -678,6 +681,7 @@ export class AutomationEngine {
             message: result.reason,
             rainId: liveJoin.rainId,
             poolCoins: liveJoin.amount ?? undefined,
+            wagerClearAttempted: result.wagerClearAttempted,
           });
           return { retryable: false };
         }
@@ -715,6 +719,7 @@ export class AutomationEngine {
         message: lastReason,
         rainId,
         poolCoins: pool ?? undefined,
+        wagerClearAttempted: lastWagerClearAttempted,
       });
       if (liveEnd && rainJoinWindowOpen(liveEnd)) {
         appendLog({
