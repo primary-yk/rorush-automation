@@ -21,4 +21,10 @@ describe("updateAccount join_rain", () => {
     updateAccount(row.id, { join_rain: 0 }, { allowJoinRainChange: true });
     expect(getAccount(row.id)!.join_rain).toBe(0);
   });
+
+  it("clamps limbo_multiplier to at least 1.3 on every save", () => {
+    const row = insertAccount({ nickname: "vk" });
+    updateAccount(row.id, { limbo_multiplier: 1.1 });
+    expect(getAccount(row.id)!.limbo_multiplier).toBe(1.3);
+  });
 });

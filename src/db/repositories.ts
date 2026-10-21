@@ -1,3 +1,4 @@
+import { clampLimboMultiplier, LIMBO_MIN_MULTIPLIER } from "../config.js";
 import { getDb } from "./database.js";
 import { shouldSkipDuplicateActivityLog } from "./activity-dedupe.js";
 
@@ -139,6 +140,14 @@ export function listAccounts(): AccountRow[] {
   return getDb().prepare("SELECT * FROM accounts ORDER BY id").all() as AccountRow[];
 }
 
+/** Bumps stored multipliers below {@link LIMBO_MIN_MULTIPLIER} (e.g. after site import). */
+export function enforceLimboMultiplierMinimums(): number {
+  const result = getDb()
+    .prepare("UPDATE accounts SET limbo_multiplier = ? WHERE limbo_multiplier < ?")
+    .run(LIMBO_MIN_MULTIPLIER, LIMBO_MIN_MULTIPLIER);
+  return result.changes;
+}
+
 export function getAccount(id: number): AccountRow | undefined {
   return getDb().prepare("SELECT * FROM accounts WHERE id = ?").get(id) as AccountRow | undefined;
 }
@@ -200,6 +209,7 @@ export function updateAccount(
   next.vault_session_auto_deposit = Number(next.vault_session_auto_deposit) !== 0 ? 1 : 0;
   next.vault_lock_minutes = Math.max(0, Math.trunc(Number(next.vault_lock_minutes) || 0));
   next.automation_paused = Number(next.automation_paused) !== 0 ? 1 : 0;
+  next.limbo_multiplier = clampLimboMultiplier(next.limbo_multiplier);
   getDb()
     .prepare(
       `UPDATE accounts SET nickname = ?, owner_discord_id = ?, username = ?, password_enc = ?, session_jwt_enc = ?, api_key_enc = ?,

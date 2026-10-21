@@ -13,6 +13,12 @@ export function projectRoot(): string {
 /** RoRush: multipliers below ~1.3× can leave wager lock; enforce on all limbo bets. */
 export const LIMBO_MIN_MULTIPLIER = 1.3;
 
+export function clampLimboMultiplier(multiplier: number): number {
+  const n = Number(multiplier);
+  if (!Number.isFinite(n)) return LIMBO_MIN_MULTIPLIER;
+  return Math.max(LIMBO_MIN_MULTIPLIER, n);
+}
+
 function loadDotenv(): void {
   loadProjectEnv();
 }

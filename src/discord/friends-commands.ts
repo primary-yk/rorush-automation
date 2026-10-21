@@ -9,7 +9,7 @@ import {
   updateAccount,
   type AccountRow,
 } from "../db/repositories.js";
-import { LIMBO_MIN_MULTIPLIER } from "../config.js";
+import { clampLimboMultiplier, LIMBO_MIN_MULTIPLIER } from "../config.js";
 import { engine } from "../worker/engine.js";
 import { isAccountAutomationPaused } from "../accounts/account-automation.js";
 import { appendSessionHintIfNeeded } from "./friends-auth-hints.js";
@@ -184,7 +184,7 @@ function formatOneAccount(a: AccountRow, joinsToday?: number): string {
   const flags = [
     a.join_rain ? "rain" : null,
     a.auto_open_cases ? "cases" : null,
-    a.limbo_wager_enabled ? `limbo ${a.limbo_multiplier.toFixed(2)}×` : null,
+    a.limbo_wager_enabled ? `limbo ${clampLimboMultiplier(a.limbo_multiplier).toFixed(2)}×` : null,
     a.auto_vault_deposit ? "vault rain profit" : null,
     vaultLockStatusLine(a),
     a.pre_wager_before_rain ? "pre-wager" : null,
@@ -231,7 +231,7 @@ export async function setLimbo(
     limbo_wager_enabled: input.enabled ? 1 : 0,
   };
   if (input.multiplier != null) {
-    patch.limbo_multiplier = Math.max(LIMBO_MIN_MULTIPLIER, input.multiplier);
+    patch.limbo_multiplier = clampLimboMultiplier(input.multiplier);
   }
   if (input.betCoins != null) {
     patch.limbo_bet_coins = Math.max(0.01, input.betCoins);

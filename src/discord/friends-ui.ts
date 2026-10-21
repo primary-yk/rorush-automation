@@ -1,5 +1,6 @@
 import { EmbedBuilder, type APIEmbedField } from "discord.js";
-import { listAccounts, type AccountRow } from "../db/repositories.js";
+import { clampLimboMultiplier } from "../config.js";
+import { enforceLimboMultiplierMinimums, listAccounts, type AccountRow } from "../db/repositories.js";
 import { accountsForDiscordUser } from "./friends-commands.js";
 import { countRainJoinsToday } from "../db/repositories.js";
 import { vaultLockStatusLine } from "../automation/vault-lock-apply.js";
@@ -131,7 +132,7 @@ function accountRowField(a: AccountRow): APIEmbedField {
     a.auto_open_cases ? "Cases" : null,
     a.auto_vault_deposit ? "Vault rain" : null,
     vaultLockStatusLine(a),
-    a.limbo_wager_enabled ? `Limbo ${a.limbo_multiplier.toFixed(2)}×` : null,
+    a.limbo_wager_enabled ? `Limbo ${clampLimboMultiplier(a.limbo_multiplier).toFixed(2)}×` : null,
     a.pre_wager_before_rain ? "Pre-wager" : null,
     a.min_rain_amount > 0 ? `Min pool ${a.min_rain_amount.toFixed(0)}` : null,
   ]
@@ -149,6 +150,7 @@ function accountRowField(a: AccountRow): APIEmbedField {
 }
 
 export function buildAccountsEmbed(discordUserId: string): EmbedBuilder {
+  enforceLimboMultiplierMinimums();
   const accounts = accountsForDiscordUser(discordUserId);
   const embed = baseEmbed(UI.primary).setTitle("Your accounts");
   if (accounts.length === 0) {

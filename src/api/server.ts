@@ -2,6 +2,7 @@ import express from "express";
 import {
   captchaApiKey,
   encryptionKeyStatus,
+  clampLimboMultiplier,
   LIMBO_MIN_MULTIPLIER,
   loadConfig,
   projectRoot,
@@ -204,7 +205,7 @@ export function createApiServer() {
     if (body.minCodeLevel !== undefined) patch.min_code_level = body.minCodeLevel;
     if (body.limboWagerEnabled !== undefined) patch.limbo_wager_enabled = body.limboWagerEnabled ? 1 : 0;
     if (body.limboMultiplier !== undefined) {
-      patch.limbo_multiplier = Math.max(LIMBO_MIN_MULTIPLIER, body.limboMultiplier);
+      patch.limbo_multiplier = clampLimboMultiplier(body.limboMultiplier);
     }
     if (body.limboBetCoins !== undefined) patch.limbo_bet_coins = body.limboBetCoins;
     if (body.preWagerBeforeRain !== undefined) {
@@ -394,7 +395,7 @@ function publicAccount(a: ReturnType<typeof listAccounts>[number]) {
     autoRedeemCodes: !!a.auto_redeem_codes,
     minCodeLevel: a.min_code_level,
     limboWagerEnabled: !!a.limbo_wager_enabled,
-    limboMultiplier: a.limbo_multiplier,
+    limboMultiplier: clampLimboMultiplier(a.limbo_multiplier),
     limboBetCoins: a.limbo_bet_coins,
     preWagerBeforeRain: !!a.pre_wager_before_rain,
     status: a.status,
