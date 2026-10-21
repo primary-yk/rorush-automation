@@ -284,7 +284,7 @@ export function createApiServer() {
     }
     try {
       const outcome = await engine.openRewardCase(id, slot);
-      res.json({ ok: true, ...outcome });
+      res.json(outcome);
     } catch (err) {
       res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
     }

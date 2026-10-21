@@ -51,7 +51,7 @@ export async function ensureUserPrivateFeedThread(input: {
   const row = getDiscordUserThread(input.discordUserId);
   if (row?.thread_id) {
     const ch = await input.client.channels.fetch(row.thread_id).catch(() => null);
-    if (ch?.isThread()) {
+    if (ch?.isThread() && ch.type === ChannelType.PrivateThread) {
       await ensurePrivateThreadMember(ch, input.discordUserId);
       return { threadId: ch.id, created: false };
     }
@@ -68,7 +68,7 @@ export async function ensureUserPrivateFeedThread(input: {
     invitable: false,
     reason: "Friend private feed",
   });
-  await ensurePrivateThreadMember(thread, input.discordUserId);
+  await ensurePrivateThreadMember(thread as PrivateThreadChannel, input.discordUserId);
 
   const hostId = process.env.HOST_DISCORD_USER_ID?.trim();
   if (hostAutoJoinPrivateThreads() && hostId && hostId !== input.discordUserId) {

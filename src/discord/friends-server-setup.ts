@@ -301,11 +301,12 @@ async function seedConnectChannel(channel: TextChannel, force = false): Promise<
   if (!force) {
     const recent = await channel.messages.fetch({ limit: 10 }).catch(() => null);
     const hasButton = recent?.some((m) =>
-      m.components.some((row) =>
-        row.components.some(
+      m.components.some((row) => {
+        if (!("components" in row)) return false;
+        return row.components.some(
           (c) => "customId" in c && c.customId === FRIENDS_CONNECT_BUTTON_ID,
-        ),
-      ),
+        );
+      }),
     );
     if (hasButton) return;
   }

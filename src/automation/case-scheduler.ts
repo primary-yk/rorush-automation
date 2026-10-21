@@ -9,7 +9,7 @@ import {
   upsertCaseSchedule,
   updateAccount,
 } from "../db/repositories.js";
-import { AUTO_OPEN_CASE_KINDS, CASE_KIND } from "../rorush/endpoints.js";
+import { AUTO_OPEN_CASE_KINDS, CASE_KIND, type CaseKind } from "../rorush/endpoints.js";
 import { RoRushHub } from "../rorush/signalr-hub.js";
 import { ensureAuthenticated } from "../accounts/session-manager.js";
 import { accountEligibleForCases } from "../accounts/account-automation.js";
@@ -111,7 +111,7 @@ export async function openDueCases(accountHubs: Map<number, RoRushHub>): Promise
 
       const outcome = await openRewardCaseOnHub(hub, {
         caseId: row.case_id,
-        kind: row.case_kind,
+        kind: row.case_kind as CaseKind,
       });
 
       applyCaseOpenOutcome({
