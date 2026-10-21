@@ -46,7 +46,7 @@ export function buildHelpEmbed(): EmbedBuilder {
       {
         name: "Accounts",
         value:
-          "`/account add` · `/account session`\n`/account list` (auto-refresh) · `/account refresh`\n`/account pause` · `/account resume` · `/account remove`",
+          "`/account add` · `/account session`\n`/account list` · `/account refresh` · pause · resume · remove\nAccount picks use **dropdowns** (your saved nicknames)",
         inline: true,
       },
       {
