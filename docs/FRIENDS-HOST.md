@@ -69,8 +69,8 @@ No install. In your Discord server:
 | `/account list` | Balance, level, lifetime, toggles (auto-refreshes from RoRush) |
 | `/account refresh` | Manual balance/level refresh (one nickname or all yours) |
 | `/account pause` / `resume` | Pause **one account** (host: any nickname; friends: own only) |
-| `/account vault` | After rain (+ limbo), send **profit** (wallet above pre-rain balance) to **RoRush vault** |
-| `/account vaultlock` | Timed vault lock on RoRush (**10m**–**1d**). Withdraw blocked until timer ends; **rain still deposits** while locked |
+| `/account vault` | Always-on: after rain (+ limbo), send **profit** to **RoRush vault** |
+| `/rorush vault` | **Button flow** — pick lock length (**10m**–**1d**), then **lock + vault rain for that timer** or **lock only**. When the timer ends, nothing re-locks until you run this again |
 | `/rain` / `/cases` | Turn automation on/off |
 | `/limbo set` | Wager on/off + multiplier + fallback bet |
 | `/limbo test` | One manual test bet (real balance) |

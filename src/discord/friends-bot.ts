@@ -55,6 +55,12 @@ import { botRuntimeLabel, encryptionKeyStatus, projectRoot } from "../config.js"
 import { sanitizeDiscordOutbound } from "./sanitize-outbound.js";
 import { engine } from "../worker/engine.js";
 import {
+  buildRorushVaultDurationRows,
+  buildRorushVaultStartEmbed,
+  handleVaultFlowButton,
+  isVaultFlowButton,
+} from "./friends-vault-flow.js";
+import {
   buildAccountsEmbed,
   buildErrorEmbed,
   buildHelpEmbed,
@@ -200,30 +206,18 @@ function buildSlashCommands() {
     .addSubcommand((sub) =>
       sub
         .setName("vault")
-        .setDescription("After rain (+ limbo), move profit to RoRush vault")
+        .setDescription("After rain (+ limbo), move profit to RoRush vault (always on)")
         .addStringOption((o) => o.setName("nickname").setDescription("Account nickname").setRequired(true))
         .addBooleanOption((o) => o.setName("on").setDescription("Enable or disable").setRequired(true)),
-    )
+    ),
+  new SlashCommandBuilder()
+    .setName("rorush")
+    .setDescription("RoRush tools")
     .addSubcommand((sub) =>
       sub
-        .setName("vaultlock")
-        .setDescription("Timed RoRush vault lock (withdraw blocked; rain still deposits)")
-        .addStringOption((o) => o.setName("nickname").setDescription("Account nickname").setRequired(true))
-        .addStringOption((o) =>
-          o
-            .setName("duration")
-            .setDescription("Lock length (or off)")
-            .setRequired(true)
-            .addChoices(
-              { name: "Off", value: "off" },
-              { name: "10 minutes", value: "10m" },
-              { name: "30 minutes", value: "30m" },
-              { name: "1 hour", value: "1h" },
-              { name: "6 hours", value: "6h" },
-              { name: "12 hours", value: "12h" },
-              { name: "1 day", value: "1d" },
-            ),
-        ),
+        .setName("vault")
+        .setDescription("Lock vault — pick duration and whether rain profits vault for that timer")
+        .addStringOption((o) => o.setName("account").setDescription("Account nickname").setRequired(true)),
     ),
   new SlashCommandBuilder()
     .setName("rain")
@@ -402,6 +396,10 @@ export async function startFriendsDiscordBot(): Promise<void> {
         void liveClient.guilds.fetch(interaction.guildId).then((guild) => {
           void handleHostToolButton(interaction, liveClient, guild, isHost(interaction.user.id));
         });
+        return;
+      }
+      if (isVaultFlowButton(interaction.customId)) {
+        void handleVaultFlowButton(interaction, interaction.user.id);
       }
     }
   });
@@ -781,37 +779,6 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
         await editEmbeds(interaction, resultEmbed(text));
         return;
       }
-      if (sub === "vaultlock") {
-        await interaction.deferReply({ ephemeral: true });
-        const nick = interaction.options.getString("nickname", true);
-        const account = accountsForDiscordUser(userId).find(
-          (a) => a.nickname.toLowerCase() === nick.trim().toLowerCase(),
-        );
-        if (!account) {
-          await editEmbeds(
-            interaction,
-            resultEmbed(`No account **${nick}** saved for you. Use \`/account add\`.`),
-          );
-          return;
-        }
-        const { parseVaultLockPreset } = await import("../rorush/vault-lock.js");
-        const { applyVaultLockSetting } = await import("../automation/vault-lock-apply.js");
-        const minutes = parseVaultLockPreset(interaction.options.getString("duration", true));
-        if (minutes == null) {
-          await editEmbeds(interaction, buildErrorEmbed("Invalid vault lock duration."));
-          return;
-        }
-        try {
-          const text = await applyVaultLockSetting({ accountId: account.id, lockMinutes: minutes });
-          await editEmbeds(interaction, resultEmbed(text));
-        } catch (err) {
-          await editEmbeds(
-            interaction,
-            buildErrorEmbed(err instanceof Error ? err.message : String(err)),
-          );
-        }
-        return;
-      }
       await interaction.deferReply({ ephemeral: true });
       if (sub === "add") {
         const nick = interaction.options.getString("nickname", true);
@@ -863,6 +830,34 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
             detail: `Nickname **${nick}**`,
           });
         }
+        return;
+      }
+    }
+
+    if (interaction.commandName === "rorush") {
+      const sub = interaction.options.getSubcommand();
+      if (sub === "vault") {
+        const nick = interaction.options.getString("account", true);
+        const account = accountsForDiscordUser(userId).find(
+          (a) => a.nickname.toLowerCase() === nick.trim().toLowerCase(),
+        );
+        if (!account) {
+          await interaction.reply({
+            ephemeral: true,
+            embeds: [
+              buildPlainResultEmbed(
+                `No account **${nick}** saved for you. Use \`/account add\`.`,
+                false,
+              ),
+            ],
+          });
+          return;
+        }
+        await interaction.reply({
+          ephemeral: true,
+          embeds: [buildRorushVaultStartEmbed(account.nickname)],
+          components: buildRorushVaultDurationRows(account.id),
+        });
         return;
       }
     }

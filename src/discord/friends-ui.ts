@@ -51,7 +51,8 @@ export function buildHelpEmbed(): EmbedBuilder {
       },
       {
         name: "Automation",
-        value: "`/rain` · `/cases`\n`/limbo set` · `/limbo test` · `/limbo filters`",
+        value:
+          "`/rain` · `/cases`\n`/limbo set` · `/limbo test` · `/limbo filters`\n`/account vault` · `/rorush vault`",
         inline: true,
       },
       {

@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS accounts (
   auto_vault_deposit INTEGER NOT NULL DEFAULT 0,
   vault_lock_minutes INTEGER NOT NULL DEFAULT 0,
   vault_lock_expires_at TEXT,
+  vault_session_auto_deposit INTEGER NOT NULL DEFAULT 0,
   automation_paused INTEGER NOT NULL DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'idle',
   last_error TEXT,

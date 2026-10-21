@@ -73,6 +73,7 @@ function migrateAccounts(db: Database.Database): void {
     ["auto_vault_deposit", "INTEGER NOT NULL DEFAULT 0"],
     ["vault_lock_minutes", "INTEGER NOT NULL DEFAULT 0"],
     ["vault_lock_expires_at", "TEXT"],
+    ["vault_session_auto_deposit", "INTEGER NOT NULL DEFAULT 0"],
     ["automation_paused", "INTEGER NOT NULL DEFAULT 0"],
   ];
   for (const [name, type] of add) {

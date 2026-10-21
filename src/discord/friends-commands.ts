@@ -245,8 +245,8 @@ export async function setAutoVaultDeposit(
   return (
     `**${account.nickname}** · Auto vault **${enabled ? "ON" : "OFF"}** — ` +
     (enabled
-      ? "after each rain (+ limbo if enabled), profit above your pre-rain wallet balance moves to **RoRush vault**."
-      : "rain profits stay in your wallet.")
+      ? "after each rain (+ limbo if enabled), profit above your pre-rain wallet balance moves to **RoRush vault** (until you turn it off)."
+      : "rain profits stay in your wallet. For a **timed** lock + optional rain vault, use **`/rorush vault`**.")
   );
 }
 

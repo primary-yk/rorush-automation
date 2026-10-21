@@ -22,6 +22,7 @@ export type AccountRow = {
   auto_vault_deposit: number;
   vault_lock_minutes: number;
   vault_lock_expires_at: string | null;
+  vault_session_auto_deposit: number;
   automation_paused: number;
   status: string;
   last_error: string | null;
@@ -195,6 +196,7 @@ export function updateAccount(
   next.join_rain = Number(next.join_rain) !== 0 ? 1 : 0;
   next.pre_wager_before_rain = Number(next.pre_wager_before_rain) !== 0 ? 1 : 0;
   next.auto_vault_deposit = Number(next.auto_vault_deposit) !== 0 ? 1 : 0;
+  next.vault_session_auto_deposit = Number(next.vault_session_auto_deposit) !== 0 ? 1 : 0;
   next.vault_lock_minutes = Math.max(0, Math.trunc(Number(next.vault_lock_minutes) || 0));
   next.automation_paused = Number(next.automation_paused) !== 0 ? 1 : 0;
   getDb()
@@ -203,6 +205,7 @@ export function updateAccount(
        proxy_url = ?, join_rain = ?, min_rain_amount = ?, auto_open_cases = ?, auto_redeem_codes = ?,
        min_code_level = ?, limbo_wager_enabled = ?, limbo_multiplier = ?, limbo_bet_coins = ?,
        pre_wager_before_rain = ?, auto_vault_deposit = ?, vault_lock_minutes = ?, vault_lock_expires_at = ?,
+       vault_session_auto_deposit = ?,
        automation_paused = ?,
        status = ?, last_error = ?, balance = ?, level = ?,
        lifetime_rain = ?, lifetime_cases = ?, lifetime_codes = ?, updated_at = ?
@@ -228,6 +231,7 @@ export function updateAccount(
       next.auto_vault_deposit ?? 0,
       next.vault_lock_minutes ?? 0,
       next.vault_lock_expires_at ?? null,
+      next.vault_session_auto_deposit ?? 0,
       next.automation_paused ?? 0,
       next.status,
       next.last_error,
