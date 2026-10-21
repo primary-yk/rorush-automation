@@ -16,6 +16,7 @@ import {
   setToggle,
 } from "./friends-commands.js";
 import { deferEphemeral, replyEphemeralEmbeds } from "./friends-interaction.js";
+import { prependNavRow } from "./friends-nav.js";
 import { buildAccountsEmbed, buildPlainResultEmbed } from "./friends-ui.js";
 
 export const DASHBOARD_PREFIX = "friends:dash:";
@@ -80,23 +81,23 @@ export function buildAccountDashboardComponents(
     new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
       new ButtonBuilder()
         .setCustomId(`${DASHBOARD_PREFIX}rain:on:${focus.id}`)
-        .setLabel("Rain ON")
+        .setLabel("Rain · On")
         .setStyle(rainOn ? ButtonStyle.Success : ButtonStyle.Secondary),
       new ButtonBuilder()
         .setCustomId(`${DASHBOARD_PREFIX}rain:off:${focus.id}`)
-        .setLabel("Rain OFF")
+        .setLabel("Rain · Off")
         .setStyle(!rainOn ? ButtonStyle.Danger : ButtonStyle.Secondary),
       new ButtonBuilder()
         .setCustomId(`${DASHBOARD_PREFIX}cases:toggle:${focus.id}`)
-        .setLabel(casesOn ? "Cases ON" : "Cases OFF")
+        .setLabel(casesOn ? "Cases · On" : "Cases · Off")
         .setStyle(casesOn ? ButtonStyle.Primary : ButtonStyle.Secondary),
       new ButtonBuilder()
         .setCustomId(`${DASHBOARD_PREFIX}limbo:toggle:${focus.id}`)
-        .setLabel(limboOn ? "Limbo ON" : "Limbo OFF")
+        .setLabel(limboOn ? "Limbo · On" : "Limbo · Off")
         .setStyle(limboOn ? ButtonStyle.Primary : ButtonStyle.Secondary),
       new ButtonBuilder()
         .setCustomId(`${DASHBOARD_PREFIX}refresh:${focus.id}`)
-        .setLabel("Refresh")
+        .setLabel("Refresh stats")
         .setStyle(ButtonStyle.Secondary),
     ),
   );
@@ -105,7 +106,7 @@ export function buildAccountDashboardComponents(
     new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
       new ButtonBuilder()
         .setCustomId(`${DASHBOARD_PREFIX}pause:${focus.id}`)
-        .setLabel(paused ? "Resume automation" : "Pause automation")
+        .setLabel(paused ? "Resume account" : "Pause account")
         .setStyle(paused ? ButtonStyle.Success : ButtonStyle.Secondary),
     ),
   );
@@ -128,13 +129,13 @@ export function buildAccountDashboardView(
     embed = embed.setDescription("No accounts yet. Use `/account add` or `/account session`.");
   } else if (variant === "dashboard") {
     embed = embed
-      .setTitle("Your dashboard")
+      .setTitle("Control panel")
       .setDescription(
-        `Controls apply to **${focusNick}** — pick another account in the menu or use the buttons below.`,
+        `Editing **${focusNick}**. Choose another nickname from the menu, then use the action rows below.`,
       );
   } else {
     embed = embed.setDescription(
-      `Controls apply to **${focusNick}** — rain, cases, limbo, refresh, and pause/resume below.`,
+      `Focused account: **${focusNick}**. Toggle rain, cases, limbo, refresh stats, or pause/resume below.`,
     );
   }
   const components =
@@ -148,7 +149,7 @@ async function renderDashboard(
   focusAccountId: number,
 ): Promise<void> {
   const { embed, components } = buildAccountDashboardView(discordUserId, focusAccountId);
-  await replyEphemeralEmbeds(interaction, [embed], components);
+  await replyEphemeralEmbeds(interaction, [embed], prependNavRow(components));
 }
 
 export async function handleDashboardInteraction(interaction: MessageComponentInteraction): Promise<void> {

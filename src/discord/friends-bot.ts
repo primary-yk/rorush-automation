@@ -61,6 +61,13 @@ import {
   handleDashboardInteraction,
   isDashboardComponent,
 } from "./friends-dashboard.js";
+import {
+  buildGlobalNavRow,
+  buildReplyComponentRows,
+  handleNavInteraction,
+  isNavComponent,
+  prependNavRow,
+} from "./friends-quick-actions.js";
 import { handleFriendsSlashAutocomplete } from "./friends-slash-autocomplete.js";
 import {
   savedAccountOption,
@@ -76,12 +83,12 @@ import {
 } from "./friends-account-remove.js";
 import { writeHostBackupFile } from "./friends-owner-backup.js";
 import {
-  buildAccountsEmbed,
   buildErrorEmbed,
   buildHelpEmbed,
   buildPersonalEarningsEmbed,
   buildServerEarningsBoardEmbed,
   buildPlainResultEmbed,
+  inferResultEmbedTitle,
   buildSetupGuideEmbed,
   buildSetupJoinEmbed,
   buildSetupServerEmbed,
@@ -98,8 +105,10 @@ function out(text: string): string {
 async function replyEmbeds(
   interaction: ChatInputCommandInteraction,
   embeds: EmbedBuilder[],
+  withNav = true,
 ): Promise<void> {
-  await replyEphemeralEmbeds(interaction, embeds);
+  const components = withNav ? [buildGlobalNavRow()] : undefined;
+  await replyEphemeralEmbeds(interaction, embeds, components);
 }
 
 async function editEmbeds(
@@ -112,10 +121,24 @@ async function editEmbeds(
 function resultEmbed(text: string): EmbedBuilder {
   const body = out(appendSessionHintIfNeeded(text));
   const fail =
-    /no account|not saved|required|must be|license|host-only|invalid|expired|incomplete|could not verify|failed|refresh failed/i.test(
+    /no account|not saved|required|must be|license|host-only|invalid|expired|incomplete|could not verify|failed|refresh failed|not linked|could not complete|already taken|looks incomplete/i.test(
       body,
     );
-  return buildPlainResultEmbed(body, !fail);
+  const ok = !fail;
+  return buildPlainResultEmbed(body, ok, inferResultEmbedTitle(body, ok));
+}
+
+async function replyWithResult(
+  interaction: ChatInputCommandInteraction,
+  text: string,
+  options?: { accountNickname?: string; fullControls?: boolean },
+): Promise<void> {
+  const embed = resultEmbed(text);
+  const components = buildReplyComponentRows(interaction.user.id, {
+    accountNickname: options?.accountNickname,
+    includeAccountControls: options?.fullControls ?? true,
+  });
+  await replyEphemeralEmbeds(interaction, [embed], components);
 }
 
 let client: Client | null = null;
@@ -124,10 +147,10 @@ function buildSlashCommands() {
   const core = [
   new SlashCommandBuilder()
     .setName("connect")
-    .setDescription("Open your private rain & limbo feed thread"),
+    .setDescription("Create or open your private automation feed thread"),
   new SlashCommandBuilder()
     .setName("guide")
-    .setDescription("Getting started — connect, accounts, automation"),
+    .setDescription("Step-by-step setup — feed, login, automation"),
   new SlashCommandBuilder()
     .setName("server")
     .setDescription("Staff: Discord server layout")
@@ -147,14 +170,14 @@ function buildSlashCommands() {
     .addSubcommand((sub) =>
       sub.setName("tools").setDescription("Re-post host test buttons in #host-log"),
     ),
-  new SlashCommandBuilder().setName("help").setDescription("Full command reference"),
+  new SlashCommandBuilder().setName("help").setDescription("Command reference with quick navigation"),
   new SlashCommandBuilder()
     .setName("earnings")
-    .setDescription("Your lifetime rain, cases, and code earnings on this host"),
-  new SlashCommandBuilder().setName("status").setDescription("Automation engine status"),
+    .setDescription("Lifetime rain, cases, and code totals for your accounts"),
+  new SlashCommandBuilder().setName("status").setDescription("Engine health and host account counts"),
   new SlashCommandBuilder()
     .setName("dashboard")
-    .setDescription("Your accounts with rain, cases, and limbo controls"),
+    .setDescription("Account overview with rain, cases, and limbo buttons"),
   new SlashCommandBuilder()
     .setName("jump")
     .setDescription("Staff: join a member's private feed thread for support")
@@ -170,7 +193,7 @@ function buildSlashCommands() {
     ),
   new SlashCommandBuilder()
     .setName("account")
-    .setDescription("Manage your RoRush login (ephemeral)")
+    .setDescription("Link and manage RoRush accounts (private replies)")
     .addSubcommand((sub) =>
       sub
         .setName("add")
@@ -201,7 +224,9 @@ function buildSlashCommands() {
         ),
     )
     .addSubcommand((sub) =>
-      sub.setName("list").setDescription("Balances, levels, lifetime — refreshes stats first"),
+      sub
+        .setName("list")
+        .setDescription("Account stats with control buttons (refreshes first)"),
     )
     .addSubcommand((sub) =>
       sub
@@ -267,17 +292,17 @@ function buildSlashCommands() {
     ),
   new SlashCommandBuilder()
     .setName("rain")
-    .setDescription("Turn auto rain join on or off")
+    .setDescription("Enable or disable automatic rain joins")
     .addStringOption((o) => savedAccountOption(o))
     .addBooleanOption((o) => o.setName("on").setDescription("On or off").setRequired(true)),
   new SlashCommandBuilder()
     .setName("cases")
-    .setDescription("Turn automatic case opens on or off")
+    .setDescription("Enable or disable automatic case opens")
     .addStringOption((o) => savedAccountOption(o))
     .addBooleanOption((o) => o.setName("on").setDescription("On or off").setRequired(true)),
   new SlashCommandBuilder()
     .setName("limbo")
-    .setDescription("Limbo wagers, test bets, and rain filters")
+    .setDescription("Limbo wagers, manual tests, and rain filters")
     .addSubcommand((sub) =>
       sub
         .setName("set")
@@ -446,6 +471,10 @@ export async function startFriendsDiscordBot(): Promise<void> {
       return;
     }
     if (interaction.isButton() || interaction.isStringSelectMenu()) {
+      if (isNavComponent(interaction.customId)) {
+        void handleNavInteraction(interaction);
+        return;
+      }
       if (isDashboardComponent(interaction.customId)) {
         void handleDashboardInteraction(interaction);
         return;
@@ -572,7 +601,7 @@ async function handleConnectButton(interaction: ButtonInteraction): Promise<void
       activitySource: "button",
       activityDisplayName: interactionDisplayName(interaction),
     });
-    await editEmbeds(interaction, buildSetupJoinEmbed(joinResult));
+    await replyEphemeralEmbeds(interaction, [buildSetupJoinEmbed(joinResult)], [buildGlobalNavRow()]);
   } catch (err) {
     if (isInteractionAlreadyAcknowledged(err)) return;
     const msg = err instanceof Error ? err.message : String(err);
@@ -702,7 +731,7 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
         activitySource: "slash",
         activityDisplayName: interactionDisplayName(interaction),
       });
-      await editEmbeds(interaction, buildSetupJoinEmbed(joinResult));
+      await replyEphemeralEmbeds(interaction, [buildSetupJoinEmbed(joinResult)], [buildGlobalNavRow()]);
       return;
     }
 
@@ -816,7 +845,7 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
         await engine.refreshAccountStatsForIds(owned.map((a) => a.id));
       }
       const { embed, components } = buildAccountDashboardView(userId);
-      await replyEphemeralEmbeds(interaction, [embed], components);
+      await replyEphemeralEmbeds(interaction, [embed], prependNavRow(components));
       return;
     }
 
@@ -834,35 +863,37 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
           await engine.refreshAccountStatsForIds(owned.map((a) => a.id));
         }
         const { embed, components } = buildAccountDashboardView(userId, undefined, "list");
-        await replyEphemeralEmbeds(interaction, [embed], components);
+        await replyEphemeralEmbeds(interaction, [embed], prependNavRow(components));
         return;
       }
       if (sub === "refresh") {
         await interaction.deferReply({ ephemeral: true });
         const nick = interaction.options.getString("nickname");
         const text = await refreshAccountsForDiscordUser(userId, nick ?? undefined);
-        await editEmbeds(interaction, resultEmbed(text));
+        await replyWithResult(interaction, text, { accountNickname: nick ?? undefined });
         return;
       }
       if (sub === "pause" || sub === "resume") {
         await interaction.deferReply({ ephemeral: true });
+        const nick = interaction.options.getString("nickname", true);
         const text = await setAccountAutomationPaused({
           actorUserId: userId,
           isHost: isHost(userId),
-          nickname: interaction.options.getString("nickname", true),
+          nickname: nick,
           paused: sub === "pause",
         });
-        await editEmbeds(interaction, resultEmbed(text));
+        await replyWithResult(interaction, text, { accountNickname: nick });
         return;
       }
       if (sub === "vault") {
         await interaction.deferReply({ ephemeral: true });
+        const nick = interaction.options.getString("nickname", true);
         const text = await setAutoVaultDeposit(
           userId,
-          interaction.options.getString("nickname", true),
+          nick,
           interaction.options.getBoolean("on", true),
         );
-        await editEmbeds(interaction, resultEmbed(text));
+        await replyWithResult(interaction, text, { accountNickname: nick });
         return;
       }
       if (sub === "remove") {
@@ -884,11 +915,12 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
           ephemeral: true,
           embeds: [
             buildPlainResultEmbed(
-              `Remove **${account.nickname}** from this host?\n\nAutomation stops immediately. This cannot be undone from Discord.`,
+              `Remove **${account.nickname}** from this host?\n\nAutomation stops immediately for this nickname. This action cannot be undone from Discord.`,
               true,
+              "Confirm removal",
             ),
           ],
-          components: [buildRemoveAccountConfirmRow(account.id)],
+          components: [buildRemoveAccountConfirmRow(account.id), buildGlobalNavRow()],
         });
         return;
       }
@@ -901,8 +933,8 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
           email: interaction.options.getString("email", true),
           password: interaction.options.getString("password", true),
         });
-        await editEmbeds(interaction, resultEmbed(text));
-        if (/^saved/i.test(text)) {
+        await replyWithResult(interaction, text, { accountNickname: nick });
+        if (/is linked/i.test(text)) {
           void logHostMemberActivity({
             kind: "account_add",
             discordUserId: userId,
@@ -920,8 +952,8 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
           sessionJwt: interaction.options.getString("token", true),
           apiKey: interaction.options.getString("api_key") ?? undefined,
         });
-        await editEmbeds(interaction, resultEmbed(text));
-        if (/^saved/i.test(text)) {
+        await replyWithResult(interaction, text, { accountNickname: nick });
+        if (/is linked/i.test(text)) {
           void logHostMemberActivity({
             kind: "account_session",
             discordUserId: userId,
@@ -977,7 +1009,7 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
         }
         try {
           const text = await clearAllVaultPreferences(account.id);
-          await editEmbeds(interaction, resultEmbed(text));
+          await replyWithResult(interaction, text, { accountNickname: nick });
         } catch (err) {
           await editEmbeds(
             interaction,
@@ -1009,17 +1041,16 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
         if (minutes <= 0) {
           if (vaultRainOpt === true) {
             const text = await setAutoVaultDeposit(userId, account.nickname, true);
-            await editEmbeds(
+            await replyWithResult(
               interaction,
-              resultEmbed(
-                `${text}\n\nNo vault **lock** on RoRush — withdraw stays available. Rain profit keeps moving to vault until you turn this off (**vault_rain: false** or \`/account vault on:false\`).`,
-              ),
+              `${text}\n\nNo vault **lock** on RoRush — withdraw stays available. Rain profit keeps moving to vault until you turn this off (**vault_rain: false** or \`/account vault on:false\`).`,
+              { accountNickname: account.nickname },
             );
             return;
           }
           if (vaultRainOpt === false) {
             const text = await setAutoVaultDeposit(userId, account.nickname, false);
-            await editEmbeds(interaction, resultEmbed(text));
+            await replyWithResult(interaction, text, { accountNickname: account.nickname });
             return;
           }
           await editEmbeds(
@@ -1039,7 +1070,7 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
             lockMinutes: minutes,
             vaultRainDuringLock: vaultRain,
           });
-          await editEmbeds(interaction, resultEmbed(text));
+          await replyWithResult(interaction, text, { accountNickname: account.nickname });
         } catch (err) {
           await editEmbeds(
             interaction,
@@ -1057,13 +1088,14 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
         return;
       }
       await interaction.deferReply({ ephemeral: true });
+      const account = interaction.options.getString("account", true);
       const text = await setToggle(
         userId,
-        interaction.options.getString("account", true),
+        account,
         "join_rain",
         interaction.options.getBoolean("on", true),
       );
-      await editEmbeds(interaction, resultEmbed(text));
+      await replyWithResult(interaction, text, { accountNickname: account });
       return;
     }
 
@@ -1074,13 +1106,14 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
         return;
       }
       await interaction.deferReply({ ephemeral: true });
+      const account = interaction.options.getString("account", true);
       const text = await setToggle(
         userId,
-        interaction.options.getString("account", true),
+        account,
         "auto_open_cases",
         interaction.options.getBoolean("on", true),
       );
-      await editEmbeds(interaction, resultEmbed(text));
+      await replyWithResult(interaction, text, { accountNickname: account });
       return;
     }
 
@@ -1099,7 +1132,7 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
           multiplier: interaction.options.getNumber("multiplier") ?? undefined,
           betCoins: interaction.options.getNumber("bet") ?? undefined,
         });
-        await editEmbeds(interaction, resultEmbed(text));
+        await replyWithResult(interaction, text, { accountNickname: account });
         return;
       }
       if (sub === "test") {
@@ -1109,7 +1142,7 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
           interaction.options.getNumber("bet", true),
           interaction.options.getNumber("multiplier") ?? undefined,
         );
-        await editEmbeds(interaction, resultEmbed(text));
+        await replyWithResult(interaction, text, { accountNickname: account });
         return;
       }
       if (sub === "filters") {
@@ -1119,7 +1152,7 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
           minRainCoins: minRain ?? undefined,
           preWagerBeforeRain: preWager ?? undefined,
         });
-        await editEmbeds(interaction, resultEmbed(text));
+        await replyWithResult(interaction, text, { accountNickname: account });
         return;
       }
     }
@@ -1214,8 +1247,12 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
       const paused = interaction.commandName === "pause";
       await replyEmbeds(interaction, [
         buildUpdateEmbed({
-          title: paused ? "Automation paused" : "Automation resumed",
-          lines: [paused ? "All accounts stop until you `/resume`." : "Rain and cases will run again."],
+          title: paused ? "Global pause enabled" : "Global pause cleared",
+          lines: [
+            paused
+              ? "All accounts on this host are paused until you run **`/resume`**."
+              : "Rain, cases, and limbo automation may run again for enabled accounts.",
+          ],
         }),
       ]);
       return;

@@ -6,16 +6,16 @@ export function discordSupportMention(): string {
 }
 
 export function discordSupportLine(): string {
-  return `Issues? Ping **${discordSupportMention()}**.`;
+  return `Need help? Contact **${discordSupportMention()}**.`;
 }
 
 export function friendSetupGuideLines(): string[] {
   return [
-    "**Getting started**",
+    "**Setup guide**",
     "",
-    "1. Open **`#connect`** → tap **Create my private feed** (or **`/` → connect**)",
-    "2. **`/account add`** or **`/account session`** — login (only you see it)",
-    "3. **`/rain`** · **`/limbo`** · **`/cases`**",
+    "1. **`#connect`** → **Create my private feed** (or **`/connect`**) ",
+    "2. **`/account add`** or **`/account session`** — link RoRush (private reply)",
+    "3. **`/dashboard`** — enable rain, cases, and limbo with buttons",
     "",
     discordSupportLine(),
   ];
@@ -25,11 +25,11 @@ export function friendStartHereChannelText(): string {
   return [
     "**Welcome**",
     "",
-    "Automation runs from this Discord server.",
+    "Rain automation runs from this Discord server — no install required.",
     "",
-    "1. **`#connect`** — button or **`/connect`** for your private feed thread",
-    "2. **`/account add`** or **`/account session`** — login (ephemeral)",
-    "3. **`/rain`** · **`/limbo`** · **`/cases`**",
+    "1. **`#connect`** — private feed thread",
+    "2. **`/account add`** or **`/account session`**",
+    "3. **`/dashboard`** — one-tap controls",
     "",
     discordSupportLine(),
   ].join("\n");
@@ -38,11 +38,10 @@ export function friendStartHereChannelText(): string {
 export function friendCommandsChannelText(): string {
   return [
     "**Commands**",
-    "• `/connect` — private feed",
-    "• `/guide` — getting started",
-    "• `/dashboard` · `/account add` · `/account session` · `/account list`",
+    "• `/connect` · `/guide` · `/dashboard`",
+    "• `/account add` · `/account session` · `/account list`",
     "• `/rain` · `/cases` · `/limbo`",
-    "• `/status` · `/earnings` · `/help`",
+    "• `/earnings` · `/status` · `/help`",
     "",
     discordSupportLine(),
   ].join("\n");

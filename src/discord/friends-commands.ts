@@ -43,13 +43,13 @@ export async function refreshAccountsForDiscordUser(
     ? [findOwnedAccount(discordUserId, nickname)].filter((a): a is AccountRow => !!a)
     : accountsForDiscordUser(discordUserId);
   if (nickname && targets.length === 0) {
-    return `No account **${nickname}** saved for you. Use \`/account add\`.`;
+    return `No account **${nickname}** is linked to your Discord.\n\nAdd one with **\`/account add\`** or **\`/account session\`**.`;
   }
   if (targets.length === 0) {
-    return "No accounts to refresh. Use `/account add` or `/account session`.";
+    return "You have no accounts to refresh.\n\nLink RoRush with **\`/account add\`** or **\`/account session\`**.";
   }
   const results = await engine.refreshAccountStatsForIds(targets.map((a) => a.id));
-  const lines: string[] = ["**Refreshed balance & level**", ""];
+  const lines: string[] = ["**Balances refreshed from RoRush**", ""];
   for (const r of results) {
     const row = getAccount(r.accountId);
     if (!row) continue;
@@ -80,7 +80,11 @@ export async function setAccountAutomationPaused(input: {
   await engine.reloadAccounts();
   const state = input.paused ? "**paused**" : "**resumed**";
   const scope = input.isHost && owner && owner !== input.actorUserId ? " (host override)" : "";
-  return `**${account.nickname}** automation ${state}${scope} — rain/cases/limbo skip until resumed. Global \`/pause\` still stops everyone.`;
+  return (
+    `**${account.nickname}** automation is now ${state}${scope}.\n` +
+    "Rain, cases, and limbo are skipped for this nickname until you resume.\n" +
+    "Host **`/pause`** still stops automation for the entire server."
+  );
 }
 
 export async function addAccountForDiscordUser(input: {
@@ -110,7 +114,10 @@ export async function addAccountForDiscordUser(input: {
     updateAccount(row.id, { level: verified.level });
   }
   await engine.reloadAccounts();
-  return `Saved **${nick}**. Use \`/account list\`, then \`/rain\`, \`/cases\`, and \`/limbo\`.`;
+  return (
+    `**${nick}** is linked and ready.\n\n` +
+    "Open **`/dashboard`** to enable rain with buttons, or use **`/rain`**, **`/cases`**, and **`/limbo set`**."
+  );
 }
 
 export async function addAccountSessionForDiscordUser(input: {
@@ -150,9 +157,8 @@ export async function addAccountSessionForDiscordUser(input: {
   });
   await engine.reloadAccounts();
   return (
-    `Saved **${nick}** with session login (no password stored). ` +
-    "Use `/account list`, then `/rain`, `/cases`, and `/limbo`. " +
-    "When the token expires, run `/account session` again with a new JWT."
+    `**${nick}** is linked via session JWT (password not stored).\n\n` +
+    "Use **`/dashboard`** to turn on automation. When the token expires, run **`/account session`** again with a fresh JWT."
   );
 }
 
@@ -221,8 +227,13 @@ export async function setToggle(
     { allowJoinRainChange: field === "join_rain" },
   );
   await engine.reloadAccounts();
-  const label = field === "join_rain" ? "Join rain" : "Auto cases";
-  return `**${account.nickname}** · ${label} **${enabled ? "ON" : "OFF"}**`;
+  const label = field === "join_rain" ? "Auto rain join" : "Auto case opens";
+  return (
+    `**${account.nickname}**\n${label} is now **${enabled ? "ON" : "OFF"}**.\n` +
+    (enabled
+      ? "You will see join results in your private feed thread."
+      : "This account will not join new rains until you turn it back on.")
+  );
 }
 
 export async function setLimbo(
@@ -245,8 +256,8 @@ export async function setLimbo(
   await engine.reloadAccounts();
   const row = getAccount(account.id)!;
   return (
-    `**${row.nickname}** · Limbo wager **${row.limbo_wager_enabled ? "ON" : "OFF"}** · ` +
-    `${row.limbo_multiplier.toFixed(2)}× · fallback bet ${row.limbo_bet_coins.toFixed(2)} coins`
+    `**${row.nickname}** — limbo wager **${row.limbo_wager_enabled ? "ON" : "OFF"}**\n` +
+    `Target **${row.limbo_multiplier.toFixed(2)}×** · fallback bet **${row.limbo_bet_coins.toFixed(2)}** coins`
   );
 }
 

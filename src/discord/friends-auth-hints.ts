@@ -16,7 +16,7 @@ export function isSessionJwtError(message: string | null | undefined): boolean {
 }
 
 export function sessionJwtDiscordHint(): string {
-  return "Session expired — run **`/account session`** with a fresh JWT from rorush.com (same as dashboard **Session JWT**).";
+  return "Session expired — run **`/account session`** with a fresh JWT from the site (same value as **Session JWT** in account settings).";
 }
 
 export function appendSessionHintIfNeeded(text: string, account?: AccountRow | null): string {

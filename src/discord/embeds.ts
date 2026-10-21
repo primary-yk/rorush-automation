@@ -51,12 +51,12 @@ export function rainJoinEmbedCopy(success: boolean): { title: string; descriptio
   if (success) {
     return {
       title: "Rain · Join confirmed",
-      description: "Your account entered the join window for this pool.",
+      description: "This account successfully entered the join window for the active pool.",
     };
   }
   return {
     title: "Rain · Join failed",
-    description: "This account could not join the current rain.",
+    description: "This account could not join the current rain. Check wager requirements or try again on the next pool.",
   };
 }
 
