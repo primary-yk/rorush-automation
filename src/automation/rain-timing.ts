@@ -30,6 +30,22 @@ export function captchaSolveLeadMs(): number {
   );
 }
 
+/** When SignalR omits tipStageDuration, assume standard tip length so solves start before join. */
+export function defaultTipStageMs(): number {
+  return Math.max(
+    60_000,
+    Number(process.env.RAIN_DEFAULT_TIP_STAGE_MS ?? 300_000) || 300_000,
+  );
+}
+
+export function effectiveRainForTiming(rain: RainState): RainState {
+  if (rainJoinStageBounds(rain)) return rain;
+  const created = normalizeEpochMs(rain.createdTimestamp);
+  if (!created) return rain;
+  if (rain.tipStageDuration != null) return rain;
+  return { ...rain, tipStageDuration: defaultTipStageMs() };
+}
+
 export function rainJoinStageBounds(
   rain: RainState,
   now = Date.now(),

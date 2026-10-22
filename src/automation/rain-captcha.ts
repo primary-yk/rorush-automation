@@ -6,11 +6,12 @@ import {
 } from "../captcha/solve.js";
 import {
   captchaSolveLeadMs,
+  effectiveRainForTiming,
   rainAllowsPaidCaptchaSolve,
   rainCaptchaCancelAfterMs,
+  rainCaptchaSolveWindow,
   rainJoinOpensInMs,
   rainJoinWindowOpen,
-  rainJoinWindowRemainingMs,
 } from "./rain-timing.js";
 import {
   rainTelemetryAccountCaptchaReady,
@@ -27,7 +28,7 @@ const billingSkipLogged = new Set<string>();
 
 export function syncRainCaptchaMeta(rain: RainState): void {
   if (!rain.rainId) return;
-  rainMetaById.set(rain.rainId, rain);
+  rainMetaById.set(rain.rainId, effectiveRainForTiming(rain));
 }
 
 export function dropRainCaptchaMeta(rainId: string): void {
@@ -170,10 +171,14 @@ function rainCaptchaDualStartEnabled(): boolean {
   return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
 }
 
-function buildRainSolveOptions(rain: RainState): CaptchaSolveOptions {
-  const taskAttempts = Math.max(1, Number(process.env.CAPTCHA_RAIN_TASK_ATTEMPTS ?? 2) || 2);
+function buildRainSolveOptions(rain: RainState, now = Date.now()): CaptchaSolveOptions {
+  const lateJoin = rainJoinWindowOpen(rain, now) && rainJoinOpensInMs(rain, now) === 0;
+  const taskAttempts = Math.max(
+    1,
+    Number(process.env.CAPTCHA_RAIN_TASK_ATTEMPTS ?? (lateJoin ? 2 : 1)) || 1,
+  );
   return {
-    cancelAfterMs: rainCaptchaCancelAfterMs(rain),
+    cancelAfterMs: rainCaptchaCancelAfterMs(rain, now),
     taskAttempts,
   };
 }
@@ -345,10 +350,7 @@ function startSolveForSlot(
 
   const blockKey = accountId != null ? `${rainId}:${accountId}` : rainId;
   const blocked = prewarmBlockedUntil.get(blockKey);
-  const urgent =
-    opts?.bypassCooldown ||
-    rainCaptchaUrgent(rain) ||
-    rainJoinWindowRemainingMs(rain) > 0;
+  const urgent = opts?.bypassCooldown || rainCaptchaUrgent(rain);
   if (blocked != null && Date.now() < blocked) {
     if (!urgent) return;
     prewarmBlockedUntil.delete(blockKey);
@@ -471,6 +473,14 @@ export function prewarmRainCaptchasParallel(rainId: string, accountIds: number[]
   for (const id of unique) startSolveForSlot(rainId, id);
 }
 
+/** Single entry: start paid solves when timing + billing allow (engine + join loop). */
+export function ensureRainCaptchasRunning(rainId: string, accountIds: number[]): void {
+  if (!rainId || isRainCaptchaFinished(rainId)) return;
+  const rain = getRainMeta(rainId);
+  if (!rain || !rainCaptchaSolveWindow(rain)) return;
+  prewarmRainCaptchasParallel(rainId, accountIds);
+}
+
 export async function waitForRainCaptchasParallel(
   rainId: string,
   accountIds: number[],
@@ -526,7 +536,7 @@ export async function takeRainCaptchaToken(
   }
 
   let p = inflight.get(key);
-  if (!p) {
+  if (!p && paidSolveAllowed(rainId)) {
     startSolveForSlot(rainId, opts?.accountId ?? null, {
       bypassCooldown: !!opts?.forRainJoin,
     });

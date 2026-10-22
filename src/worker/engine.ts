@@ -11,6 +11,7 @@ import {
   consumeRainCaptchaToken,
   isRainCaptchaFinished,
   markRainCaptchaFinished,
+  ensureRainCaptchasRunning,
   prewarmRainCaptchasParallel,
   maybeJoinWindowCaptchaHedge,
   refreshRainCaptchasForJoin,
@@ -27,6 +28,8 @@ import {
   parseRain,
   rainCaptchaPrewarmWindow,
   rainCaptchaSolveWindow,
+  effectiveRainForTiming,
+  rainJoinOpensInMs,
   rainJoinPrepShouldRun,
   rainJoinStageBounds,
   rainJoinWindowOpen,
@@ -288,9 +291,7 @@ export class AutomationEngine {
       rain.rainId,
       eligible.map((a) => ({ id: a.id, nickname: a.nickname })),
     );
-    if (rainCaptchaSolveWindow(rain)) {
-      prewarmRainCaptchasParallel(rain.rainId, joinIds);
-    }
+    ensureRainCaptchasRunning(rain.rainId, joinIds);
     if (rainJoinWindowOpen(rain)) {
       maybeJoinWindowCaptchaHedge(rain.rainId, joinIds);
     }
@@ -515,7 +516,7 @@ export class AutomationEngine {
           appendLog({
             category: "rain",
             message: "Rain created",
-            detail: `${rain.rainId} · pool ${rain.amount ?? "?"} coins`,
+            detail: `${rain.rainId} · pool ${rain.amount ?? "?"} coins · join ~${Math.round(rainJoinOpensInMs(effectiveRainForTiming(rain)) / 1000)}s`,
           }),
         );
         if (rainJoinPrepShouldRun(rain)) {
@@ -665,6 +666,10 @@ export class AutomationEngine {
     this.activeRain = merged;
     this.rainSnapshots.set(merged.rainId, merged);
     syncRainCaptchaMeta(merged);
+    const eligible = this.joinRainEligibleAccounts(merged);
+    if (eligible.length > 0) {
+      ensureRainCaptchasRunning(merged.rainId, eligible.map((a) => a.id));
+    }
     return merged;
   }
 
@@ -704,9 +709,7 @@ export class AutomationEngine {
       }
       if (isRainJoined(account.id, rainId)) return { retryable: false };
 
-      if (!isRainCaptchaFinished(rainId)) {
-        prewarmRainCaptchasParallel(rainId, [account.id]);
-      }
+      ensureRainCaptchasRunning(rainId, [account.id]);
 
       let accountCaptcha: string | null = null;
       while (!accountCaptcha && rainJoinWindowOpen(liveRain() ?? live)) {

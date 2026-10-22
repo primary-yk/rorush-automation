@@ -29,6 +29,8 @@ import { RoRushHub } from "../rorush/signalr-hub.js";
 import type { RainState } from "../rorush/types.js";
 import {
   captchaSolveLeadMs,
+  defaultTipStageMs,
+  effectiveRainForTiming,
   maxFailures,
   normalizeDurationMs,
   normalizeEpochMs,
@@ -43,6 +45,8 @@ import {
 
 export {
   captchaSolveLeadMs,
+  defaultTipStageMs,
+  effectiveRainForTiming,
   rainCaptchaPrewarmWindow,
   rainCaptchaSolveWindow,
   rainJoinOpensInMs,
