@@ -8,6 +8,7 @@ import {
   rainAllowsPaidCaptchaSolve,
   rainCaptchaCancelAfterMs,
   rainJoinOpensInMs,
+  rainJoinWindowOpen,
 } from "./rain-timing.js";
 import {
   rainTelemetryAccountCaptchaReady,
@@ -80,6 +81,8 @@ const inflight = new Map<string, Promise<string | null>>();
 const prewarmBlockedUntil = new Map<string, number>();
 const finishedRainIds = new Set<string>();
 const paidTasksPerSlot = new Map<string, number>();
+const solveStartedAt = new Map<string, number>();
+const joinHedgeLaunched = new Set<string>();
 
 function slotKey(rainId: string, accountId?: number | null): string {
   if (accountId != null && Number.isFinite(accountId)) return `${rainId}:acct:${accountId}`;
@@ -130,6 +133,9 @@ export function markRainCaptchaFinished(rainId: string): void {
   dropRainCaptchaMeta(rainId);
   clearPaidTasksForRain(rainId);
   clearRainCaptcha(rainId);
+  for (const k of [...joinHedgeLaunched]) {
+    if (k.startsWith(rainKeyPrefix(rainId))) joinHedgeLaunched.delete(k);
+  }
   if (finishedRainIds.size > 40) {
     for (const id of finishedRainIds) {
       finishedRainIds.delete(id);
@@ -307,6 +313,7 @@ function startSolveForSlot(
   }
 
   const started = Date.now();
+  solveStartedAt.set(key, started);
   logSolveStart(rainId, accountId ?? null, rain);
   if (accountId != null) {
     const nick = getAccount(accountId)?.nickname ?? `#${accountId}`;
@@ -341,8 +348,42 @@ function startSolveForSlot(
     })
     .finally(() => {
       inflight.delete(key);
+      solveStartedAt.delete(key);
     });
   inflight.set(key, p);
+}
+
+/** One optional extra 2Captcha task per slot when join is open and the first task is still slow. */
+export function maybeJoinWindowCaptchaHedge(rainId: string, accountIds: number[]): void {
+  const hedgeAfterMs = Math.max(0, Number(process.env.CAPTCHA_RAIN_HEDGE_AFTER_MS ?? 0) || 0);
+  if (hedgeAfterMs <= 0) return;
+  if (!paidSolveAllowed(rainId)) return;
+  const rain = getRainMeta(rainId);
+  if (!rain || !rainJoinWindowOpen(rain)) return;
+
+  const unique = [...new Set(accountIds.filter((id) => Number.isFinite(id)))];
+  for (const id of unique) {
+    const key = slotKey(rainId, id);
+    if (readCachedKey(key)) continue;
+    if (!inflight.has(key)) continue;
+    if (joinHedgeLaunched.has(key)) continue;
+    const startedAt = solveStartedAt.get(key);
+    if (startedAt == null || Date.now() - startedAt < hedgeAfterMs) continue;
+    const budgetKey = key;
+    if (budgetRemaining(budgetKey) < 1) continue;
+
+    joinHedgeLaunched.add(key);
+    recordPaidTask(budgetKey);
+    const msUntilJoin = rainJoinOpensInMs(rain);
+    console.log(
+      `[rain-captcha] join hedge ${rainId.slice(0, 8)}… acct ${id} · msUntilJoin=${msUntilJoin}`,
+    );
+    void solveCaptcha("hcaptcha", buildRainSolveOptions(rain)).then((token) => {
+      if (token && !isRainCaptchaFinished(rainId) && !readCachedKey(key)) {
+        cache.set(key, { token, at: Date.now() });
+      }
+    });
+  }
 }
 
 /* ── Public API ──────────────────────────────────────────────────────────── */

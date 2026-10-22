@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   normalizeEpochMs,
   rainCaptchaCancelAfterMs,
+  rainCaptchaPrewarmWindow,
   rainCaptchaSolveWindow,
+  rainJoinPrepShouldRun,
   rainJoinStageBounds,
 } from "../src/automation/rain-timing.js";
 import type { RainState } from "../src/rorush/types.js";
@@ -20,15 +22,31 @@ describe("normalizeEpochMs", () => {
 });
 
 describe("rainCaptchaSolveWindow", () => {
-  it("opens within default 120s lead before join", () => {
+  it("opens within default 110s lead before join", () => {
     const joinStart = 1_000_000;
     const rain: RainState = {
       rainId: "x",
       joinStageStartTimestamp: joinStart,
       joinStageDuration: 90_000,
     };
-    expect(rainCaptchaSolveWindow(rain, joinStart - 130_000)).toBe(false);
+    expect(rainCaptchaSolveWindow(rain, joinStart - 120_000)).toBe(false);
     expect(rainCaptchaSolveWindow(rain, joinStart - 110_000)).toBe(true);
+  });
+
+  it("prep tick runs during solve window even if hub prewarm env is narrower", () => {
+    const joinStart = 500_000;
+    const rain: RainState = {
+      rainId: "x",
+      createdTimestamp: joinStart - 180_000,
+      tipStageDuration: 180_000,
+      joinStageDuration: 90_000,
+    };
+    const now = joinStart - 100_000;
+    vi.stubEnv("RAIN_CAPTCHA_PREWARM_BEFORE_JOIN_MS", "60000");
+    expect(rainCaptchaPrewarmWindow(rain, now)).toBe(false);
+    expect(rainCaptchaSolveWindow(rain, now)).toBe(true);
+    expect(rainJoinPrepShouldRun(rain, now)).toBe(true);
+    vi.unstubAllEnvs();
   });
 });
 

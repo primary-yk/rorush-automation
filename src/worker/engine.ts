@@ -12,6 +12,7 @@ import {
   isRainCaptchaFinished,
   markRainCaptchaFinished,
   prewarmRainCaptchasParallel,
+  maybeJoinWindowCaptchaHedge,
   refreshRainCaptchasForJoin,
   syncRainCaptchaMeta,
   shouldInvalidateRainCaptcha,
@@ -289,6 +290,9 @@ export class AutomationEngine {
     );
     if (rainCaptchaSolveWindow(rain)) {
       prewarmRainCaptchasParallel(rain.rainId, joinIds);
+    }
+    if (rainJoinWindowOpen(rain)) {
+      maybeJoinWindowCaptchaHedge(rain.rainId, joinIds);
     }
     void this.safeRun(this.switchFromFunCoinsForJoinAccounts(joinIds));
     void this.safeRun(this.runPreWagersForRain(rain, eligible));
