@@ -13,6 +13,7 @@ import {
   markRainCaptchaFinished,
   prewarmRainCaptchasParallel,
   refreshRainCaptchasForJoin,
+  syncRainCaptchaMeta,
   shouldInvalidateRainCaptcha,
   takeRainCaptchaToken,
 } from "../automation/rain-captcha.js";
@@ -25,6 +26,7 @@ import {
   parseRain,
   rainCaptchaPrewarmWindow,
   rainCaptchaSolveWindow,
+  rainJoinStageBounds,
   rainJoinWindowOpen,
   rainJoinWindowRemainingMs,
   runPreRainWagerIfEnabled,
@@ -418,6 +420,12 @@ export class AutomationEngine {
   private async maintainActiveRainPrep(): Promise<void> {
     if (!this.activeRain) return;
     const rain = this.activeRain;
+    const bounds = rainJoinStageBounds(rain);
+    if (bounds && Date.now() > bounds.joinEnd + 120_000) {
+      markRainCaptchaFinished(rain.rainId);
+      this.activeRain = null;
+      return;
+    }
     if (isRainCaptchaFinished(rain.rainId)) return;
     if (!rainCaptchaPrewarmWindow(rain) && !rainJoinWindowOpen(rain)) return;
     this.kickoffRainJoinPrep(rain);
@@ -534,6 +542,18 @@ export class AutomationEngine {
     });
     this.sharedRainHub.on(SIGNALR.rain.receiveCurrent, (payload) => {
       if (!Array.isArray(payload)) return;
+      if (payload.length === 0) {
+        if (this.activeRain?.rainId) {
+          markRainCaptchaFinished(this.activeRain.rainId);
+          appendLog({
+            category: "rain",
+            message: "No active rain (server)",
+            detail: "Stopped rain captcha billing — ReceiveCurrentRains empty",
+          });
+        }
+        this.activeRain = null;
+        return;
+      }
       for (const item of payload) {
         const rain = parseRain(item);
         if (!rain) continue;
@@ -637,6 +657,7 @@ export class AutomationEngine {
     const merged = this.mergeRainState(incoming);
     this.activeRain = merged;
     this.rainSnapshots.set(merged.rainId, merged);
+    syncRainCaptchaMeta(merged);
     return merged;
   }
 

@@ -10,6 +10,82 @@ import {
   rainTelemetryCaptchaReady,
 } from "./rain-telemetry.js";
 import { appendLog, getAccount } from "../db/repositories.js";
+import type { RainState } from "../rorush/types.js";
+
+const rainMetaById = new Map<string, RainState>();
+const paidSolveBlockedLogged = new Set<string>();
+
+/** Engine updates this on every SignalR rain merge so we never bill without a live window. */
+export function syncRainCaptchaMeta(rain: RainState): void {
+  if (!rain.rainId) return;
+  rainMetaById.set(rain.rainId, rain);
+}
+
+export function dropRainCaptchaMeta(rainId: string): void {
+  if (!rainId) return;
+  rainMetaById.delete(rainId);
+  paidSolveBlockedLogged.delete(rainId);
+}
+
+function rainPaidSolvesGloballyEnabled(): boolean {
+  const raw = process.env.CAPTCHA_RAIN_PAID_SOLVES?.trim().toLowerCase();
+  if (raw === "0" || raw === "false" || raw === "no" || raw === "off") return false;
+  return true;
+}
+
+const DEFAULT_JOIN_STAGE_MS = 90_000;
+
+function rainJoinStageBoundsLocal(
+  rain: RainState,
+  now: number,
+): { joinStart: number; joinEnd: number } | null {
+  const joinDur = rain.joinStageDuration ?? DEFAULT_JOIN_STAGE_MS;
+  let joinStart = rain.joinStageStartTimestamp ?? null;
+  if (joinStart == null && rain.createdTimestamp != null && rain.tipStageDuration != null) {
+    joinStart = rain.createdTimestamp + rain.tipStageDuration;
+  }
+  if (joinStart == null) return null;
+  return { joinStart, joinEnd: joinStart + joinDur };
+}
+
+/** Paid 2Captcha only during pre-join lead window or open join window — never with no live rain timing. */
+function rainPaidBillingWindowOpen(rain: RainState, now = Date.now()): boolean {
+  const bounds = rainJoinStageBoundsLocal(rain, now);
+  if (!bounds) return false;
+  if (now > bounds.joinEnd + 15_000) return false;
+  if (now >= bounds.joinStart && now <= bounds.joinEnd) return true;
+  const leadMs = Math.max(
+    45_000,
+    Number(process.env.CAPTCHA_SOLVE_START_LEAD_MS ?? 95_000) || 95_000,
+  );
+  const msUntilJoin = bounds.joinStart - now;
+  return msUntilJoin > 0 && msUntilJoin <= leadMs;
+}
+
+function paidRainSolveAllowed(rainId: string): boolean {
+  if (!rainPaidSolvesGloballyEnabled()) return false;
+  if (isRainCaptchaFinished(rainId)) return false;
+  const rain = rainMetaById.get(rainId);
+  if (!rain) {
+    if (!paidSolveBlockedLogged.has(`${rainId}:nometa`)) {
+      paidSolveBlockedLogged.add(`${rainId}:nometa`);
+      console.warn(
+        `[rain-captcha] skip paid solve — no rain metadata for ${rainId.slice(0, 8)}… (stale id?)`,
+      );
+    }
+    return false;
+  }
+  if (!rainPaidBillingWindowOpen(rain)) {
+    if (!paidSolveBlockedLogged.has(rainId)) {
+      paidSolveBlockedLogged.add(rainId);
+      console.warn(
+        `[rain-captcha] skip paid solve — join window closed for ${rainId.slice(0, 8)}…`,
+      );
+    }
+    return false;
+  }
+  return true;
+}
 
 /** Drop cached token after this (ms). hCaptcha/RoRush often reject tokens older than ~2 min. */
 function tokenTtlMs(): number {
@@ -55,6 +131,7 @@ function clearPaidTasksForRain(rainId: string): void {
 export function markRainCaptchaFinished(rainId: string): void {
   if (!rainId) return;
   finishedRainIds.add(rainId);
+  dropRainCaptchaMeta(rainId);
   clearPaidTasksForRain(rainId);
   clearRainCaptcha(rainId);
   if (finishedRainIds.size > 40) {
@@ -243,6 +320,7 @@ function startSolveForSlot(
   opts?: { bypassCooldown?: boolean },
 ): void {
   const key = slotKey(rainId, accountId);
+  if (!paidRainSolveAllowed(rainId)) return;
   if (isRainCaptchaFinished(rainId)) return;
   if (readCachedKey(key)) return;
   if (inflight.has(key)) return;
