@@ -64,7 +64,7 @@ function rainJoinFailureEmbedCopy(kind: RainJoinFailureKind): {
       return {
         title: "Rain · FunCoins wallet",
         description:
-          "RoRush blocked join because the account was on **FunCoins**. Real rains need **real coins** — the bot switches back automatically before each join. If you toggled FunCoins on the site, switch to real coins once manually.",
+          "RoRush blocked join because the account was on **FunCoins**. Real rains need **real coins** — the bot switches back **only when it detects FunCoins**, not every rain.",
         color: COLORS.rainFail,
       };
     case "pool_filter":
@@ -353,7 +353,7 @@ export async function reportRainOutcome(input: {
     if (kind === "funcoin") {
       title = "Rain · FunCoins (permission denied)";
       description =
-        "Account wallet was on **FunCoins** — rain joins only work on **real coins**. Bot auto-switches before join; confirm on rorush.com if failures continue.";
+        "Account wallet was on **FunCoins** — rain joins only work on **real coins**. Bot switches back only when it detects FunCoins; confirm on rorush.com if failures continue.";
     } else if (kind === "captcha") {
       if (/not ready before the join window/i.test(detail)) {
         title = "Rain · Captcha not ready";

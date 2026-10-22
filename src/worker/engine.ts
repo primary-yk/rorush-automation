@@ -45,7 +45,7 @@ import { pollDiscordChannel } from "../discord/watcher.js";
 import { isIgnorableCaseError } from "../automation/case-errors.js";
 import { accountEligibleForRain } from "../accounts/account-automation.js";
 import { ensureAuthenticated } from "../accounts/session-manager.js";
-import { ensureRealCoinsWallet } from "../rorush/balance-token.js";
+import { switchFromFunCoinsIfNeeded } from "../rorush/balance-token.js";
 import { SIGNALR } from "../rorush/endpoints.js";
 import { RoRushHub } from "../rorush/signalr-hub.js";
 import type { RainState } from "../rorush/types.js";
@@ -269,20 +269,21 @@ export class AutomationEngine {
       eligible.map((a) => ({ id: a.id, nickname: a.nickname })),
     );
     prewarmRainCaptchasParallel(rain.rainId, joinIds);
-    void this.safeRun(this.ensureRealCoinsForJoinAccounts(joinIds));
+    void this.safeRun(this.switchFromFunCoinsForJoinAccounts(joinIds));
     void this.safeRun(this.runPreWagersForRain(rain, eligible));
   }
 
-  private async ensureRealCoinsForJoinAccounts(accountIds: number[]): Promise<void> {
+  /** Only touches wallet when RoRush session is already on FunCoins. */
+  private async switchFromFunCoinsForJoinAccounts(accountIds: number[]): Promise<void> {
     for (const accountId of accountIds) {
       try {
         const { account, client } = await ensureAuthenticated(accountId);
-        await ensureRealCoinsWallet(client, { accountId, nickname: account.nickname });
+        await switchFromFunCoinsIfNeeded(client, { accountId, nickname: account.nickname });
       } catch (err) {
         appendLog({
           accountId,
           category: "rain",
-          message: "Could not switch wallet to real coins before rain",
+          message: "Could not check/switch FunCoins wallet before rain",
           detail: err instanceof Error ? err.message : String(err),
         });
       }

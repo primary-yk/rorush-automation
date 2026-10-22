@@ -31,35 +31,40 @@ export function isFunCoinRainBlock(message: string): boolean {
   );
 }
 
-/** Real-coin rain joins fail while RoRush wallet is on FunCoins — force main wallet before join. */
-export async function ensureRealCoinsWallet(
+export async function readCurrentBalanceToken(
+  client: RoRushHttpClient,
+): Promise<RorushBalanceToken | null> {
+  try {
+    return parseCurrentBalanceToken(await client.authStatus());
+  } catch {
+    return null;
+  }
+}
+
+/** Switch to real coins only when RoRush reports the wallet is on FunCoins. */
+export async function switchFromFunCoinsIfNeeded(
   client: RoRushHttpClient,
   log?: { accountId: number; nickname?: string },
-): Promise<{ before: RorushBalanceToken | null; after: RorushBalanceToken | null }> {
-  let before: RorushBalanceToken | null = null;
-  try {
-    before = parseCurrentBalanceToken(await client.authStatus());
-  } catch {
-    /* auth status shape varies — still attempt token:set */
+): Promise<{ switched: boolean; before: RorushBalanceToken | null; after: RorushBalanceToken | null }> {
+  const before = await readCurrentBalanceToken(client);
+  if (before !== "funCoin") {
+    return { switched: false, before, after: before };
   }
 
   await client.setBalanceToken("coin");
+  const after = (await readCurrentBalanceToken(client)) ?? "coin";
 
-  let after: RorushBalanceToken | null = null;
-  try {
-    after = parseCurrentBalanceToken(await client.authStatus());
-  } catch {
-    after = "coin";
-  }
-
-  if (log && before === "funCoin") {
+  if (log) {
     appendLog({
       accountId: log.accountId,
       category: "rain",
-      message: "Switched RoRush wallet FunCoins → real coins for rain",
+      message: "Detected FunCoins wallet — switched back to real coins for rain",
       detail: log.nickname ?? `account ${log.accountId}`,
     });
   }
 
-  return { before, after };
+  return { switched: true, before, after };
 }
+
+/** @deprecated Use switchFromFunCoinsIfNeeded */
+export const ensureRealCoinsWallet = switchFromFunCoinsIfNeeded;

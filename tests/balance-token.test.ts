@@ -17,3 +17,11 @@ describe("isFunCoinRainBlock", () => {
     expect(isFunCoinRainBlock("Captcha invalid")).toBe(false);
   });
 });
+
+describe("switchFromFunCoinsIfNeeded (via parse)", () => {
+  it("only funCoin token should trigger a switch decision", () => {
+    expect(parseCurrentBalanceToken({ currentBalanceToken: "coin" })).toBe("coin");
+    expect(parseCurrentBalanceToken({ currentBalanceToken: "funCoin" })).toBe("funCoin");
+    expect(parseCurrentBalanceToken({ authenticated: true })).toBeNull();
+  });
+});

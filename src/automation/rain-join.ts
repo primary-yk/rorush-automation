@@ -21,7 +21,7 @@ import {
   accountIdsWithSuccessfulRainJoin,
 } from "../db/repositories.js";
 import { parseBalanceCents } from "../rorush/balance-level.js";
-import { ensureRealCoinsWallet, isFunCoinRainBlock } from "../rorush/balance-token.js";
+import { isFunCoinRainBlock, switchFromFunCoinsIfNeeded } from "../rorush/balance-token.js";
 import type { HubRegistry } from "../worker/hub-registry.js";
 import { SIGNALR } from "../rorush/endpoints.js";
 import { RoRushHub } from "../rorush/signalr-hub.js";
@@ -327,7 +327,7 @@ async function joinRainForAccountOnce(input: {
     return { success: false, reason: `Rain amount ${rainAmount} below filter` };
   }
 
-  await ensureRealCoinsWallet(client, { accountId, nickname: account.nickname });
+  await switchFromFunCoinsIfNeeded(client, { accountId, nickname: account.nickname });
 
   const reqId = uuid();
   let captchaToken = input.captchaToken ?? null;
@@ -396,11 +396,16 @@ async function joinRainForAccountOnce(input: {
     let outcome = await outcomePromise;
 
     if (!outcome.ok && isFunCoinRainBlock(outcome.message)) {
-      await ensureRealCoinsWallet(client, { accountId, nickname: account.nickname });
-      const retryReq = uuid();
-      const retryOutcomePromise = waitForJoinOutcome(retryReq);
-      await hub.joinRain({ reqId: retryReq, rainId: rain.rainId, captchaToken });
-      outcome = await retryOutcomePromise;
+      const { switched } = await switchFromFunCoinsIfNeeded(client, {
+        accountId,
+        nickname: account.nickname,
+      });
+      if (switched) {
+        const retryReq = uuid();
+        const retryOutcomePromise = waitForJoinOutcome(retryReq);
+        await hub.joinRain({ reqId: retryReq, rainId: rain.rainId, captchaToken });
+        outcome = await retryOutcomePromise;
+      }
     }
 
     if (!outcome.ok && isWagerRejection(outcome.message) && account.limbo_wager_enabled) {
