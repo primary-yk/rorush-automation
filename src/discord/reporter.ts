@@ -308,6 +308,42 @@ function isWagerSiteMessage(message: string): boolean {
   return /wager|play.?through|requirement|must bet|bet before/i.test(message);
 }
 
+export async function reportFunCoinWalletCorrected(input: {
+  nickname: string;
+  accountId?: number;
+  before: import("../rorush/balance-token.js").RorushBalanceToken | null;
+  reason: import("../rorush/balance-token.js").FunCoinCorrectReason;
+}): Promise<void> {
+  const was =
+    input.before === "funCoin"
+      ? "FunCoins"
+      : input.before === "coin"
+        ? "Real coins"
+        : "Unknown (RoRush did not report wallet mode)";
+  const trigger =
+    input.reason === "permission_denied"
+      ? "Rain join returned **permission denied**"
+      : input.reason === "periodic"
+        ? "Background wallet check"
+        : "FunCoins detected before rain";
+
+  await deliverEmbed(
+    {
+      title: "Wallet · Switched to real coins",
+      description:
+        "RoRush had this account on **FunCoins** (or blocked rain until real coins). The bot switched back to **real coins** automatically — no action needed unless this keeps repeating.",
+      color: COLORS.rainSummary,
+      fields: [
+        { name: accountFieldLabel(), value: `**${input.nickname}**`, inline: true },
+        { name: "Was", value: was, inline: true },
+        { name: "Trigger", value: trigger, inline: false },
+      ],
+      footer: { text: "Wallet" },
+    },
+    { accountId: input.accountId ?? null, nickname: input.nickname },
+  );
+}
+
 export async function reportRainOutcome(input: {
   nickname: string;
   success: boolean;

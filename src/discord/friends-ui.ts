@@ -1,6 +1,7 @@
 import { EmbedBuilder, type APIEmbedField } from "discord.js";
 import { clampLimboMultiplier } from "../config.js";
 import { enforceLimboMultiplierMinimums, listAccounts, type AccountRow } from "../db/repositories.js";
+import { formatWalletBalanceToken } from "../rorush/balance-token.js";
 import { accountsForDiscordUser } from "./friends-commands.js";
 import { countRainJoinsToday } from "../db/repositories.js";
 import { vaultLockStatusLine } from "../automation/vault-lock-apply.js";
@@ -160,8 +161,9 @@ function accountRowField(a: AccountRow): APIEmbedField {
   const paused = isAccountAutomationPaused(a)
     ? "\n\n**Account paused** — resume from the dashboard or **`/account resume`**."
     : "";
+  const walletMode = formatWalletBalanceToken(a.wallet_balance_token);
   let value = [
-    `**Wallet** ${bal} · **Vault** ${vault} · **Level** ${lvl}`,
+    `**Wallet** ${bal} (${walletMode}) · **Vault** ${vault} · **Level** ${lvl}`,
     `**Lifetime** ${life}`,
     `**Automation** ${automationSummary(a)}`,
     `**Connection** \`${a.status}\``,

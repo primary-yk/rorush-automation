@@ -5,6 +5,12 @@ import { Toggle } from "./Toggle";
 import { Button, Card, Input, StatusPill } from "./ui";
 import { useToast } from "./Toast";
 import { dashboardApi, type Account } from "@/lib/api";
+
+function walletModeLabel(token: string | null | undefined): string {
+  if (token === "funCoin") return "FunCoins";
+  if (token === "coin") return "Real coins";
+  return "—";
+}
 import clsx from "clsx";
 import { SensitiveText } from "./PrivacyBlur";
 import { RewardCasesPanel } from "./RewardCasesPanel";
@@ -119,8 +125,9 @@ export function AccountCard({
             </div>
             <StatusPill ok={ok} label={local.status} />
           </div>
-          <div className="mt-4 grid grid-cols-3 gap-2 sm:gap-3">
+          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
             <StatChip label="Balance" value={local.balance != null ? local.balance.toFixed(2) : "—"} />
+            <StatChip label="Wallet" value={walletModeLabel(local.walletBalanceToken)} />
             <StatChip label="Level" value={local.level != null ? String(local.level) : "—"} />
             <StatChip label="Earned" value={local.lifetimeEarnings.total.toFixed(2)} accent />
           </div>

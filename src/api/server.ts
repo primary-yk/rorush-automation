@@ -406,6 +406,7 @@ function publicAccount(a: ReturnType<typeof listAccounts>[number]) {
     status: a.status,
     lastError: a.last_error,
     balance: a.balance,
+    walletBalanceToken: a.wallet_balance_token,
     level: a.level,
     lifetimeEarnings: {
       rain: a.lifetime_rain,

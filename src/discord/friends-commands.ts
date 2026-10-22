@@ -1,5 +1,6 @@
 import { encryptField, verifyRoRushEmailPassword } from "../accounts/session-manager.js";
 import { RoRushHttpClient } from "../rorush/http-client.js";
+import { formatWalletBalanceToken } from "../rorush/balance-token.js";
 import {
   countRainJoinsToday,
   deleteAccount,
@@ -190,6 +191,7 @@ export function formatAccountList(discordUserId: string): string {
 
 function formatOneAccount(a: AccountRow, joinsToday?: number): string {
   const bal = a.balance != null ? a.balance.toFixed(2) : "—";
+  const walletMode = formatWalletBalanceToken(a.wallet_balance_token);
   const vault = a.vault_balance != null ? a.vault_balance.toFixed(2) : "—";
   const lvl = a.level != null ? String(a.level) : "—";
   const flags = [
@@ -208,7 +210,7 @@ function formatOneAccount(a: AccountRow, joinsToday?: number): string {
   const joins =
     joinsToday != null && joinsToday > 0 ? ` · **${joinsToday}** rain join(s) today` : "";
   let line =
-    `• **${a.nickname}** · wallet **${bal}** · vault **${vault}** · lvl ${lvl}${paused}${joins}\n  ${life}\n  ${flags || "all automation off"} · ${a.status}`;
+    `• **${a.nickname}** · wallet **${bal}** (${walletMode}) · vault **${vault}** · lvl ${lvl}${paused}${joins}\n  ${life}\n  ${flags || "all automation off"} · ${a.status}`;
   line = appendSessionHintIfNeeded(line, a);
   return line;
 }

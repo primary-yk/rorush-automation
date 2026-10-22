@@ -18,6 +18,8 @@ export type Account = {
   status: string;
   lastError: string | null;
   balance: number | null;
+  /** RoRush active wallet: `coin` | `funCoin` */
+  walletBalanceToken: string | null;
   level: number | null;
   lifetimeEarnings: { rain: number; cases: number; codes: number; total: number };
 };

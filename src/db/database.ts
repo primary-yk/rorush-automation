@@ -75,6 +75,7 @@ function migrateAccounts(db: Database.Database): void {
     ["vault_lock_expires_at", "TEXT"],
     ["vault_session_auto_deposit", "INTEGER NOT NULL DEFAULT 0"],
     ["vault_balance", "REAL"],
+    ["wallet_balance_token", "TEXT"],
     ["automation_paused", "INTEGER NOT NULL DEFAULT 0"],
   ];
   for (const [name, type] of add) {

@@ -45,7 +45,8 @@ import { pollDiscordChannel } from "../discord/watcher.js";
 import { isIgnorableCaseError } from "../automation/case-errors.js";
 import { accountEligibleForRain } from "../accounts/account-automation.js";
 import { ensureAuthenticated } from "../accounts/session-manager.js";
-import { switchFromFunCoinsIfNeeded } from "../rorush/balance-token.js";
+import { readCurrentBalanceToken } from "../rorush/balance-token.js";
+import { runFunCoinWalletCorrection } from "../discord/wallet-alerts.js";
 import { SIGNALR } from "../rorush/endpoints.js";
 import { RoRushHub } from "../rorush/signalr-hub.js";
 import type { RainState } from "../rorush/types.js";
@@ -90,7 +91,15 @@ export class AutomationEngine {
   private preWagerDoneForRain = new Set<string>();
   private captchaLowBalanceAlerted = false;
   private captchaBalanceTimer: NodeJS.Timeout | null = null;
+  private funCoinCheckTimer: NodeJS.Timeout | null = null;
   private rainJoinWaitLogKeys = new Set<string>();
+
+  private funCoinCheckIntervalMs(): number {
+    return Math.max(
+      60_000,
+      Number(process.env.WALLET_FUNCOIN_CHECK_MS ?? 1_800_000) || 1_800_000,
+    );
+  }
 
   private rainJoinScheduleDebounceMs(): number {
     return Math.max(3_000, Number(process.env.RAIN_JOIN_SCHEDULE_DEBOUNCE_MS ?? 5_000) || 5_000);
@@ -147,7 +156,11 @@ export class AutomationEngine {
     this.captchaBalanceTimer = setInterval(() => {
       void this.safeRun(this.checkCaptchaBalance());
     }, 300_000);
+    this.funCoinCheckTimer = setInterval(() => {
+      void this.safeRun(this.periodicFunCoinWalletCheck());
+    }, this.funCoinCheckIntervalMs());
     void this.safeRun(this.refreshAccountStats());
+    void this.safeRun(this.periodicFunCoinWalletCheck());
     void this.safeRun(this.checkCaptchaBalance());
   }
 
@@ -175,6 +188,7 @@ export class AutomationEngine {
     if (this.hubHealthTimer) clearInterval(this.hubHealthTimer);
     if (this.rainPrepTimer) clearInterval(this.rainPrepTimer);
     if (this.captchaBalanceTimer) clearInterval(this.captchaBalanceTimer);
+    if (this.funCoinCheckTimer) clearInterval(this.funCoinCheckTimer);
     await this.sharedRainHub?.disconnect();
     this.sharedRainHub = null;
     await this.accountHubs.disconnectAll();
@@ -278,7 +292,12 @@ export class AutomationEngine {
     for (const accountId of accountIds) {
       try {
         const { account, client } = await ensureAuthenticated(accountId);
-        await switchFromFunCoinsIfNeeded(client, { accountId, nickname: account.nickname });
+        await runFunCoinWalletCorrection({
+          client,
+          reason: "detected",
+          accountId,
+          nickname: account.nickname,
+        });
       } catch (err) {
         appendLog({
           accountId,
@@ -286,6 +305,30 @@ export class AutomationEngine {
           message: "Could not check/switch FunCoins wallet before rain",
           detail: err instanceof Error ? err.message : String(err),
         });
+      }
+    }
+  }
+
+  /** Every ~30m: switch to real coins only when RoRush reports FunCoins (rain-enabled accounts). */
+  private async periodicFunCoinWalletCheck(): Promise<void> {
+    for (const account of listAccounts()) {
+      if (!account.join_rain) continue;
+      if (!account.username && !account.session_jwt_enc) continue;
+      try {
+        const { client } = await ensureAuthenticated(account.id);
+        const token = await readCurrentBalanceToken(client);
+        if (token != null) {
+          updateAccount(account.id, { wallet_balance_token: token });
+        }
+        if (token !== "funCoin") continue;
+        await runFunCoinWalletCorrection({
+          client,
+          reason: "periodic",
+          accountId: account.id,
+          nickname: account.nickname,
+        });
+      } catch {
+        /* skip — session refresh will surface errors elsewhere */
       }
     }
   }
@@ -887,10 +930,11 @@ export class AutomationEngine {
     try {
       const { client } = await ensureAuthenticated(account.id);
       const { fetchVaultBalanceCoins } = await import("../rorush/vault.js");
-      const [balanceRaw, levelRaw, vaultBal] = await Promise.all([
+      const [balanceRaw, levelRaw, vaultBal, walletToken] = await Promise.all([
         client.getBalance(),
         client.getLevel(),
         fetchVaultBalanceCoins(client).catch(() => null),
+        readCurrentBalanceToken(client),
       ]);
       const balanceRawAmount = parseBalanceCents(balanceRaw);
       const level = parseLevel(levelRaw);
@@ -903,6 +947,7 @@ export class AutomationEngine {
       }
       if (level != null) patch.level = level;
       if (vaultBal != null) patch.vault_balance = vaultBal;
+      if (walletToken != null) patch.wallet_balance_token = walletToken;
       const row = listAccounts().find((a) => a.id === account.id);
       if (row?.last_error && isIgnorableCaseError(row.last_error)) {
         patch.last_error = null;

@@ -21,7 +21,8 @@ import {
   accountIdsWithSuccessfulRainJoin,
 } from "../db/repositories.js";
 import { parseBalanceCents } from "../rorush/balance-level.js";
-import { isFunCoinRainBlock, switchFromFunCoinsIfNeeded } from "../rorush/balance-token.js";
+import { isFunCoinRainBlock } from "../rorush/balance-token.js";
+import { runFunCoinWalletCorrection } from "../discord/wallet-alerts.js";
 import type { HubRegistry } from "../worker/hub-registry.js";
 import { SIGNALR } from "../rorush/endpoints.js";
 import { RoRushHub } from "../rorush/signalr-hub.js";
@@ -327,7 +328,12 @@ async function joinRainForAccountOnce(input: {
     return { success: false, reason: `Rain amount ${rainAmount} below filter` };
   }
 
-  await switchFromFunCoinsIfNeeded(client, { accountId, nickname: account.nickname });
+  await runFunCoinWalletCorrection({
+    client,
+    reason: "detected",
+    accountId,
+    nickname: account.nickname,
+  });
 
   const reqId = uuid();
   let captchaToken = input.captchaToken ?? null;
@@ -396,7 +402,9 @@ async function joinRainForAccountOnce(input: {
     let outcome = await outcomePromise;
 
     if (!outcome.ok && isFunCoinRainBlock(outcome.message)) {
-      const { switched } = await switchFromFunCoinsIfNeeded(client, {
+      const { switched } = await runFunCoinWalletCorrection({
+        client,
+        reason: "permission_denied",
         accountId,
         nickname: account.nickname,
       });

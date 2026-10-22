@@ -4,6 +4,8 @@ import type { RoRushHttpClient } from "./http-client.js";
 /** RoRush wallet mode (`currentBalanceToken` on session / auth status). */
 export type RorushBalanceToken = "coin" | "funCoin";
 
+export type FunCoinCorrectReason = "detected" | "permission_denied" | "periodic";
+
 export function parseCurrentBalanceToken(body: unknown): RorushBalanceToken | null {
   if (!body || typeof body !== "object") return null;
   const seen = new Set<unknown>();
@@ -25,10 +27,25 @@ export function parseCurrentBalanceToken(body: unknown): RorushBalanceToken | nu
   return walk(body);
 }
 
+export function formatWalletBalanceToken(token: string | null | undefined): string {
+  if (token === "funCoin") return "FunCoins";
+  if (token === "coin") return "Real coins";
+  return "Unknown";
+}
+
 export function isFunCoinRainBlock(message: string): boolean {
   return /permission denied|fun\s*coins?|funcoins?|balance token|fun\s*coin\s*mode|switch.*real\s*coins?|convert to coins|not available.*fun/i.test(
     message,
   );
+}
+
+export function shouldCorrectFunCoinWallet(
+  before: RorushBalanceToken | null,
+  reason: FunCoinCorrectReason,
+): boolean {
+  if (before === "funCoin") return true;
+  if (reason === "permission_denied" && before !== "coin") return true;
+  return false;
 }
 
 export async function readCurrentBalanceToken(
@@ -41,13 +58,17 @@ export async function readCurrentBalanceToken(
   }
 }
 
-/** Switch to real coins only when RoRush reports the wallet is on FunCoins. */
-export async function switchFromFunCoinsIfNeeded(
+/**
+ * Switch to real coins when FunCoins is detected, or on rain permission-denied when
+ * token is unknown (auth did not expose wallet mode).
+ */
+export async function correctFunCoinWalletIfNeeded(
   client: RoRushHttpClient,
+  reason: FunCoinCorrectReason,
   log?: { accountId: number; nickname?: string },
 ): Promise<{ switched: boolean; before: RorushBalanceToken | null; after: RorushBalanceToken | null }> {
   const before = await readCurrentBalanceToken(client);
-  if (before !== "funCoin") {
+  if (!shouldCorrectFunCoinWallet(before, reason)) {
     return { switched: false, before, after: before };
   }
 
@@ -58,13 +79,20 @@ export async function switchFromFunCoinsIfNeeded(
     appendLog({
       accountId: log.accountId,
       category: "rain",
-      message: "Detected FunCoins wallet — switched back to real coins for rain",
-      detail: log.nickname ?? `account ${log.accountId}`,
+      message: "Detected FunCoins wallet — switched back to real coins",
+      detail:
+        (log.nickname ?? `account ${log.accountId}`) +
+        (before == null ? " · site blocked rain (token was unknown)" : ""),
     });
   }
 
   return { switched: true, before, after };
 }
 
-/** @deprecated Use switchFromFunCoinsIfNeeded */
-export const ensureRealCoinsWallet = switchFromFunCoinsIfNeeded;
+/** @deprecated Use correctFunCoinWalletIfNeeded */
+export async function switchFromFunCoinsIfNeeded(
+  client: RoRushHttpClient,
+  log?: { accountId: number; nickname?: string },
+): Promise<{ switched: boolean; before: RorushBalanceToken | null; after: RorushBalanceToken | null }> {
+  return correctFunCoinWalletIfNeeded(client, "detected", log);
+}

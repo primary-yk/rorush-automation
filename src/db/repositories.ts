@@ -34,6 +34,8 @@ export type AccountRow = {
   last_error: string | null;
   balance: number | null;
   vault_balance: number | null;
+  /** RoRush active wallet: coin (real) or funCoin — from auth status refresh. */
+  wallet_balance_token: string | null;
   level: number | null;
   lifetime_rain: number;
   lifetime_cases: number;
