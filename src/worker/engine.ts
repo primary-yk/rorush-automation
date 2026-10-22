@@ -11,8 +11,8 @@ import {
   consumeRainCaptchaToken,
   isRainCaptchaFinished,
   markRainCaptchaFinished,
-  forceFreshRainCaptchas,
   prewarmRainCaptchasParallel,
+  refreshRainCaptchasForJoin,
   shouldInvalidateRainCaptcha,
   takeRainCaptchaToken,
 } from "../automation/rain-captcha.js";
@@ -24,6 +24,7 @@ import {
   joinRainForAccount,
   parseRain,
   rainCaptchaPrewarmWindow,
+  rainCaptchaSolveWindow,
   rainJoinWindowOpen,
   rainJoinWindowRemainingMs,
   runPreRainWagerIfEnabled,
@@ -268,7 +269,7 @@ export class AutomationEngine {
       void this.safeRun(this.preconnectJoinRainHubs(joinIds));
     }
 
-    if (!rainCaptchaPrewarmWindow(rain)) return;
+    if (!rainCaptchaPrewarmWindow(rain) && !rainCaptchaSolveWindow(rain)) return;
 
     if (!this.rainPrepLogged.has(rain.rainId)) {
       this.rainPrepLogged.add(rain.rainId);
@@ -283,7 +284,9 @@ export class AutomationEngine {
       rain.rainId,
       eligible.map((a) => ({ id: a.id, nickname: a.nickname })),
     );
-    prewarmRainCaptchasParallel(rain.rainId, joinIds);
+    if (rainCaptchaSolveWindow(rain)) {
+      prewarmRainCaptchasParallel(rain.rainId, joinIds);
+    }
     void this.safeRun(this.switchFromFunCoinsForJoinAccounts(joinIds));
     void this.safeRun(this.runPreWagersForRain(rain, eligible));
   }
@@ -522,7 +525,7 @@ export class AutomationEngine {
         );
         const joinIds = this.joinRainEligibleAccounts(live).map((a) => a.id);
         if (joinIds.length > 0) {
-          forceFreshRainCaptchas(live.rainId, joinIds);
+          refreshRainCaptchasForJoin(live.rainId, joinIds);
         }
         this.kickoffRainJoinPrep(live);
         this.maybeDiscordJoinWindowOpen(live);

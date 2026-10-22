@@ -25,10 +25,37 @@ const cache = new Map<string, { token: string; at: number }>();
 const inflight = new Map<string, Promise<string | null>>();
 const prewarmBlockedUntil = new Map<string, number>();
 const finishedRainIds = new Set<string>();
+/** Paid 2Captcha createTask calls per rain slot (rainId + account). */
+const paidTasksPerSlot = new Map<string, number>();
+
+function maxRainPaidTasksPerSlot(): number {
+  return Math.max(1, Number(process.env.CAPTCHA_RAIN_MAX_TASKS_PER_SLOT ?? 3) || 3);
+}
+
+function slotBudgetKey(rainId: string, accountId?: number | null): string {
+  return slotKey(rainId, accountId);
+}
+
+function rainPaidTaskBudgetRemaining(budgetKey: string): number {
+  const used = paidTasksPerSlot.get(budgetKey) ?? 0;
+  return Math.max(0, maxRainPaidTasksPerSlot() - used);
+}
+
+function recordRainPaidTask(budgetKey: string): void {
+  paidTasksPerSlot.set(budgetKey, (paidTasksPerSlot.get(budgetKey) ?? 0) + 1);
+}
+
+function clearPaidTasksForRain(rainId: string): void {
+  const prefix = rainKeyPrefix(rainId);
+  for (const k of [...paidTasksPerSlot.keys()]) {
+    if (k.startsWith(prefix) || k === `${rainId}:shared`) paidTasksPerSlot.delete(k);
+  }
+}
 
 export function markRainCaptchaFinished(rainId: string): void {
   if (!rainId) return;
   finishedRainIds.add(rainId);
+  clearPaidTasksForRain(rainId);
   clearRainCaptcha(rainId);
   if (finishedRainIds.size > 40) {
     for (const id of finishedRainIds) {
@@ -101,18 +128,25 @@ function rainCaptchaSolveOptions(): CaptchaSolveOptions {
       28_000,
       Number(process.env.CAPTCHA_RAIN_CANCEL_AFTER_MS ?? 42_000) || 42_000,
     ),
-    taskAttempts: Math.max(2, Number(process.env.CAPTCHA_RAIN_TASK_ATTEMPTS ?? 5) || 5),
+    taskAttempts: Math.max(1, Number(process.env.CAPTCHA_RAIN_TASK_ATTEMPTS ?? 2) || 2),
   };
 }
 
 /** Parallel 2Captcha tasks — first token wins (dual-start + optional late hedge). */
-async function solveRainCaptchaWithHedge(): Promise<string | null> {
+async function solveRainCaptchaWithHedge(budgetKey: string): Promise<string | null> {
   const opts = rainCaptchaSolveOptions();
   const hedgeAfterMs = Math.max(
     0,
-    Number(process.env.CAPTCHA_RAIN_HEDGE_AFTER_MS ?? 12_000) || 12_000,
+    Number(process.env.CAPTCHA_RAIN_HEDGE_AFTER_MS ?? 0) || 0,
   );
   const dualStart = rainCaptchaDualStartEnabled();
+
+  if (rainPaidTaskBudgetRemaining(budgetKey) < 1) {
+    console.warn(
+      `[rain-captcha] paid task cap (${maxRainPaidTasksPerSlot()}) reached for ${budgetKey.slice(0, 20)}… — skip new 2Captcha tasks`,
+    );
+    return null;
+  }
 
   return new Promise<string | null>((resolve, reject) => {
     let settled = false;
@@ -131,6 +165,13 @@ async function solveRainCaptchaWithHedge(): Promise<string | null> {
     };
 
     const launch = (label?: string) => {
+      if (rainPaidTaskBudgetRemaining(budgetKey) < 1) {
+        if (tasksLaunched === 0) {
+          fail(new Error("Rain captcha spend cap reached (CAPTCHA_RAIN_MAX_TASKS_PER_SLOT)"));
+        }
+        return;
+      }
+      recordRainPaidTask(budgetKey);
       tasksLaunched++;
       if (label) console.log(`[rain-captcha] ${label}`);
       void solveCaptcha("hcaptcha", opts)
@@ -163,12 +204,14 @@ async function solveRainCaptchaWithHedge(): Promise<string | null> {
   });
 }
 
-async function solveHcaptchaWithRetry(): Promise<string | null> {
-  const maxAttempts = Math.max(1, Number(process.env.RAIN_CAPTCHA_WORKER_RETRIES ?? 3) || 3);
+async function solveHcaptchaWithRetry(budgetKey: string): Promise<string | null> {
+  const maxAttempts = Math.max(1, Number(process.env.RAIN_CAPTCHA_WORKER_RETRIES ?? 2) || 2);
   let lastErr: unknown;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      return await solveRainCaptchaWithHedge();
+      const token = await solveRainCaptchaWithHedge(budgetKey);
+      if (token) return token;
+      if (rainPaidTaskBudgetRemaining(budgetKey) < 1) return null;
     } catch (err) {
       lastErr = err;
       const retry =
@@ -190,7 +233,8 @@ async function solveHcaptchaWithRetry(): Promise<string | null> {
       await new Promise((r) => setTimeout(r, retryMs));
     }
   }
-  throw lastErr;
+  if (lastErr) throw lastErr;
+  return null;
 }
 
 function startSolveForSlot(
@@ -218,7 +262,8 @@ function startSolveForSlot(
     const nick = getAccount(accountId)?.nickname ?? `#${accountId}`;
     rainTelemetryAccountCaptchaSolving(rainId, accountId, nick);
   }
-  const p = solveHcaptchaWithRetry()
+  const budgetKey = slotBudgetKey(rainId, accountId);
+  const p = solveHcaptchaWithRetry(budgetKey)
     .then((token) => {
       logSolveDone(rainId, started, token, accountId);
       if (token && !isRainCaptchaFinished(rainId)) {
@@ -257,7 +302,7 @@ export function prewarmRainCaptcha(rainId: string): void {
   startSolveForSlot(rainId, null);
 }
 
-/** Drop cached/inflight tokens and start a new paid solve (join stage / stale token). */
+/** Drop cached/inflight tokens and start a new paid solve (explicit invalidation only). */
 export function forceFreshRainCaptchas(rainId: string, accountIds: number[]): void {
   if (!rainId || isRainCaptchaFinished(rainId)) return;
   const unique = [...new Set(accountIds.filter((id) => Number.isFinite(id)))];
@@ -268,6 +313,27 @@ export function forceFreshRainCaptchas(rainId: string, accountIds: number[]): vo
     prewarmBlockedUntil.delete(`${rainId}:${id}`);
   }
   prewarmRainCaptchasParallel(rainId, unique);
+}
+
+function tokenTooOldForJoin(at: number): boolean {
+  return Date.now() - at > tokenMaxAgeForJoinMs() * 0.9;
+}
+
+/** At join stage: only pay again when there is no fresh token (keep prewarm from tip stage). */
+export function refreshRainCaptchasForJoin(rainId: string, accountIds: number[]): void {
+  if (!rainId || isRainCaptchaFinished(rainId)) return;
+  const unique = [...new Set(accountIds.filter((id) => Number.isFinite(id)))];
+  const needSolve: number[] = [];
+  for (const id of unique) {
+    const key = slotKey(rainId, id);
+    const row = cache.get(key);
+    if (row && !tokenTooOldForJoin(row.at) && readCachedKey(key)) continue;
+    if (inflight.has(key)) continue;
+    if (row && tokenTooOldForJoin(row.at)) cache.delete(key);
+    needSolve.push(id);
+  }
+  if (needSolve.length === 0) return;
+  prewarmRainCaptchasParallel(rainId, needSolve);
 }
 
 /** Start one 2Captcha task per account in parallel — fits ~2 min join windows for multi-account. */
@@ -333,7 +399,7 @@ export async function takeRainCaptchaToken(
 
   if (opts?.forRainJoin) {
     const rowStale = cache.get(key);
-    if (rowStale && Date.now() - rowStale.at > tokenMaxAgeForJoinMs() * 0.55) {
+    if (rowStale && tokenTooOldForJoin(rowStale.at)) {
       cache.delete(key);
       startSolveForSlot(rainId, opts?.accountId ?? null, { bypassCooldown: true });
     }
@@ -370,6 +436,7 @@ export function clearRainCaptcha(rainId: string): void {
   for (const k of [...inflight.keys()]) {
     if (k === `${rainId}:shared` || k.startsWith(prefix)) inflight.delete(k);
   }
+  clearPaidTasksForRain(rainId);
 }
 
 export function rainCaptchaInflight(rainId: string): boolean {
