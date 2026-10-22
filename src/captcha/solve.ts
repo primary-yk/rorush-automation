@@ -314,7 +314,7 @@ async function pollTaskUntilReady(
   const waitedSec = ((Date.now() - started) / 1000).toFixed(0);
   throw new Error(
     `Captcha solve timed out after ~${waitedSec}s (${maxPolls} polls, last status ${lastStatus}). ` +
-      "2Captcha queue may be slow — try CAPTCHA_PROVIDER=auto or capsolver, CAPTCHA_VERBOSE=1, or off-peak. " +
+      "2Captcha queue may be slow — use CAPTCHA_VERBOSE=1, rain dual-start env vars, or a faster hCaptcha provider when integrated. " +
       "Keep npm run dev up during tip stage for prewarm.",
   );
 }

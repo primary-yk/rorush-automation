@@ -43,7 +43,7 @@ export function isRainCaptchaFinished(rainId: string): boolean {
 }
 
 function prewarmFailureCooldownMs(): number {
-  return Math.max(60_000, Number(process.env.RAIN_CAPTCHA_FAIL_COOLDOWN_MS ?? 300_000) || 300_000);
+  return Math.max(30_000, Number(process.env.RAIN_CAPTCHA_FAIL_COOLDOWN_MS ?? 120_000) || 120_000);
 }
 
 function slotKey(rainId: string, accountId?: number | null): string {
@@ -141,8 +141,18 @@ async function solveRainCaptchaWithHedge(): Promise<string | null> {
         });
     };
 
-    launch();
-    if (dualStart) launch("dual-start — 2 parallel 2Captcha tasks");
+    launch("primary 2Captcha task");
+
+    const dualDelayMs = Math.max(
+      0,
+      Number(process.env.CAPTCHA_RAIN_DUAL_START_DELAY_MS ?? 10_000) || 10_000,
+    );
+    if (dualStart) {
+      setTimeout(() => {
+        if (settled) return;
+        launch("dual-start — second task (staggered, avoids queue pile-up)");
+      }, dualDelayMs);
+    }
 
     if (hedgeAfterMs > 0) {
       setTimeout(() => {
@@ -211,11 +221,11 @@ function startSolveForSlot(
   const p = solveHcaptchaWithRetry()
     .then((token) => {
       logSolveDone(rainId, started, token, accountId);
-      if (token) {
+      if (token && !isRainCaptchaFinished(rainId)) {
         cache.set(key, { token, at: Date.now() });
         prewarmBlockedUntil.delete(blockKey);
       }
-      return token;
+      return token && !isRainCaptchaFinished(rainId) ? token : null;
     })
     .catch((err) => {
       const msg = err instanceof Error ? err.message : String(err);
@@ -307,6 +317,14 @@ export async function takeRainCaptchaToken(
   }
   const cached = readCachedKey(key);
   if (cached) return cached;
+
+  if (opts?.forRainJoin) {
+    const rowStale = cache.get(key);
+    if (rowStale && Date.now() - rowStale.at > tokenMaxAgeForJoinMs() * 0.55) {
+      cache.delete(key);
+      startSolveForSlot(rainId, opts?.accountId ?? null, { bypassCooldown: true });
+    }
+  }
 
   let p = inflight.get(key);
   if (!p) {

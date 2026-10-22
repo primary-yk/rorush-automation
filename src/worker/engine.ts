@@ -23,7 +23,6 @@ import {
   joinRainForAccount,
   parseRain,
   rainCaptchaPrewarmWindow,
-  rainCaptchaSolveWindow,
   rainJoinWindowOpen,
   rainJoinWindowRemainingMs,
   runPreRainWagerIfEnabled,
@@ -254,7 +253,7 @@ export class AutomationEngine {
     }
   }
 
-  /** Hub warm-up early; paid captcha only in the solve window (tokens stay fresh). */
+  /** Hub warm-up + paid captcha in the pre-join window (stale tokens refreshed at join). */
   private kickoffRainJoinPrep(rain: RainState): void {
     if (!rain.rainId || isRainCaptchaFinished(rain.rainId)) return;
     this.logRainMinPoolSkips(rain);
@@ -266,8 +265,7 @@ export class AutomationEngine {
       void this.safeRun(this.preconnectJoinRainHubs(joinIds));
     }
 
-    const solveWindow = rainCaptchaSolveWindow(rain) || rainJoinWindowOpen(rain);
-    if (!solveWindow) return;
+    if (!rainCaptchaPrewarmWindow(rain)) return;
 
     if (!this.rainPrepLogged.has(rain.rainId)) {
       this.rainPrepLogged.add(rain.rainId);
