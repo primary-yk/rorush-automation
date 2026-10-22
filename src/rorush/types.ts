@@ -3,6 +3,9 @@ export type LoginEmailResponse = {
     jwtToken?: string;
     apiKey?: string;
     level?: number;
+    currentBalanceToken?: string;
+    cryptoBalance?: number;
+    funCoinBalance?: number;
   };
   twoFactorToken?: string;
   message?: string;

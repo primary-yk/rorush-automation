@@ -6,6 +6,7 @@ import {
   updateAccount,
   type AccountRow,
 } from "../db/repositories.js";
+import { parseCurrentBalanceToken } from "../rorush/balance-token.js";
 import { RoRushHttpClient, type RoRushCredentials } from "../rorush/http-client.js";
 
 export type AccountSecrets = {
@@ -92,12 +93,14 @@ export async function resolveCredentials(account: AccountRow): Promise<RoRushCre
   }
   const apiKey = login.userInfo?.apiKey ?? null;
   const level = login.userInfo?.level;
+  const walletToken = parseCurrentBalanceToken(login.userInfo ?? login);
   updateAccount(account.id, {
     session_jwt_enc: encryptField(jwt),
     api_key_enc: encryptField(apiKey),
     last_error: null,
     status: "idle",
     ...(typeof level === "number" && Number.isFinite(level) ? { level: Math.trunc(level) } : {}),
+    ...(walletToken ? { wallet_balance_token: walletToken } : {}),
   });
   return { jwt, apiKey };
 }

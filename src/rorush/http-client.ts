@@ -136,6 +136,10 @@ export class RoRushHttpClient {
     return this.request(RORUSH_PATHS.user.level);
   }
 
+  async getStats(): Promise<unknown> {
+    return this.request(RORUSH_PATHS.user.stats);
+  }
+
   async getDailyCasesInfo(): Promise<unknown> {
     return this.request(RORUSH_PATHS.rewards.dailyCasesInfo);
   }

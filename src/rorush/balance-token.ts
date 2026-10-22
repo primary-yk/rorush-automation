@@ -17,7 +17,7 @@ export function parseCurrentBalanceToken(body: unknown): RorushBalanceToken | nu
       const v = record[key];
       if (v === "coin" || v === "funCoin") return v;
     }
-    for (const nested of ["userInfo", "value", "data", "result"] as const) {
+    for (const nested of ["userInfo", "value", "data", "result", "usingBalance"] as const) {
       const inner = record[nested];
       const fromInner = walk(inner);
       if (fromInner) return fromInner;
@@ -48,14 +48,24 @@ export function shouldCorrectFunCoinWallet(
   return false;
 }
 
-export async function readCurrentBalanceToken(
-  client: RoRushHttpClient,
-): Promise<RorushBalanceToken | null> {
+async function readBalanceTokenFromRoRush(client: RoRushHttpClient): Promise<RorushBalanceToken | null> {
   try {
-    return parseCurrentBalanceToken(await client.authStatus());
+    const fromAuth = parseCurrentBalanceToken(await client.authStatus());
+    if (fromAuth) return fromAuth;
+  } catch {
+    /* try stats next */
+  }
+  try {
+    return parseCurrentBalanceToken(await client.getStats());
   } catch {
     return null;
   }
+}
+
+export async function readCurrentBalanceToken(
+  client: RoRushHttpClient,
+): Promise<RorushBalanceToken | null> {
+  return readBalanceTokenFromRoRush(client);
 }
 
 /**
