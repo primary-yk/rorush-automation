@@ -1,0 +1,395 @@
+From c0d202e90f59a91d4338f3a24dedd9184c22b791 Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Thu, 22 Oct 2026 06:33:19 +0000
+Subject: [PATCH 1/2] Fix alternating rain misses: earlier captcha prewarm,
+ stagger dual tasks
+
+Start paid solves in the full prewarm window (not only ~95s before join).
+Stagger second 2Captcha task by 10s to reduce queue pile-up; shorten fail
+cooldown; discard tokens when rain ends; refresh stale tokens at join.
+
+Co-authored-by: goshennoshen <goshennoshen@onionmail.org>
+---
+ .env.example                   |  5 +++--
+ src/automation/rain-captcha.ts | 28 +++++++++++++++++++++++-----
+ src/captcha/solve.ts           |  2 +-
+ src/worker/engine.ts           |  6 ++----
+ 4 files changed, 29 insertions(+), 12 deletions(-)
+
+diff --git a/.env.example b/.env.example
+index c4a49e8..cc4a6f0 100644
+--- a/.env.example
++++ b/.env.example
+@@ -8,7 +8,7 @@ RORUSH_SEC_RUSH=836457212
+ # Optional global HTTP/S proxy for all RoRush traffic (e.g. http://user:pass@host:port)
+ RORUSH_PROXY_URL=
+ 
+-# RoRush RAIN uses hCaptcha — 2Captcha or CapSolver (CapMonster not supported for rain):
++# RoRush RAIN uses hCaptcha — use 2Captcha (CapSolver removed hCaptcha; CapMonster not supported):
+ CAPTCHA_API_KEY=
+ CAPTCHA_PROVIDER=2captcha
+ # CAPTCHA_POLL_MS=1000        # poll interval (default 1s — faster token pickup)
+@@ -39,7 +39,8 @@ AUTOMATION_API_PORT=43124
+ # CAPTCHA_LOW_BALANCE_USD=1                    # Discord + dashboard alert threshold
+ # CAPTCHA_BALANCE_CACHE_MS=120000
+ # CAPTCHA_ESTIMATE_USD=0.00299                 # stats page spend estimate per solve
+-# RAIN_CAPTCHA_FAIL_COOLDOWN_MS=300000
++# RAIN_CAPTCHA_FAIL_COOLDOWN_MS=120000   # after failed solve (was 5m — caused skip patterns)
++# CAPTCHA_RAIN_DUAL_START_DELAY_MS=10000 # second task 10s after first (not 2 at once)
+ # RAIN_CAPTCHA_WORKER_RETRIES=3              # retries when 2Captcha says workers could not solve
+ # RAIN_CAPTCHA_WORKER_FAIL_COOLDOWN_MS=20000 # short cooldown before another task (not 5 min)
+ # Each account gets its own parallel hCaptcha solve (2 accounts ≈ 2 concurrent 2Captcha tasks).
+diff --git a/src/automation/rain-captcha.ts b/src/automation/rain-captcha.ts
+index 9c643c5..7616628 100644
+--- a/src/automation/rain-captcha.ts
++++ b/src/automation/rain-captcha.ts
+@@ -43,7 +43,7 @@ export function isRainCaptchaFinished(rainId: string): boolean {
+ }
+ 
+ function prewarmFailureCooldownMs(): number {
+-  return Math.max(60_000, Number(process.env.RAIN_CAPTCHA_FAIL_COOLDOWN_MS ?? 300_000) || 300_000);
++  return Math.max(30_000, Number(process.env.RAIN_CAPTCHA_FAIL_COOLDOWN_MS ?? 120_000) || 120_000);
+ }
+ 
+ function slotKey(rainId: string, accountId?: number | null): string {
+@@ -141,8 +141,18 @@ async function solveRainCaptchaWithHedge(): Promise<string | null> {
+         });
+     };
+ 
+-    launch();
+-    if (dualStart) launch("dual-start — 2 parallel 2Captcha tasks");
++    launch("primary 2Captcha task");
++
++    const dualDelayMs = Math.max(
++      0,
++      Number(process.env.CAPTCHA_RAIN_DUAL_START_DELAY_MS ?? 10_000) || 10_000,
++    );
++    if (dualStart) {
++      setTimeout(() => {
++        if (settled) return;
++        launch("dual-start — second task (staggered, avoids queue pile-up)");
++      }, dualDelayMs);
++    }
+ 
+     if (hedgeAfterMs > 0) {
+       setTimeout(() => {
+@@ -211,11 +221,11 @@ function startSolveForSlot(
+   const p = solveHcaptchaWithRetry()
+     .then((token) => {
+       logSolveDone(rainId, started, token, accountId);
+-      if (token) {
++      if (token && !isRainCaptchaFinished(rainId)) {
+         cache.set(key, { token, at: Date.now() });
+         prewarmBlockedUntil.delete(blockKey);
+       }
+-      return token;
++      return token && !isRainCaptchaFinished(rainId) ? token : null;
+     })
+     .catch((err) => {
+       const msg = err instanceof Error ? err.message : String(err);
+@@ -308,6 +318,14 @@ export async function takeRainCaptchaToken(
+   const cached = readCachedKey(key);
+   if (cached) return cached;
+ 
++  if (opts?.forRainJoin) {
++    const rowStale = cache.get(key);
++    if (rowStale && Date.now() - rowStale.at > tokenMaxAgeForJoinMs() * 0.55) {
++      cache.delete(key);
++      startSolveForSlot(rainId, opts?.accountId ?? null, { bypassCooldown: true });
++    }
++  }
++
+   let p = inflight.get(key);
+   if (!p) {
+     startSolveForSlot(rainId, opts?.accountId ?? null, {
+diff --git a/src/captcha/solve.ts b/src/captcha/solve.ts
+index dc77f6d..14106bf 100644
+--- a/src/captcha/solve.ts
++++ b/src/captcha/solve.ts
+@@ -314,7 +314,7 @@ async function pollTaskUntilReady(
+   const waitedSec = ((Date.now() - started) / 1000).toFixed(0);
+   throw new Error(
+     `Captcha solve timed out after ~${waitedSec}s (${maxPolls} polls, last status ${lastStatus}). ` +
+-      "2Captcha queue may be slow — try CAPTCHA_PROVIDER=auto or capsolver, CAPTCHA_VERBOSE=1, or off-peak. " +
++      "2Captcha queue may be slow — use CAPTCHA_VERBOSE=1, rain dual-start env vars, or a faster hCaptcha provider when integrated. " +
+       "Keep npm run dev up during tip stage for prewarm.",
+   );
+ }
+diff --git a/src/worker/engine.ts b/src/worker/engine.ts
+index 81636fb..d7d1600 100644
+--- a/src/worker/engine.ts
++++ b/src/worker/engine.ts
+@@ -23,7 +23,6 @@ import {
+   joinRainForAccount,
+   parseRain,
+   rainCaptchaPrewarmWindow,
+-  rainCaptchaSolveWindow,
+   rainJoinWindowOpen,
+   rainJoinWindowRemainingMs,
+   runPreRainWagerIfEnabled,
+@@ -254,7 +253,7 @@ export class AutomationEngine {
+     }
+   }
+ 
+-  /** Hub warm-up early; paid captcha only in the solve window (tokens stay fresh). */
++  /** Hub warm-up + paid captcha in the pre-join window (stale tokens refreshed at join). */
+   private kickoffRainJoinPrep(rain: RainState): void {
+     if (!rain.rainId || isRainCaptchaFinished(rain.rainId)) return;
+     this.logRainMinPoolSkips(rain);
+@@ -266,8 +265,7 @@ export class AutomationEngine {
+       void this.safeRun(this.preconnectJoinRainHubs(joinIds));
+     }
+ 
+-    const solveWindow = rainCaptchaSolveWindow(rain) || rainJoinWindowOpen(rain);
+-    if (!solveWindow) return;
++    if (!rainCaptchaPrewarmWindow(rain)) return;
+ 
+     if (!this.rainPrepLogged.has(rain.rainId)) {
+       this.rainPrepLogged.add(rain.rainId);
+-- 
+2.43.0
+
+
+From 9978ee037264f2fc3c9bed91276a5ec22e1d15fe Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Thu, 22 Oct 2026 08:34:07 +0000
+Subject: [PATCH 2/2] Fix rain join abort when activeRain clears during captcha
+ wait
+
+Keep per-rain timing snapshots, pass fallback state into join retries,
+force fresh captcha on each join stage, default dual 2Captcha tasks off.
+
+Co-authored-by: goshennoshen <goshennoshen@onionmail.org>
+---
+ src/automation/rain-captcha.ts |  17 +++++-
+ src/worker/engine.ts           | 107 ++++++++++++++++++++-------------
+ 2 files changed, 79 insertions(+), 45 deletions(-)
+
+diff --git a/src/automation/rain-captcha.ts b/src/automation/rain-captcha.ts
+index 7616628..9e8d5bf 100644
+--- a/src/automation/rain-captcha.ts
++++ b/src/automation/rain-captcha.ts
+@@ -91,8 +91,8 @@ function isWorkerUnsolvableError(err: unknown): boolean {
+ 
+ function rainCaptchaDualStartEnabled(): boolean {
+   const raw = process.env.CAPTCHA_RAIN_DUAL_START?.trim().toLowerCase();
+-  if (raw === "0" || raw === "false" || raw === "off" || raw === "no") return false;
+-  return true;
++  if (raw === "1" || raw === "true" || raw === "yes" || raw === "on") return true;
++  return false;
+ }
+ 
+ function rainCaptchaSolveOptions(): CaptchaSolveOptions {
+@@ -257,6 +257,19 @@ export function prewarmRainCaptcha(rainId: string): void {
+   startSolveForSlot(rainId, null);
+ }
+ 
++/** Drop cached/inflight tokens and start a new paid solve (join stage / stale token). */
++export function forceFreshRainCaptchas(rainId: string, accountIds: number[]): void {
++  if (!rainId || isRainCaptchaFinished(rainId)) return;
++  const unique = [...new Set(accountIds.filter((id) => Number.isFinite(id)))];
++  for (const id of unique) {
++    const key = slotKey(rainId, id);
++    cache.delete(key);
++    inflight.delete(key);
++    prewarmBlockedUntil.delete(`${rainId}:${id}`);
++  }
++  prewarmRainCaptchasParallel(rainId, unique);
++}
++
+ /** Start one 2Captcha task per account in parallel — fits ~2 min join windows for multi-account. */
+ export function prewarmRainCaptchasParallel(rainId: string, accountIds: number[]): void {
+   if (!rainId || isRainCaptchaFinished(rainId)) return;
+diff --git a/src/worker/engine.ts b/src/worker/engine.ts
+index d7d1600..d112d8f 100644
+--- a/src/worker/engine.ts
++++ b/src/worker/engine.ts
+@@ -11,6 +11,7 @@ import {
+   consumeRainCaptchaToken,
+   isRainCaptchaFinished,
+   markRainCaptchaFinished,
++  forceFreshRainCaptchas,
+   prewarmRainCaptchasParallel,
+   shouldInvalidateRainCaptcha,
+   takeRainCaptchaToken,
+@@ -71,6 +72,8 @@ export class AutomationEngine {
+   private sharedRainHub: RoRushHub | null = null;
+   private readonly accountHubs = new HubRegistry();
+   private activeRain: RainState | null = null;
++  /** Join window timing survives activeRain being cleared mid-captcha-wait. */
++  private readonly rainSnapshots = new Map<string, RainState>();
+   private rainJoinLastAttempt = new Map<string, number>();
+   /** One active join pipeline per rain (captcha + hub invoke can take >90s if overlapped). */
+   private rainJoinInFlight = new Set<string>();
+@@ -489,7 +492,7 @@ export class AutomationEngine {
+     this.sharedRainHub.on(SIGNALR.rain.receiveCreated, (payload) => {
+       const rain = parseRain(payload);
+       if (rain) {
+-        this.activeRain = rain;
++        this.rememberRain(rain);
+         rainTelemetryOnCreated(rain);
+         rainTelemetryUpdateWindow(rain);
+         this.logRainLifecycleOnce("created", rain.rainId, () =>
+@@ -508,18 +511,22 @@ export class AutomationEngine {
+       const partial = parseRain(payload);
+       const rain = partial ? this.mergeRainState(partial) : this.activeRain;
+       if (rain) {
+-        this.activeRain = rain;
+-        rainTelemetryUpdateWindow(rain);
+-        this.logRainLifecycleOnce("join_stage", rain.rainId, () =>
++        const live = this.rememberRain(rain);
++        rainTelemetryUpdateWindow(live);
++        this.logRainLifecycleOnce("join_stage", live.rainId, () =>
+           appendLog({
+             category: "rain",
+             message: "Rain join stage started",
+-            detail: `${rain.rainId} · window ${rainJoinWindowOpen(rain) ? "open" : "closed"}`,
++            detail: `${live.rainId} · window ${rainJoinWindowOpen(live) ? "open" : "closed"}`,
+           }),
+         );
+-        this.kickoffRainJoinPrep(rain);
+-        this.maybeDiscordJoinWindowOpen(rain);
+-        this.scheduleRainJoinAttempt(rain, "join_stage");
++        const joinIds = this.joinRainEligibleAccounts(live).map((a) => a.id);
++        if (joinIds.length > 0) {
++          forceFreshRainCaptchas(live.rainId, joinIds);
++        }
++        this.kickoffRainJoinPrep(live);
++        this.maybeDiscordJoinWindowOpen(live);
++        this.scheduleRainJoinAttempt(live, "join_stage");
+       }
+     });
+     this.sharedRainHub.on(SIGNALR.rain.receiveCurrent, (payload) => {
+@@ -527,13 +534,13 @@ export class AutomationEngine {
+       for (const item of payload) {
+         const rain = parseRain(item);
+         if (!rain) continue;
+-        this.activeRain = this.mergeRainState(rain);
+-        rainTelemetryUpdateWindow(this.activeRain);
+-        if (rainCaptchaPrewarmWindow(this.activeRain)) {
+-          this.kickoffRainJoinPrep(this.activeRain);
++        const live = this.rememberRain(rain);
++        rainTelemetryUpdateWindow(live);
++        if (rainCaptchaPrewarmWindow(live)) {
++          this.kickoffRainJoinPrep(live);
+         }
+-        if (rainJoinWindowOpen(this.activeRain)) {
+-          this.scheduleRainJoinAttempt(this.activeRain, "current_rains");
++        if (rainJoinWindowOpen(live)) {
++          this.scheduleRainJoinAttempt(live, "current_rains");
+         }
+       }
+     });
+@@ -541,25 +548,22 @@ export class AutomationEngine {
+     this.sharedRainHub.on(SIGNALR.rain.receiveAmountUpdated, (payload) => {
+       const partial = parseRain(payload);
+       if (!partial) return;
+-      if (this.activeRain?.rainId === partial.rainId) {
+-        this.activeRain = {
+-          ...this.activeRain,
+-          amount: partial.amount ?? this.activeRain.amount,
+-          joinStageStartTimestamp:
+-            partial.joinStageStartTimestamp ?? this.activeRain.joinStageStartTimestamp,
+-          joinStageDuration: partial.joinStageDuration ?? this.activeRain.joinStageDuration,
+-          createdTimestamp: partial.createdTimestamp ?? this.activeRain.createdTimestamp,
+-          tipStageDuration: partial.tipStageDuration ?? this.activeRain.tipStageDuration,
+-        };
+-      } else {
+-        this.activeRain = partial;
+-      }
+-      if (this.activeRain) {
+-        rainTelemetryUpdateWindow(this.activeRain);
+-        // Pool tips (owner topping up) must not re-trigger paid captcha solves.
+-        if (rainJoinWindowOpen(this.activeRain)) {
+-          this.scheduleRainJoinAttempt(this.activeRain, "amount_updated");
+-        }
++      const live =
++        this.activeRain?.rainId === partial.rainId
++          ? this.rememberRain({
++              ...this.activeRain,
++              amount: partial.amount ?? this.activeRain.amount,
++              joinStageStartTimestamp:
++                partial.joinStageStartTimestamp ?? this.activeRain.joinStageStartTimestamp,
++              joinStageDuration: partial.joinStageDuration ?? this.activeRain.joinStageDuration,
++              createdTimestamp: partial.createdTimestamp ?? this.activeRain.createdTimestamp,
++              tipStageDuration: partial.tipStageDuration ?? this.activeRain.tipStageDuration,
++            })
++          : this.rememberRain(partial);
++      rainTelemetryUpdateWindow(live);
++      // Pool tips (owner topping up) must not re-trigger paid captcha solves.
++      if (rainJoinWindowOpen(live)) {
++        this.scheduleRainJoinAttempt(live, "amount_updated");
+       }
+     });
+ 
+@@ -587,6 +591,7 @@ export class AutomationEngine {
+       }
+       clearRainJoinStateForRain(p.rainId);
+       markRainCaptchaFinished(p.rainId);
++      this.rainSnapshots.delete(p.rainId);
+       this.rainPrepLogged.delete(p.rainId);
+       this.rainSkipLogged.delete(`${p.rainId}`);
+       for (const key of [...this.rainSkipLogged]) {
+@@ -612,25 +617,41 @@ export class AutomationEngine {
+   }
+ 
+   private mergeRainState(incoming: RainState): RainState {
+-    if (!this.activeRain || this.activeRain.rainId !== incoming.rainId) {
+-      return incoming;
+-    }
++    const base =
++      this.activeRain?.rainId === incoming.rainId
++        ? this.activeRain
++        : this.rainSnapshots.get(incoming.rainId);
++    if (!base) return incoming;
+     return {
+-      ...this.activeRain,
++      ...base,
+       ...incoming,
+-      joinStageStartTimestamp:
+-        incoming.joinStageStartTimestamp ?? this.activeRain.joinStageStartTimestamp,
+-      joinStageDuration: incoming.joinStageDuration ?? this.activeRain.joinStageDuration,
++      joinStageStartTimestamp: incoming.joinStageStartTimestamp ?? base.joinStageStartTimestamp,
++      joinStageDuration: incoming.joinStageDuration ?? base.joinStageDuration,
+     };
+   }
+ 
++  private rememberRain(incoming: RainState): RainState {
++    const merged = this.mergeRainState(incoming);
++    this.activeRain = merged;
++    this.rainSnapshots.set(merged.rainId, merged);
++    return merged;
++  }
++
++  private rainForJoin(rainId: string, fallback?: RainState): RainState | null {
++    if (this.activeRain?.rainId === rainId) return this.activeRain;
++    const snap = this.rainSnapshots.get(rainId);
++    if (snap) return snap;
++    if (fallback?.rainId === rainId) return fallback;
++    return null;
++  }
++
+   /** Keep trying captcha + join for this account until joined or the rain window closes. */
+   private async attemptRainJoinForAccount(
+     account: AccountRow,
+     rainId: string,
++    rainFallback: RainState,
+   ): Promise<{ retryable: boolean }> {
+-    const liveRain = (): RainState | null =>
+-      this.activeRain?.rainId === rainId ? this.activeRain : null;
++    const liveRain = (): RainState | null => this.rainForJoin(rainId, rainFallback);
+ 
+     if (isRainJoined(account.id, rainId)) return { retryable: false };
+ 
+@@ -897,7 +918,7 @@ export class AutomationEngine {
+       });
+ 
+       await Promise.all(
+-        pending.map((account) => this.attemptRainJoinForAccount(account, live.rainId)),
++        pending.map((account) => this.attemptRainJoinForAccount(account, live.rainId, live)),
+       );
+     } finally {
+       this.rainJoinInFlight.delete(rain.rainId);
+-- 
+2.43.0
+
