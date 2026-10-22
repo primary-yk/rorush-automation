@@ -39,11 +39,19 @@ export function defaultTipStageMs(): number {
 }
 
 export function effectiveRainForTiming(rain: RainState): RainState {
-  if (rainJoinStageBounds(rain)) return rain;
-  const created = normalizeEpochMs(rain.createdTimestamp);
-  if (!created) return rain;
-  if (rain.tipStageDuration != null) return rain;
-  return { ...rain, tipStageDuration: defaultTipStageMs() };
+  let r = rain;
+  const joinStart = normalizeEpochMs(rain.joinStageStartTimestamp ?? undefined);
+  let created = normalizeEpochMs(rain.createdTimestamp);
+  const tipDur = normalizeDurationMs(rain.tipStageDuration) ?? defaultTipStageMs();
+
+  if (!created && joinStart != null) {
+    r = { ...r, createdTimestamp: joinStart - tipDur, tipStageDuration: tipDur };
+    created = r.createdTimestamp;
+  } else if (created != null && rain.tipStageDuration == null) {
+    r = { ...r, tipStageDuration: tipDur };
+  }
+
+  return r;
 }
 
 export function rainJoinStageBounds(
@@ -138,7 +146,9 @@ export function rainCaptchaCancelAfterMs(rain: RainState, now = Date.now()): num
     const untilJoin = bounds.joinStart - now;
     return Math.min(150_000, Math.max(45_000, untilJoin + joinDur - JOIN_SUBMIT_BUFFER_MS));
   }
-  return Math.max(35_000, bounds.joinEnd - now - JOIN_SUBMIT_BUFFER_MS);
+  const remaining = bounds.joinEnd - now;
+  // One long poll through the join window — slow 2Captcha (~90s) cannot finish if we cancel at ~35s.
+  return Math.max(55_000, remaining - JOIN_SUBMIT_BUFFER_MS + 8_000);
 }
 
 export function maxFailures(): number {
