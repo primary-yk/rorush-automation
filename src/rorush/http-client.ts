@@ -113,8 +113,17 @@ export class RoRushHttpClient {
     });
   }
 
-  async authStatus(): Promise<{ authenticated?: boolean }> {
+  async authStatus(): Promise<{ authenticated?: boolean; [key: string]: unknown }> {
     return this.request(RORUSH_PATHS.auth.status);
+  }
+
+  /** Set active wallet (real coins vs FunCoins) — same as toggling on rorush.com. */
+  async setBalanceToken(token: "coin" | "funCoin"): Promise<void> {
+    const q = encodeURIComponent(token);
+    await this.request(`${RORUSH_PATHS.user.balanceTokenSet}?token=${q}`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
   }
 
   /** RoRush requires `?currency=crypto|robux`; response is usually a numeric balance in cents. */

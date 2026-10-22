@@ -21,6 +21,7 @@ import {
   accountIdsWithSuccessfulRainJoin,
 } from "../db/repositories.js";
 import { parseBalanceCents } from "../rorush/balance-level.js";
+import { ensureRealCoinsWallet, isFunCoinRainBlock } from "../rorush/balance-token.js";
 import type { HubRegistry } from "../worker/hub-registry.js";
 import { SIGNALR } from "../rorush/endpoints.js";
 import { RoRushHub } from "../rorush/signalr-hub.js";
@@ -158,11 +159,14 @@ export function isWagerRejection(message: string): boolean {
 
 export type RainJoinFailureKind =
   | "captcha"
+  | "funcoin"
   | "wager"
   | "wager_limbo_off"
   | "wager_after_limbo"
   | "pool_filter"
   | "other";
+
+export { isFunCoinRainBlock };
 
 /** User-facing bucket for rain join failures (wager before captcha when limbo was tried). */
 export const MANUAL_WAGER_CLEAR_MESSAGE =
@@ -181,6 +185,7 @@ export function classifyRainJoinFailure(
     return "pool_filter";
   }
   if (ctx?.wagerClearAttempted) return "wager_after_limbo";
+  if (isFunCoinRainBlock(message)) return "funcoin";
   if (
     /captcha|hcaptcha|complete the captcha|captcha again|token missing|2captcha|submitting captcha|not ready before the join window/i.test(
       message,
@@ -201,7 +206,21 @@ export function buildRainJoinExhaustedReason(input: {
   captchaTokenEverHeld: boolean;
 }): string {
   const last = input.lastReason.trim();
-  if (!GENERIC_RAIN_JOIN_FAILURE.test(last)) return last;
+  if (!GENERIC_RAIN_JOIN_FAILURE.test(last)) {
+    if (isFunCoinRainBlock(last)) {
+      return (
+        "Rain join blocked — RoRush wallet was on **FunCoins** (real-coin rains need the main wallet). " +
+        "The bot switches to real coins automatically before each join; toggle once on rorush.com if this repeats."
+      );
+    }
+    return last;
+  }
+
+  if (isFunCoinRainBlock(last)) {
+    return (
+      "Rain join blocked — account was on **FunCoins**. Real rains require real coins; the bot now switches wallets before join."
+    );
+  }
 
   if (input.joinSubmissions === 0 && !input.captchaTokenEverHeld) {
     return (
@@ -308,10 +327,14 @@ async function joinRainForAccountOnce(input: {
     return { success: false, reason: `Rain amount ${rainAmount} below filter` };
   }
 
+  await ensureRealCoinsWallet(client, { accountId, nickname: account.nickname });
+
   const reqId = uuid();
   let captchaToken = input.captchaToken ?? null;
 
-  const waitForOutcome = (): Promise<{ ok: boolean; message: string }> =>
+  const waitForJoinOutcome = (
+    joinReqId: string,
+  ): Promise<{ ok: boolean; message: string }> =>
     new Promise((resolve) => {
       const timeout = setTimeout(() => {
         cleanup();
@@ -323,13 +346,13 @@ async function joinRainForAccountOnce(input: {
       }, Math.max(30_000, Number(process.env.RAIN_JOIN_OUTCOME_MS ?? 90_000) || 90_000));
 
       const onSuccess = (payload: unknown) => {
-        if (!matchesJoinReqId(payload, reqId)) return;
+        if (!matchesJoinReqId(payload, joinReqId)) return;
         cleanup();
         resolve({ ok: true, message: "Joined rain" });
       };
       const onFailure = (payload: unknown) => {
         const p = payload as { reqId?: string; message?: string };
-        if (!p.reqId || p.reqId !== reqId) return;
+        if (!p.reqId || p.reqId !== joinReqId) return;
         cleanup();
         resolve({ ok: false, message: p.message ?? "Rain join failed" });
       };
@@ -368,9 +391,17 @@ async function joinRainForAccountOnce(input: {
       message: "Sending rain join",
       detail: `${rain.rainId} · pool ${rainAmount} coins${captchaToken ? " · captcha ready" : ""}`,
     });
-    const outcomePromise = waitForOutcome();
+    const outcomePromise = waitForJoinOutcome(reqId);
     await hub.joinRain({ reqId, rainId: rain.rainId, captchaToken });
     let outcome = await outcomePromise;
+
+    if (!outcome.ok && isFunCoinRainBlock(outcome.message)) {
+      await ensureRealCoinsWallet(client, { accountId, nickname: account.nickname });
+      const retryReq = uuid();
+      const retryOutcomePromise = waitForJoinOutcome(retryReq);
+      await hub.joinRain({ reqId: retryReq, rainId: rain.rainId, captchaToken });
+      outcome = await retryOutcomePromise;
+    }
 
     if (!outcome.ok && isWagerRejection(outcome.message) && account.limbo_wager_enabled) {
       const minBet = effectiveLimboMinBetCoins();

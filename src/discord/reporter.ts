@@ -60,6 +60,13 @@ function rainJoinFailureEmbedCopy(kind: RainJoinFailureKind): {
           "hCaptcha / 2Captcha did not complete a valid join for this pool. This is **not** a wager issue — check API key balance and host logs.",
         color: COLORS.rainFail,
       };
+    case "funcoin":
+      return {
+        title: "Rain · FunCoins wallet",
+        description:
+          "RoRush blocked join because the account was on **FunCoins**. Real rains need **real coins** — the bot switches back automatically before each join. If you toggled FunCoins on the site, switch to real coins once manually.",
+        color: COLORS.rainFail,
+      };
     case "pool_filter":
       return {
         title: "Rain · Skipped (pool filter)",
@@ -343,7 +350,11 @@ export async function reportRainOutcome(input: {
     title = failCopy.title;
     description = failCopy.description;
     color = failCopy.color;
-    if (kind === "captcha") {
+    if (kind === "funcoin") {
+      title = "Rain · FunCoins (permission denied)";
+      description =
+        "Account wallet was on **FunCoins** — rain joins only work on **real coins**. Bot auto-switches before join; confirm on rorush.com if failures continue.";
+    } else if (kind === "captcha") {
       if (/not ready before the join window/i.test(detail)) {
         title = "Rain · Captcha not ready";
         description =

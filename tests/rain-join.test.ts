@@ -84,6 +84,10 @@ describe("classifyRainJoinFailure", () => {
   it("labels wager when RoRush message mentions wager", () => {
     expect(classifyRainJoinFailure("You must wager before joining")).toBe("wager");
   });
+
+  it("labels funcoin before captcha when RoRush says permission denied", () => {
+    expect(classifyRainJoinFailure("Permission denied")).toBe("funcoin");
+  });
 });
 
 describe("rainJoinWindowOpen", () => {

@@ -8,6 +8,7 @@ export const RORUSH_PATHS = {
   },
   user: {
     balance: "/api/v1/user/balance",
+    balanceTokenSet: "/api/v1/user/balance/token:set",
     level: "/api/v1/user/level",
     stats: "/api/v1/user/stats",
   },
