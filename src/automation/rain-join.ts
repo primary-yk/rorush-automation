@@ -30,6 +30,7 @@ import type { RainState } from "../rorush/types.js";
 import {
   captchaSolveLeadMs,
   maxFailures,
+  normalizeDurationMs,
   normalizeEpochMs,
   rainCaptchaPrewarmWindow,
   rainCaptchaSolveWindow,
@@ -1157,7 +1158,7 @@ export function parseRain(payload: unknown): RainState | null {
   ) {
     joinStageStartTimestamp = normalizeEpochMs(p.timestamp) ?? null;
   }
-  const joinStageDuration =
+  const joinStageDurationRaw =
     typeof p.joinStageDuration === "number"
       ? p.joinStageDuration
       : joinStageStartTimestamp != null
@@ -1167,8 +1168,11 @@ export function parseRain(payload: unknown): RainState | null {
     rainId,
     amount: amountRaw != null ? amountRaw / 100 : undefined,
     createdTimestamp,
-    tipStageDuration: typeof p.tipStageDuration === "number" ? p.tipStageDuration : undefined,
+    tipStageDuration:
+      typeof p.tipStageDuration === "number"
+        ? normalizeDurationMs(p.tipStageDuration)
+        : undefined,
     joinStageStartTimestamp,
-    joinStageDuration,
+    joinStageDuration: normalizeDurationMs(joinStageDurationRaw),
   };
 }

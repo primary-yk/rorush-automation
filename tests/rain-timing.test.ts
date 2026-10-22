@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  normalizeDurationMs,
   normalizeEpochMs,
   rainCaptchaCancelAfterMs,
   rainCaptchaPrewarmWindow,
@@ -21,16 +22,24 @@ describe("normalizeEpochMs", () => {
   });
 });
 
+describe("normalizeDurationMs", () => {
+  it("treats 90 as seconds", () => {
+    expect(normalizeDurationMs(90)).toBe(90_000);
+  });
+});
+
 describe("rainCaptchaSolveWindow", () => {
-  it("opens within default 110s lead before join", () => {
+  it("opens within configured lead before join", () => {
+    vi.stubEnv("CAPTCHA_SOLVE_START_LEAD_MS", "120000");
     const joinStart = 1_000_000;
     const rain: RainState = {
       rainId: "x",
       joinStageStartTimestamp: joinStart,
       joinStageDuration: 90_000,
     };
-    expect(rainCaptchaSolveWindow(rain, joinStart - 120_000)).toBe(false);
-    expect(rainCaptchaSolveWindow(rain, joinStart - 110_000)).toBe(true);
+    expect(rainCaptchaSolveWindow(rain, joinStart - 121_000)).toBe(false);
+    expect(rainCaptchaSolveWindow(rain, joinStart - 119_000)).toBe(true);
+    vi.unstubAllEnvs();
   });
 
   it("prep tick runs during solve window even if hub prewarm env is narrower", () => {

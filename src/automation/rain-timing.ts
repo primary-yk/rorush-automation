@@ -16,10 +16,17 @@ export function normalizeEpochMs(value: number | null | undefined): number | und
   return Math.round(value);
 }
 
+/** Durations ≤180 are treated as seconds (RoRush API quirk); larger values are ms. */
+export function normalizeDurationMs(value: number | null | undefined): number | undefined {
+  if (value == null || !Number.isFinite(value)) return undefined;
+  if (value >= 30 && value <= 180) return Math.round(value * 1000);
+  return Math.round(value);
+}
+
 export function captchaSolveLeadMs(): number {
   return Math.max(
-    45_000,
-    Number(process.env.CAPTCHA_SOLVE_START_LEAD_MS ?? 110_000) || 110_000,
+    60_000,
+    Number(process.env.CAPTCHA_SOLVE_START_LEAD_MS ?? 120_000) || 120_000,
   );
 }
 
@@ -27,10 +34,10 @@ export function rainJoinStageBounds(
   rain: RainState,
   now = Date.now(),
 ): { joinStart: number; joinEnd: number } | null {
-  const joinDur = rain.joinStageDuration ?? DEFAULT_JOIN_STAGE_MS;
+  const joinDur = normalizeDurationMs(rain.joinStageDuration) ?? DEFAULT_JOIN_STAGE_MS;
   let joinStart = normalizeEpochMs(rain.joinStageStartTimestamp ?? undefined) ?? null;
   const created = normalizeEpochMs(rain.createdTimestamp);
-  const tipDur = rain.tipStageDuration;
+  const tipDur = normalizeDurationMs(rain.tipStageDuration);
   if (joinStart == null && created != null && tipDur != null) {
     joinStart = created + tipDur;
   }
@@ -88,12 +95,13 @@ export function rainCaptchaPrewarmWindow(rain: RainState, now = Date.now()): boo
   return msUntilJoin > 0 && msUntilJoin <= leadMs;
 }
 
-/** Bill 2Captcha only while a rain event is live and we're in solve/join timing. */
+/** Bill 2Captcha during tip-stage lead, join window, and brief tail for in-flight tasks. */
 export function rainAllowsPaidCaptchaSolve(rain: RainState, now = Date.now()): boolean {
   const bounds = rainJoinStageBounds(rain, now);
   if (!bounds) return false;
-  if (now > bounds.joinEnd + 15_000) return false;
-  return rainCaptchaSolveWindow(rain, now);
+  if (now > bounds.joinEnd + 20_000) return false;
+  if (rainCaptchaSolveWindow(rain, now)) return true;
+  return false;
 }
 
 const JOIN_SUBMIT_BUFFER_MS = 12_000;

@@ -5,6 +5,7 @@ module.exports = {
       name: "rorush-automation",
       script: "dist/main.js",
       cwd: __dirname,
+      exec_mode: "fork",
       instances: 1,
       autorestart: true,
       max_restarts: 10,

@@ -156,7 +156,7 @@ export class AutomationEngine {
     this.hubHealthTimer = setInterval(() => {
       void this.safeRun(this.maintainSharedRainListener());
     }, 45_000);
-    const rainPrepMs = Math.max(5_000, Number(process.env.RAIN_PREP_TICK_MS ?? 10_000) || 10_000);
+    const rainPrepMs = Math.max(3_000, Number(process.env.RAIN_PREP_TICK_MS ?? 5_000) || 5_000);
     this.rainPrepTimer = setInterval(() => {
       void this.safeRun(this.maintainActiveRainPrep());
     }, rainPrepMs);
@@ -273,7 +273,7 @@ export class AutomationEngine {
       void this.safeRun(this.preconnectJoinRainHubs(joinIds));
     }
 
-    if (!rainCaptchaPrewarmWindow(rain) && !rainCaptchaSolveWindow(rain)) return;
+    if (!rainJoinPrepShouldRun(rain)) return;
 
     if (!this.rainPrepLogged.has(rain.rainId)) {
       this.rainPrepLogged.add(rain.rainId);
@@ -653,6 +653,8 @@ export class AutomationEngine {
     return {
       ...base,
       ...incoming,
+      createdTimestamp: incoming.createdTimestamp ?? base.createdTimestamp,
+      tipStageDuration: incoming.tipStageDuration ?? base.tipStageDuration,
       joinStageStartTimestamp: incoming.joinStageStartTimestamp ?? base.joinStageStartTimestamp,
       joinStageDuration: incoming.joinStageDuration ?? base.joinStageDuration,
     };

@@ -5,10 +5,12 @@ import {
   type CaptchaSolveOptions,
 } from "../captcha/solve.js";
 import {
+  captchaSolveLeadMs,
   rainAllowsPaidCaptchaSolve,
   rainCaptchaCancelAfterMs,
   rainJoinOpensInMs,
   rainJoinWindowOpen,
+  rainJoinWindowRemainingMs,
 } from "./rain-timing.js";
 import {
   rainTelemetryAccountCaptchaReady,
@@ -63,6 +65,8 @@ function paidSolveAllowed(rainId: string, now = Date.now()): boolean {
     }
     return false;
   }
+  billingSkipLogged.delete(rainId);
+  billingSkipLogged.delete(`${rainId}:nometa`);
   return true;
 }
 
@@ -127,11 +131,22 @@ function tokenTooOldForJoin(at: number): boolean {
   return Date.now() - at > tokenMaxAgeForJoinMs() * 0.9;
 }
 
+function clearJoinHedgeForRain(rainId: string): void {
+  const prefix = rainKeyPrefix(rainId);
+  for (const k of [...joinHedgeLaunched]) {
+    if (k.startsWith(prefix)) joinHedgeLaunched.delete(k);
+  }
+  for (const k of [...solveStartedAt.keys()]) {
+    if (k.startsWith(prefix)) solveStartedAt.delete(k);
+  }
+}
+
 export function markRainCaptchaFinished(rainId: string): void {
   if (!rainId) return;
   finishedRainIds.add(rainId);
   dropRainCaptchaMeta(rainId);
   clearPaidTasksForRain(rainId);
+  clearJoinHedgeForRain(rainId);
   clearRainCaptcha(rainId);
   for (const k of [...joinHedgeLaunched]) {
     if (k.startsWith(rainKeyPrefix(rainId))) joinHedgeLaunched.delete(k);
@@ -156,11 +171,28 @@ function rainCaptchaDualStartEnabled(): boolean {
 }
 
 function buildRainSolveOptions(rain: RainState): CaptchaSolveOptions {
-  const taskAttempts = Math.max(1, Number(process.env.CAPTCHA_RAIN_TASK_ATTEMPTS ?? 1) || 1);
+  const taskAttempts = Math.max(1, Number(process.env.CAPTCHA_RAIN_TASK_ATTEMPTS ?? 2) || 2);
   return {
     cancelAfterMs: rainCaptchaCancelAfterMs(rain),
     taskAttempts,
   };
+}
+
+function rainCaptchaUrgent(rain: RainState, now = Date.now()): boolean {
+  return rainJoinWindowOpen(rain, now) || rainJoinOpensInMs(rain, now) <= captchaSolveLeadMs();
+}
+
+function failureCooldownMs(rain: RainState, workerFail: boolean): number {
+  const base = workerFail
+    ? Math.max(8_000, Number(process.env.RAIN_CAPTCHA_WORKER_FAIL_COOLDOWN_MS ?? 15_000) || 15_000)
+    : Math.max(20_000, Number(process.env.RAIN_CAPTCHA_FAIL_COOLDOWN_MS ?? 25_000) || 25_000);
+  if (rainCaptchaUrgent(rain)) {
+    return Math.min(
+      base,
+      Math.max(4_000, Number(process.env.RAIN_CAPTCHA_URGENT_FAIL_COOLDOWN_MS ?? 8_000) || 8_000),
+    );
+  }
+  return base;
 }
 
 function isWorkerUnsolvableError(err: unknown): boolean {
@@ -236,7 +268,13 @@ async function solveOneRainHcaptcha(rain: RainState, budgetKey: string): Promise
 }
 
 async function solveWithWorkerRetries(rain: RainState, budgetKey: string): Promise<string | null> {
-  const maxAttempts = Math.max(1, Number(process.env.RAIN_CAPTCHA_WORKER_RETRIES ?? 1) || 1);
+  const maxAttempts = Math.max(
+    1,
+    Number(
+      process.env.RAIN_CAPTCHA_WORKER_RETRIES ??
+        (rainCaptchaUrgent(rain) ? 2 : 1),
+    ) || 1,
+  );
   let lastErr: unknown;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
@@ -262,7 +300,7 @@ async function solveWithWorkerRetries(rain: RainState, budgetKey: string): Promi
 }
 
 function prewarmFailureCooldownMs(): number {
-  return Math.max(30_000, Number(process.env.RAIN_CAPTCHA_FAIL_COOLDOWN_MS ?? 90_000) || 90_000);
+  return Math.max(20_000, Number(process.env.RAIN_CAPTCHA_FAIL_COOLDOWN_MS ?? 25_000) || 25_000);
 }
 
 function logSolveStart(rainId: string, accountId: number | null | undefined, rain: RainState): void {
@@ -307,8 +345,12 @@ function startSolveForSlot(
 
   const blockKey = accountId != null ? `${rainId}:${accountId}` : rainId;
   const blocked = prewarmBlockedUntil.get(blockKey);
+  const urgent =
+    opts?.bypassCooldown ||
+    rainCaptchaUrgent(rain) ||
+    rainJoinWindowRemainingMs(rain) > 0;
   if (blocked != null && Date.now() < blocked) {
-    if (!opts?.bypassCooldown) return;
+    if (!urgent) return;
     prewarmBlockedUntil.delete(blockKey);
   }
 
@@ -334,9 +376,7 @@ function startSolveForSlot(
       const msg = err instanceof Error ? err.message : String(err);
       console.warn(`[rain-captcha] solve failed ${rainId.slice(0, 8)}…: ${msg}`);
       const workerFail = isWorkerUnsolvableError(err);
-      const cooldown = workerFail
-        ? Math.max(8_000, Number(process.env.RAIN_CAPTCHA_WORKER_FAIL_COOLDOWN_MS ?? 20_000) || 20_000)
-        : prewarmFailureCooldownMs();
+      const cooldown = failureCooldownMs(rain, workerFail);
       prewarmBlockedUntil.set(blockKey, Date.now() + cooldown);
       appendLog({
         accountId: accountId ?? undefined,
