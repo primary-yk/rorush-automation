@@ -26,6 +26,7 @@ import {
   parseRain,
   rainCaptchaPrewarmWindow,
   rainCaptchaSolveWindow,
+  rainJoinPrepShouldRun,
   rainJoinStageBounds,
   rainJoinWindowOpen,
   rainJoinWindowRemainingMs,
@@ -427,7 +428,7 @@ export class AutomationEngine {
       return;
     }
     if (isRainCaptchaFinished(rain.rainId)) return;
-    if (!rainCaptchaPrewarmWindow(rain) && !rainJoinWindowOpen(rain)) return;
+    if (!rainJoinPrepShouldRun(rain) && !rainJoinWindowOpen(rain)) return;
     this.kickoffRainJoinPrep(rain);
     if (rainJoinWindowOpen(rain)) {
       this.maybeDiscordJoinWindowOpen(rain);
@@ -513,7 +514,7 @@ export class AutomationEngine {
             detail: `${rain.rainId} · pool ${rain.amount ?? "?"} coins`,
           }),
         );
-        if (rainCaptchaPrewarmWindow(rain)) {
+        if (rainJoinPrepShouldRun(rain)) {
           this.kickoffRainJoinPrep(rain);
         }
       }
@@ -559,7 +560,7 @@ export class AutomationEngine {
         if (!rain) continue;
         const live = this.rememberRain(rain);
         rainTelemetryUpdateWindow(live);
-        if (rainCaptchaPrewarmWindow(live)) {
+        if (rainJoinPrepShouldRun(live)) {
           this.kickoffRainJoinPrep(live);
         }
         if (rainJoinWindowOpen(live)) {

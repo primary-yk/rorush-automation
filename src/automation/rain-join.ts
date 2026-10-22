@@ -27,6 +27,30 @@ import type { HubRegistry } from "../worker/hub-registry.js";
 import { SIGNALR } from "../rorush/endpoints.js";
 import { RoRushHub } from "../rorush/signalr-hub.js";
 import type { RainState } from "../rorush/types.js";
+import {
+  captchaSolveLeadMs,
+  maxFailures,
+  normalizeEpochMs,
+  rainCaptchaPrewarmWindow,
+  rainCaptchaSolveWindow,
+  rainJoinOpensInMs,
+  rainJoinPrepShouldRun,
+  rainJoinStageBounds,
+  rainJoinWindowOpen,
+  rainJoinWindowRemainingMs,
+} from "./rain-timing.js";
+
+export {
+  captchaSolveLeadMs,
+  rainCaptchaPrewarmWindow,
+  rainCaptchaSolveWindow,
+  rainJoinOpensInMs,
+  rainJoinPrepShouldRun,
+  rainJoinStageBounds,
+  rainJoinWindowOpen,
+  rainJoinWindowRemainingMs,
+  maxFailures,
+} from "./rain-timing.js";
 import { ensureAuthenticated } from "../accounts/session-manager.js";
 import {
   reportLimboOutcome,
@@ -1113,14 +1137,17 @@ export function parseRain(payload: unknown): RainState | null {
           ? p.baseAmount
           : undefined;
   const hasTipStage = typeof p.tipStageDuration === "number";
-  const createdTimestamp =
+  const createdRaw =
     typeof p.createdTimestamp === "number"
       ? p.createdTimestamp
       : hasTipStage && typeof p.timestamp === "number"
         ? p.timestamp
         : undefined;
+  const createdTimestamp = normalizeEpochMs(createdRaw);
   let joinStageStartTimestamp: number | null =
-    typeof p.joinStageStartTimestamp === "number" ? p.joinStageStartTimestamp : null;
+    typeof p.joinStageStartTimestamp === "number"
+      ? (normalizeEpochMs(p.joinStageStartTimestamp) ?? null)
+      : null;
   // ReceiveRainJoinStageStart uses `timestamp`, not joinStageStartTimestamp (see RoRush web client).
   if (
     joinStageStartTimestamp == null &&
@@ -1128,7 +1155,7 @@ export function parseRain(payload: unknown): RainState | null {
     typeof p.timestamp === "number" &&
     typeof p.joinStageDuration === "number"
   ) {
-    joinStageStartTimestamp = p.timestamp;
+    joinStageStartTimestamp = normalizeEpochMs(p.timestamp) ?? null;
   }
   const joinStageDuration =
     typeof p.joinStageDuration === "number"
@@ -1144,76 +1171,4 @@ export function parseRain(payload: unknown): RainState | null {
     joinStageStartTimestamp,
     joinStageDuration,
   };
-}
-
-const DEFAULT_JOIN_STAGE_MS = 90_000;
-
-export function rainJoinStageBounds(
-  rain: RainState,
-  now = Date.now(),
-): { joinStart: number; joinEnd: number } | null {
-  const joinDur = rain.joinStageDuration ?? DEFAULT_JOIN_STAGE_MS;
-  let joinStart = rain.joinStageStartTimestamp ?? null;
-  if (joinStart == null && rain.createdTimestamp != null && rain.tipStageDuration != null) {
-    joinStart = rain.createdTimestamp + rain.tipStageDuration;
-  }
-  if (joinStart == null) return null;
-  return { joinStart, joinEnd: joinStart + joinDur };
-}
-
-export function rainJoinWindowOpen(rain: RainState, now = Date.now()): boolean {
-  const bounds = rainJoinStageBounds(rain, now);
-  if (!bounds) return false;
-  return now >= bounds.joinStart && now <= bounds.joinEnd;
-}
-
-export function rainJoinWindowRemainingMs(rain: RainState, now = Date.now()): number {
-  const bounds = rainJoinStageBounds(rain, now);
-  if (!bounds || now > bounds.joinEnd) return 0;
-  if (now < bounds.joinStart) return bounds.joinEnd - bounds.joinStart;
-  return Math.max(0, bounds.joinEnd - now);
-}
-
-export function rainJoinOpensInMs(rain: RainState, now = Date.now()): number {
-  const bounds = rainJoinStageBounds(rain, now);
-  if (!bounds || now >= bounds.joinStart) return 0;
-  return Math.max(0, bounds.joinStart - now);
-}
-
-/** When to start paid 2Captcha tasks — shortly before join so tokens stay fresh. */
-export function rainCaptchaSolveWindow(rain: RainState, now = Date.now()): boolean {
-  if (rainJoinWindowOpen(rain, now)) return true;
-  const bounds = rainJoinStageBounds(rain, now);
-  if (!bounds || now > bounds.joinEnd) return false;
-  const leadMs = Math.max(
-    45_000,
-    Number(process.env.CAPTCHA_SOLVE_START_LEAD_MS ?? 95_000) || 95_000,
-  );
-  const msUntilJoin = bounds.joinStart - now;
-  return msUntilJoin > 0 && msUntilJoin <= leadMs;
-}
-
-/** Hub warm-up / listener prep — wider window than captcha solve. */
-export function rainCaptchaPrewarmWindow(rain: RainState, now = Date.now()): boolean {
-  if (rainJoinWindowOpen(rain, now)) return true;
-  const bounds = rainJoinStageBounds(rain, now);
-  const leadMs = Math.max(
-    60_000,
-    Number(process.env.RAIN_CAPTCHA_PREWARM_BEFORE_JOIN_MS ?? 180_000) || 180_000,
-  );
-  if (!bounds) {
-    return !!(
-      rain.createdTimestamp &&
-      now >= rain.createdTimestamp &&
-      now - rain.createdTimestamp < 45_000
-    );
-  }
-  if (now > bounds.joinEnd) return false;
-  if (now >= bounds.joinStart) return true;
-  const msUntilJoin = bounds.joinStart - now;
-  return msUntilJoin > 0 && msUntilJoin <= leadMs;
-}
-
-export function maxFailures(): number {
-  return loadConfig().MAX_REQUEST_FAILURES;
 }
