@@ -11,6 +11,7 @@ import {
   consumeRainCaptchaToken,
   isRainCaptchaFinished,
   markRainCaptchaFinished,
+  forceFreshRainCaptchas,
   prewarmRainCaptchasParallel,
   shouldInvalidateRainCaptcha,
   takeRainCaptchaToken,
@@ -71,6 +72,8 @@ export class AutomationEngine {
   private sharedRainHub: RoRushHub | null = null;
   private readonly accountHubs = new HubRegistry();
   private activeRain: RainState | null = null;
+  /** Join window timing survives activeRain being cleared mid-captcha-wait. */
+  private readonly rainSnapshots = new Map<string, RainState>();
   private rainJoinLastAttempt = new Map<string, number>();
   /** One active join pipeline per rain (captcha + hub invoke can take >90s if overlapped). */
   private rainJoinInFlight = new Set<string>();
@@ -489,7 +492,7 @@ export class AutomationEngine {
     this.sharedRainHub.on(SIGNALR.rain.receiveCreated, (payload) => {
       const rain = parseRain(payload);
       if (rain) {
-        this.activeRain = rain;
+        this.rememberRain(rain);
         rainTelemetryOnCreated(rain);
         rainTelemetryUpdateWindow(rain);
         this.logRainLifecycleOnce("created", rain.rainId, () =>
@@ -508,18 +511,22 @@ export class AutomationEngine {
       const partial = parseRain(payload);
       const rain = partial ? this.mergeRainState(partial) : this.activeRain;
       if (rain) {
-        this.activeRain = rain;
-        rainTelemetryUpdateWindow(rain);
-        this.logRainLifecycleOnce("join_stage", rain.rainId, () =>
+        const live = this.rememberRain(rain);
+        rainTelemetryUpdateWindow(live);
+        this.logRainLifecycleOnce("join_stage", live.rainId, () =>
           appendLog({
             category: "rain",
             message: "Rain join stage started",
-            detail: `${rain.rainId} · window ${rainJoinWindowOpen(rain) ? "open" : "closed"}`,
+            detail: `${live.rainId} · window ${rainJoinWindowOpen(live) ? "open" : "closed"}`,
           }),
         );
-        this.kickoffRainJoinPrep(rain);
-        this.maybeDiscordJoinWindowOpen(rain);
-        this.scheduleRainJoinAttempt(rain, "join_stage");
+        const joinIds = this.joinRainEligibleAccounts(live).map((a) => a.id);
+        if (joinIds.length > 0) {
+          forceFreshRainCaptchas(live.rainId, joinIds);
+        }
+        this.kickoffRainJoinPrep(live);
+        this.maybeDiscordJoinWindowOpen(live);
+        this.scheduleRainJoinAttempt(live, "join_stage");
       }
     });
     this.sharedRainHub.on(SIGNALR.rain.receiveCurrent, (payload) => {
@@ -527,13 +534,13 @@ export class AutomationEngine {
       for (const item of payload) {
         const rain = parseRain(item);
         if (!rain) continue;
-        this.activeRain = this.mergeRainState(rain);
-        rainTelemetryUpdateWindow(this.activeRain);
-        if (rainCaptchaPrewarmWindow(this.activeRain)) {
-          this.kickoffRainJoinPrep(this.activeRain);
+        const live = this.rememberRain(rain);
+        rainTelemetryUpdateWindow(live);
+        if (rainCaptchaPrewarmWindow(live)) {
+          this.kickoffRainJoinPrep(live);
         }
-        if (rainJoinWindowOpen(this.activeRain)) {
-          this.scheduleRainJoinAttempt(this.activeRain, "current_rains");
+        if (rainJoinWindowOpen(live)) {
+          this.scheduleRainJoinAttempt(live, "current_rains");
         }
       }
     });
@@ -541,25 +548,22 @@ export class AutomationEngine {
     this.sharedRainHub.on(SIGNALR.rain.receiveAmountUpdated, (payload) => {
       const partial = parseRain(payload);
       if (!partial) return;
-      if (this.activeRain?.rainId === partial.rainId) {
-        this.activeRain = {
-          ...this.activeRain,
-          amount: partial.amount ?? this.activeRain.amount,
-          joinStageStartTimestamp:
-            partial.joinStageStartTimestamp ?? this.activeRain.joinStageStartTimestamp,
-          joinStageDuration: partial.joinStageDuration ?? this.activeRain.joinStageDuration,
-          createdTimestamp: partial.createdTimestamp ?? this.activeRain.createdTimestamp,
-          tipStageDuration: partial.tipStageDuration ?? this.activeRain.tipStageDuration,
-        };
-      } else {
-        this.activeRain = partial;
-      }
-      if (this.activeRain) {
-        rainTelemetryUpdateWindow(this.activeRain);
-        // Pool tips (owner topping up) must not re-trigger paid captcha solves.
-        if (rainJoinWindowOpen(this.activeRain)) {
-          this.scheduleRainJoinAttempt(this.activeRain, "amount_updated");
-        }
+      const live =
+        this.activeRain?.rainId === partial.rainId
+          ? this.rememberRain({
+              ...this.activeRain,
+              amount: partial.amount ?? this.activeRain.amount,
+              joinStageStartTimestamp:
+                partial.joinStageStartTimestamp ?? this.activeRain.joinStageStartTimestamp,
+              joinStageDuration: partial.joinStageDuration ?? this.activeRain.joinStageDuration,
+              createdTimestamp: partial.createdTimestamp ?? this.activeRain.createdTimestamp,
+              tipStageDuration: partial.tipStageDuration ?? this.activeRain.tipStageDuration,
+            })
+          : this.rememberRain(partial);
+      rainTelemetryUpdateWindow(live);
+      // Pool tips (owner topping up) must not re-trigger paid captcha solves.
+      if (rainJoinWindowOpen(live)) {
+        this.scheduleRainJoinAttempt(live, "amount_updated");
       }
     });
 
@@ -587,6 +591,7 @@ export class AutomationEngine {
       }
       clearRainJoinStateForRain(p.rainId);
       markRainCaptchaFinished(p.rainId);
+      this.rainSnapshots.delete(p.rainId);
       this.rainPrepLogged.delete(p.rainId);
       this.rainSkipLogged.delete(`${p.rainId}`);
       for (const key of [...this.rainSkipLogged]) {
@@ -612,25 +617,41 @@ export class AutomationEngine {
   }
 
   private mergeRainState(incoming: RainState): RainState {
-    if (!this.activeRain || this.activeRain.rainId !== incoming.rainId) {
-      return incoming;
-    }
+    const base =
+      this.activeRain?.rainId === incoming.rainId
+        ? this.activeRain
+        : this.rainSnapshots.get(incoming.rainId);
+    if (!base) return incoming;
     return {
-      ...this.activeRain,
+      ...base,
       ...incoming,
-      joinStageStartTimestamp:
-        incoming.joinStageStartTimestamp ?? this.activeRain.joinStageStartTimestamp,
-      joinStageDuration: incoming.joinStageDuration ?? this.activeRain.joinStageDuration,
+      joinStageStartTimestamp: incoming.joinStageStartTimestamp ?? base.joinStageStartTimestamp,
+      joinStageDuration: incoming.joinStageDuration ?? base.joinStageDuration,
     };
+  }
+
+  private rememberRain(incoming: RainState): RainState {
+    const merged = this.mergeRainState(incoming);
+    this.activeRain = merged;
+    this.rainSnapshots.set(merged.rainId, merged);
+    return merged;
+  }
+
+  private rainForJoin(rainId: string, fallback?: RainState): RainState | null {
+    if (this.activeRain?.rainId === rainId) return this.activeRain;
+    const snap = this.rainSnapshots.get(rainId);
+    if (snap) return snap;
+    if (fallback?.rainId === rainId) return fallback;
+    return null;
   }
 
   /** Keep trying captcha + join for this account until joined or the rain window closes. */
   private async attemptRainJoinForAccount(
     account: AccountRow,
     rainId: string,
+    rainFallback: RainState,
   ): Promise<{ retryable: boolean }> {
-    const liveRain = (): RainState | null =>
-      this.activeRain?.rainId === rainId ? this.activeRain : null;
+    const liveRain = (): RainState | null => this.rainForJoin(rainId, rainFallback);
 
     if (isRainJoined(account.id, rainId)) return { retryable: false };
 
@@ -897,7 +918,7 @@ export class AutomationEngine {
       });
 
       await Promise.all(
-        pending.map((account) => this.attemptRainJoinForAccount(account, live.rainId)),
+        pending.map((account) => this.attemptRainJoinForAccount(account, live.rainId, live)),
       );
     } finally {
       this.rainJoinInFlight.delete(rain.rainId);

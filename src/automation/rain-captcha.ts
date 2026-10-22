@@ -91,8 +91,8 @@ function isWorkerUnsolvableError(err: unknown): boolean {
 
 function rainCaptchaDualStartEnabled(): boolean {
   const raw = process.env.CAPTCHA_RAIN_DUAL_START?.trim().toLowerCase();
-  if (raw === "0" || raw === "false" || raw === "off" || raw === "no") return false;
-  return true;
+  if (raw === "1" || raw === "true" || raw === "yes" || raw === "on") return true;
+  return false;
 }
 
 function rainCaptchaSolveOptions(): CaptchaSolveOptions {
@@ -255,6 +255,19 @@ function startSolveForSlot(
 export function prewarmRainCaptcha(rainId: string): void {
   if (!rainId) return;
   startSolveForSlot(rainId, null);
+}
+
+/** Drop cached/inflight tokens and start a new paid solve (join stage / stale token). */
+export function forceFreshRainCaptchas(rainId: string, accountIds: number[]): void {
+  if (!rainId || isRainCaptchaFinished(rainId)) return;
+  const unique = [...new Set(accountIds.filter((id) => Number.isFinite(id)))];
+  for (const id of unique) {
+    const key = slotKey(rainId, id);
+    cache.delete(key);
+    inflight.delete(key);
+    prewarmBlockedUntil.delete(`${rainId}:${id}`);
+  }
+  prewarmRainCaptchasParallel(rainId, unique);
 }
 
 /** Start one 2Captcha task per account in parallel — fits ~2 min join windows for multi-account. */
