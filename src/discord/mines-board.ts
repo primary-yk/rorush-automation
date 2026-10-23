@@ -38,6 +38,41 @@ function buildRows(revealed: Set<number>, accountId: number, disabled: boolean):
   return rows;
 }
 
+export function ownerHasFeedThread(ownerDiscordId: string | null | undefined): boolean {
+  if (!ownerDiscordId?.trim()) return false;
+  return Boolean(getDiscordUserThread(ownerDiscordId.trim())?.thread_id);
+}
+
+/** Reminder when manual mines auto is enabled — board appears on the next rain payout. */
+export async function postMinesManualArmedNotice(input: {
+  ownerDiscordId: string | null;
+  nickname: string;
+  minesCount: number;
+  targetMultiplier: number;
+  rainsRemaining: number;
+  walletLabel: string;
+}): Promise<boolean> {
+  const client = clientRef;
+  if (!client || !input.ownerDiscordId?.trim()) return false;
+  const row = getDiscordUserThread(input.ownerDiscordId.trim());
+  if (!row?.thread_id) return false;
+  const ch = await client.channels.fetch(row.thread_id).catch(() => null);
+  if (!ch?.isTextBased() || !("send" in ch) || typeof ch.send !== "function") return false;
+
+  const content =
+    `**Mines manual · armed** · **${input.nickname}**\n` +
+    `After your **next rain** profit is bet, a **5×5 tile board** will appear **in this thread** (not in the slash-command reply).\n` +
+    `${input.walletLabel} · **${input.minesCount}** mines · target **${input.targetMultiplier.toFixed(2)}×** · **${input.rainsRemaining}** rain(s) left on auto.\n` +
+    "To practice the board now (before rain): **`/mines test`** with **random: No**.";
+
+  try {
+    await ch.send({ content });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function postMinesBoardToOwner(input: {
   ownerDiscordId: string | null;
   accountId: number;

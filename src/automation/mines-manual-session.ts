@@ -38,6 +38,7 @@ export function createManualMinesSession(
 ): ManualMinesSession {
   closeManualMinesSession(input.accountId);
   let resolver: ((tile: number) => void) | null = null;
+  const queuedTiles: number[] = [];
   const session: ManualMinesSession = {
     ...input,
     revealed: input.revealed ?? new Set<number>(),
@@ -49,6 +50,11 @@ export function createManualMinesSession(
           resolve(-1);
           return;
         }
+        const queued = queuedTiles.shift();
+        if (queued != null) {
+          resolve(queued);
+          return;
+        }
         resolver = resolve;
       }),
     pushTile: (tile: number) => {
@@ -56,7 +62,9 @@ export function createManualMinesSession(
         const r = resolver;
         resolver = null;
         r(tile);
+        return;
       }
+      queuedTiles.push(tile);
     },
   };
   sessions.set(input.accountId, session);

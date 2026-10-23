@@ -1,6 +1,7 @@
 import { parseMinesWalletMode, minesWalletLabel, type MinesWalletMode } from "../automation/mines-currency.js";
 import { getAccount, listAccounts, updateAccount, type AccountRow } from "../db/repositories.js";
 import { engine } from "../worker/engine.js";
+import { ownerHasFeedThread, postMinesManualArmedNotice } from "./mines-board.js";
 
 function findOwnedAccount(discordUserId: string, nickname?: string): AccountRow | undefined {
   const owned = listAccounts().filter((a) => a.owner_discord_id === discordUserId);
@@ -41,14 +42,38 @@ export async function setMinesAutoForUser(input: {
   });
   await engine.reloadAccounts();
 
-  const mode = input.randomTiles ? "random tiles" : "**manual board** in your feed thread (run **`/connect`** if you have not)";
+  const walletLabel = minesWalletLabel(input.walletMode);
+  let manualLine = "";
+  if (!input.randomTiles) {
+    const hasThread = ownerHasFeedThread(account.owner_discord_id);
+    if (hasThread) {
+      const posted = await postMinesManualArmedNotice({
+        ownerDiscordId: account.owner_discord_id,
+        nickname: account.nickname,
+        minesCount,
+        targetMultiplier: target,
+        rainsRemaining: rains,
+        walletLabel,
+      });
+      manualLine = posted
+        ? "Manual tiles: check your **private feed thread** — armed message posted; the **5×5 board** appears when the **next rain** pays profit."
+        : "Manual tiles: run **`/connect`**, then **`/mines auto`** again — the board posts in your feed thread **after the next rain** (not here).";
+    } else {
+      manualLine =
+        "Manual tiles: run **`/connect`** first. The **5×5 board** only appears in your feed thread **after a rain** pays profit (not when you run this command).";
+    }
+  }
+
+  const mode = input.randomTiles
+    ? "random tiles each rain"
+    : manualLine || "manual board after each rain";
   const vaultLine =
     input.walletMode === "coin"
       ? "cashout at **{target}×** → **vault**"
       : "cashout at **{target}×** (FunCoins — **not** vaulted)";
   return (
     `**${account.nickname}** · Mines auto **ON** for **${rains}** rain(s).\n` +
-    `Wallet: **${minesWalletLabel(input.walletMode)}** · each rain profit → mines · **${minesCount}** mines · ${vaultLine.replace("{target}", target.toFixed(2))} · ${mode}.\n` +
+    `Wallet: **${walletLabel}** · each rain profit → mines · **${minesCount}** mines · ${vaultLine.replace("{target}", target.toFixed(2))} · ${mode}.\n` +
     "Post-rain limbo is **skipped** while this is on. Stop early with **`/mines stop`**."
   );
 }

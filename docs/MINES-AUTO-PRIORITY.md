@@ -13,7 +13,7 @@
 
 **Wallet:** `wallet:real` (default) uses **real coins** and vaults cashout profit. `wallet:funcoins` uses **FunCoins** on RoRush (good for testing); winnings are **not** sent to vault.
 
-**Manual board (random = no):** 5×5 button grid in the user’s private feed thread. Click tiles to reveal; bot syncs to RoRush. Cashout at target → vault (real coins only).
+**Manual board (random = no):** 5×5 button grid in the user’s **private feed thread** — it appears **when a rain payout triggers mines**, not in the `/mines auto` reply. Enabling manual mode posts an “armed” note in the thread. Use **`/mines test`** with **random: No** to try the board immediately. Click tiles to reveal; bot syncs to RoRush. Cashout at target → vault (real coins only).
 
 **Random = yes:** Bot picks random unrevealed tiles until target multiplier or bomb.
 
