@@ -18,10 +18,21 @@ export class RoRushHttpClient {
     : undefined;
 
   constructor(
-    private readonly creds: RoRushCredentials,
+    private creds: RoRushCredentials,
     private readonly accountProxyUrl?: string | null,
   ) {
     this.limiter = new RateLimiter(loadConfig().REQUEST_MIN_INTERVAL_MS);
+  }
+
+  /** Keep session cookies when refreshing JWT on the same client (vault lock needs this). */
+  setCredentials(creds: RoRushCredentials): void {
+    this.creds = creds;
+  }
+
+  copySessionFrom(other: RoRushHttpClient): void {
+    for (const [k, v] of other.cookieJar.entries()) {
+      this.cookieJar.set(k, v);
+    }
   }
 
   private storeSetCookies(headers: Headers): void {

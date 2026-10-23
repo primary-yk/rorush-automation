@@ -14,6 +14,12 @@ export function snapshotLocked(snapshot: VaultSnapshot, now = Date.now()): boole
   return !Number.isNaN(t) && t > now;
 }
 
+const SITE_ORIGIN = "https://rorush.com";
+
+function vaultInfoHeaders(): Record<string, string> {
+  return { Origin: SITE_ORIGIN, Referer: `${SITE_ORIGIN}/` };
+}
+
 export async function fetchVaultSnapshot(
   client: RoRushHttpClient,
   currency: "CRYPTO" | "ROBUX" = "CRYPTO",
@@ -21,13 +27,14 @@ export async function fetchVaultSnapshot(
   const paths = [
     RORUSH_PATHS.vault.info,
     `${RORUSH_PATHS.vault.info}?currency=${currency.toLowerCase()}`,
+    `${RORUSH_PATHS.vault.info}?currency=${currency}`,
   ];
   let balanceCoins: number | null = null;
   let unlockAtIso: string | null = null;
 
   for (const path of paths) {
     try {
-      const body = await client.request<unknown>(path);
+      const body = await client.request<unknown>(path, { headers: vaultInfoHeaders() });
       if (isBareBalanceCentsBody(body)) {
         balanceCoins = body / 100;
         continue;

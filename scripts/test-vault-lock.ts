@@ -40,7 +40,7 @@ async function main() {
   }
 
   const { client, creds } = await ensureAuthenticatedForVault(account.id);
-  console.log(`Has x-api-key: ${creds.apiKey ? "yes (saved)" : "no — vault lock often needs browser apiKey"}`);
+  console.log(`Has x-api-key: ${creds.apiKey ? `yes (${creds.apiKey.slice(0, 8)}…)` : "no"}`);
   const balance = await fetchVaultBalanceCoins(client);
   const unlock = await fetchVaultUnlockAt(client);
   console.log(`Account: ${account.nickname} (#${account.id})`);

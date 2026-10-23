@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { isTransientNetworkError } from "../captcha/solve.js";
 import { requireEncryptionKey } from "../config.js";
 import { decryptSecret, encryptSecret } from "../crypto/secret-box.js";
@@ -22,6 +23,17 @@ export function encryptField(value: string | null | undefined): string | null {
 export function decryptField(value: string | null | undefined): string | null {
   if (!value) return null;
   return decryptSecret(value, requireEncryptionKey());
+}
+
+/** RoRush web client uses localStorage apiKey; generate one if login did not provide it. */
+export function ensureAccountApiKey(accountId: number): string {
+  const account = getAccount(accountId);
+  if (!account) throw new Error("Account not found");
+  const existing = decryptField(account.api_key_enc)?.trim();
+  if (existing) return existing;
+  const generated = randomUUID();
+  updateAccount(accountId, { api_key_enc: encryptField(generated) });
+  return generated;
 }
 
 /** Check email/password against RoRush before saving (Discord `/account add`, dashboard). */
@@ -69,21 +81,58 @@ export async function verifyRoRushEmailPassword(
   }
 }
 
-export async function resolveCredentials(account: AccountRow): Promise<RoRushCredentials | null> {
+async function syncApiKeyFromRoRush(
+  accountId: number,
+  client: RoRushHttpClient,
+  creds: RoRushCredentials,
+  hints: { fromLogin?: string | null } = {},
+): Promise<RoRushCredentials> {
+  let apiKey =
+    hints.fromLogin?.trim() ||
+    creds.apiKey?.trim() ||
+    decryptField(getAccount(accountId)?.api_key_enc)?.trim() ||
+    "";
+  if (!apiKey) {
+    try {
+      apiKey = parseApiKey(await client.authStatus()) ?? "";
+    } catch {
+      /* auth status optional */
+    }
+  }
+  if (!apiKey) {
+    apiKey = ensureAccountApiKey(accountId);
+  } else {
+    updateAccount(accountId, { api_key_enc: encryptField(apiKey) });
+  }
+  const next = { ...creds, apiKey };
+  client.setCredentials(next);
+  return next;
+}
+
+async function openAuthenticatedClient(
+  account: AccountRow,
+): Promise<{ creds: RoRushCredentials; client: RoRushHttpClient } | null> {
   const jwtFromSession = decryptField(account.session_jwt_enc);
+  const storedApiKey = decryptField(account.api_key_enc)?.trim() || null;
   if (jwtFromSession) {
-    return {
+    const client = new RoRushHttpClient(
+      { jwt: jwtFromSession, apiKey: storedApiKey },
+      account.proxy_url,
+    );
+    const creds = await syncApiKeyFromRoRush(account.id, client, {
       jwt: jwtFromSession,
-      apiKey: decryptField(account.api_key_enc),
-    };
+      apiKey: storedApiKey,
+    });
+    return { creds, client };
   }
 
   const username = account.username;
   const password = decryptField(account.password_enc);
   if (!username || !password) return null;
 
-  const tempClient = new RoRushHttpClient({ jwt: "" }, account.proxy_url);
-  const login = await tempClient.loginEmail(username, password);
+  // Match verifyRoRushEmailPassword: do not invent x-api-key before login (site uses "" until bound).
+  const client = new RoRushHttpClient({ jwt: "", apiKey: storedApiKey ?? undefined }, account.proxy_url);
+  const login = await client.loginEmail(username, password);
   if (login.twoFactorToken) {
     throw new Error("Account requires 2FA; paste a session JWT instead.");
   }
@@ -91,18 +140,27 @@ export async function resolveCredentials(account: AccountRow): Promise<RoRushCre
   if (!jwt) {
     throw new Error(login.message ?? "Login failed");
   }
-  const apiKey = login.userInfo?.apiKey ?? parseApiKey(login) ?? null;
+  const loginHint = login.userInfo?.apiKey ?? parseApiKey(login) ?? null;
   const level = login.userInfo?.level;
   const walletToken = parseCurrentBalanceToken(login.userInfo ?? login);
+  client.setCredentials({ jwt, apiKey: loginHint ?? storedApiKey ?? undefined });
+  const creds = await syncApiKeyFromRoRush(account.id, client, { jwt, apiKey: loginHint ?? storedApiKey }, {
+    fromLogin: loginHint,
+  });
   updateAccount(account.id, {
     session_jwt_enc: encryptField(jwt),
-    api_key_enc: encryptField(apiKey),
+    api_key_enc: encryptField(creds.apiKey ?? null),
     last_error: null,
     status: "idle",
     ...(typeof level === "number" && Number.isFinite(level) ? { level: Math.trunc(level) } : {}),
     ...(walletToken ? { wallet_balance_token: walletToken } : {}),
   });
-  return { jwt, apiKey };
+  return { creds, client };
+}
+
+export async function resolveCredentials(account: AccountRow): Promise<RoRushCredentials | null> {
+  const opened = await openAuthenticatedClient(account);
+  return opened?.creds ?? null;
 }
 
 /** Vault lock often needs a fresh login (session cookies + JWT). Deposit/rain can reuse cached JWT. */
@@ -124,18 +182,18 @@ export async function ensureAuthenticated(accountId: number): Promise<{
   if (!account) throw new Error("Account not found");
 
   try {
-    let creds = await resolveCredentials(account);
-    if (!creds) throw new Error("No credentials configured");
+    let opened = await openAuthenticatedClient(account);
+    if (!opened) throw new Error("No credentials configured");
 
-    let client = new RoRushHttpClient(creds, account.proxy_url);
+    let { creds, client } = opened;
     ({ creds, client } = await refreshApiKeyFromRoRush(accountId, client, creds));
     const sessionInvalid = await validateSession(client);
     if (sessionInvalid) {
-      updateAccount(accountId, { session_jwt_enc: null, api_key_enc: null });
+      updateAccount(accountId, { session_jwt_enc: null });
       account = getAccount(accountId)!;
-      creds = await resolveCredentials(account);
-      if (!creds) throw new Error("Session expired and re-login failed");
-      client = new RoRushHttpClient(creds, account.proxy_url);
+      opened = await openAuthenticatedClient(account);
+      if (!opened) throw new Error("Session expired and re-login failed");
+      ({ creds, client } = opened);
       ({ creds, client } = await refreshApiKeyFromRoRush(accountId, client, creds));
       const stillBad = await validateSession(client);
       if (stillBad) throw new Error("Session expired and re-login failed");
@@ -177,7 +235,8 @@ async function refreshApiKeyFromRoRush(
     }
     updateAccount(accountId, { api_key_enc: encryptField(fromAuth) });
     const next = { ...creds, apiKey: fromAuth };
-    return { creds: next, client: new RoRushHttpClient(next, getAccount(accountId)?.proxy_url) };
+    client.setCredentials(next);
+    return { creds: next, client };
   } catch {
     return { creds, client };
   }

@@ -1,3 +1,4 @@
+import { readCurrentBalanceToken } from "./balance-token.js";
 import type { RoRushHttpClient } from "./http-client.js";
 import { RORUSH_PATHS } from "./endpoints.js";
 import { vaultLockApiDurationFromMinutes } from "./vault-lock.js";
@@ -25,7 +26,10 @@ function isEmptyObject(data: unknown): boolean {
 }
 
 async function prepareVaultSession(client: RoRushHttpClient): Promise<VaultSnapshot> {
-  await client.setBalanceToken("coin").catch(() => undefined);
+  const token = await readCurrentBalanceToken(client);
+  if (token !== "coin") {
+    await client.setBalanceToken("coin").catch(() => undefined);
+  }
   return fetchVaultSnapshot(client);
 }
 
@@ -34,16 +38,34 @@ type LockAttempt = { path: string; body: Record<string, string> };
 function lockAttempts(duration: string, apiKey: string | null | undefined): LockAttempt[] {
   const base = RORUSH_PATHS.vault.lock;
   const qCrypto = `${base}?currency=crypto`;
+  const qDuration = `${base}?duration=${encodeURIComponent(duration)}`;
+  const qCryptoDuration = `${qCrypto}&duration=${encodeURIComponent(duration)}`;
   const withKey =
     apiKey?.trim() ?
-      [`${base}?api_key=${encodeURIComponent(apiKey.trim())}`, `${qCrypto}&api_key=${encodeURIComponent(apiKey.trim())}`]
+      [
+        `${base}?api_key=${encodeURIComponent(apiKey.trim())}`,
+        `${qCrypto}&api_key=${encodeURIComponent(apiKey.trim())}`,
+      ]
     : [];
-  const paths = [base, qCrypto, ...withKey];
-  const bodies: Record<string, string>[] = [{ duration }, { duration, currency: "CRYPTO" }];
+  const paths = [base, qCrypto, qDuration, qCryptoDuration, ...withKey];
+  const bodies: Record<string, string>[] = [
+    { duration },
+    { duration, currency: "CRYPTO" },
+    { duration, currency: "crypto" },
+  ];
   const out: LockAttempt[] = [];
+  const seen = new Set<string>();
   for (const path of paths) {
     for (const body of bodies) {
+      const key = `${path}|${JSON.stringify(body)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
       out.push({ path, body });
+    }
+    const queryOnlyKey = `${path}|{}`;
+    if (!seen.has(queryOnlyKey)) {
+      seen.add(queryOnlyKey);
+      out.push({ path, body: {} });
     }
   }
   return out;
@@ -94,7 +116,14 @@ export async function lockVaultForMinutes(
     );
   }
 
-  await prepareVaultSession(client);
+  const before = await prepareVaultSession(client);
+  const beforeUnlock = before.unlockAtIso;
+  if (beforeUnlock && snapshotLocked(before)) {
+    const until = beforeUnlock.slice(11, 19);
+    throw new Error(
+      `Vault is already locked on RoRush until ${until} UTC. Wait for that timer, or unlock on the site, then try again.`,
+    );
+  }
 
   let lastData: unknown = null;
   let unlockAt: string | null = null;
@@ -118,22 +147,28 @@ export async function lockVaultForMinutes(
     }
   }
 
-  const finalPoll = await pollVaultLock(client, 2_000);
+  const finalPoll = await pollVaultLock(client, 5_000);
   if (finalPoll?.unlockAtIso && snapshotLocked(finalPoll)) {
     return { unlockAt: finalPoll.unlockAtIso, confirmedOnRoRush: true };
   }
 
-  if (unlockAt) {
-    return {
-      unlockAt,
-      confirmedOnRoRush: snapshotLocked({ balanceCoins: null, unlockAtIso: unlockAt }),
-    };
+  if (unlockAt && snapshotLocked({ balanceCoins: null, unlockAtIso: unlockAt })) {
+    return { unlockAt, confirmedOnRoRush: true };
   }
 
-  return {
-    unlockAt: vaultLockExpiresAtIso(minutes),
-    confirmedOnRoRush: false,
-  };
+  const emptyHint =
+    before.balanceCoins == null || before.balanceCoins < 0.01
+      ? " Vault balance is 0 — deposit a small amount on rorush.com, then lock once in the UI."
+      : "";
+  const keyHint = creds?.apiKey?.trim()
+    ? ""
+    : " Paste browser **apiKey** (Local Storage on rorush.com) via **`/account session`**.";
+  throw new Error(
+    "RoRush vault lock failed — /vault/info still shows no unlock timer." +
+      emptyHint +
+      keyHint +
+      " Run: npm run test-vault-lock -- --nick YOURNAME --verbose --lock 10m",
+  );
 }
 
 export async function depositCoinsToVault(
