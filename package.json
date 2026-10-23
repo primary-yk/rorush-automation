@@ -17,6 +17,7 @@
     "test-vault": "tsx scripts/test-vault.ts",
     "test-stats": "tsx scripts/test-stats.ts",
     "last-rain-errors": "tsx scripts/last-rain-errors.ts",
+    "show-daily-cases": "tsx scripts/show-daily-cases.ts",
     "test-captcha": "tsx scripts/test-captcha.ts",
     "discover-captcha": "tsx scripts/discover-rorush-captcha.ts",
     "test-limbo": "tsx scripts/test-limbo.ts",

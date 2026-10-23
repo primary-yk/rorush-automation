@@ -15,7 +15,12 @@ import { ensureAuthenticated } from "../accounts/session-manager.js";
 import { accountEligibleForCases } from "../accounts/account-automation.js";
 import { isIgnorableCaseError } from "./case-errors.js";
 import { applyCaseOpenOutcome } from "./case-open-complete.js";
-import { openRewardCaseOnHub, shouldScheduleRewardCase } from "./reward-cases.js";
+import {
+  normalizeDailyCasesInfoBody,
+  normalizeRewardCaseEntry,
+  openRewardCaseOnHub,
+  shouldScheduleRewardCase,
+} from "./reward-cases.js";
 
 function parseUnlockMs(value: unknown): number | null {
   if (typeof value === "number") return value;
@@ -62,9 +67,9 @@ export async function refreshCaseSchedulesForAccount(accountId: number): Promise
   };
 
   if (dailyInfo && typeof dailyInfo === "object") {
-    const d = dailyInfo as Record<string, unknown>;
+    const d = normalizeDailyCasesInfoBody(dailyInfo);
     for (const [key, kind] of Object.entries(KIND_BY_INFO_KEY)) {
-      const entry = d[key] as Record<string, unknown> | undefined;
+      const entry = normalizeRewardCaseEntry(d[key]);
       const caseId = entry?.caseId as string | undefined;
       if (!caseId) continue;
       const unlock = parseUnlockMs(entry?.unlockAt) ?? now;
@@ -109,9 +114,20 @@ export async function openDueCases(accountHubs: Map<number, RoRushHub>): Promise
         await hub.ensureCaseSubscribed();
       }
 
+      let rankId: string | null = null;
+      if (row.meta_json) {
+        try {
+          const meta = JSON.parse(row.meta_json) as { rankId?: string };
+          if (typeof meta.rankId === "string") rankId = meta.rankId;
+        } catch {
+          /* ignore bad meta */
+        }
+      }
+
       const outcome = await openRewardCaseOnHub(hub, {
         caseId: row.case_id,
         kind: row.case_kind as CaseKind,
+        rankId,
       });
 
       applyCaseOpenOutcome({

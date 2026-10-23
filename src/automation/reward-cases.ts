@@ -21,17 +21,58 @@ export type RewardCaseSlotStatus = {
   slot: RewardCaseSlot;
   label: string;
   caseId: string | null;
+  caseName: string | null;
   isAvailable: boolean;
   unlockAt: string | null;
+  rankId: string | null;
 };
+
+/** RoRush sometimes wraps payloads in `{ data: … }` or nests case under `case`. */
+export function normalizeDailyCasesInfoBody(raw: unknown): Record<string, unknown> {
+  if (!raw || typeof raw !== "object") return {};
+  const top = raw as Record<string, unknown>;
+  if (top.data != null && typeof top.data === "object") {
+    return top.data as Record<string, unknown>;
+  }
+  return top;
+}
+
+export function normalizeRewardCaseEntry(entry: unknown): Record<string, unknown> | undefined {
+  if (!entry || typeof entry !== "object") return undefined;
+  const e = entry as Record<string, unknown>;
+  const nested =
+    e.case != null && typeof e.case === "object" ? (e.case as Record<string, unknown>) : null;
+  const caseId =
+    typeof e.caseId === "string"
+      ? e.caseId
+      : nested && typeof nested.caseId === "string"
+        ? nested.caseId
+        : undefined;
+  if (!caseId) return undefined;
+  const caseName =
+    typeof e.caseName === "string"
+      ? e.caseName
+      : nested && typeof nested.caseName === "string"
+        ? nested.caseName
+        : undefined;
+  return {
+    ...e,
+    caseId,
+    caseName,
+    unlockAt: e.unlockAt ?? nested?.unlockAt,
+    isAvailable: e.isAvailable ?? nested?.isAvailable,
+    rankId: e.rankId ?? nested?.rankId,
+  };
+}
 
 export async function fetchRewardCaseSlots(client: RoRushHttpClient): Promise<RewardCaseSlotStatus[]> {
   const raw = await client.getDailyCasesInfo().catch(() => null);
-  const d = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const d = normalizeDailyCasesInfoBody(raw);
   return (Object.keys(REWARD_CASE_SLOT_META) as RewardCaseSlot[]).map((slot) => {
     const meta = REWARD_CASE_SLOT_META[slot];
-    const entry = d[meta.infoKey] as Record<string, unknown> | undefined;
+    const entry = normalizeRewardCaseEntry(d[meta.infoKey]);
     const caseId = typeof entry?.caseId === "string" ? entry.caseId : null;
+    const caseName = typeof entry?.caseName === "string" ? entry.caseName : null;
     const unlockAt =
       typeof entry?.unlockAt === "string"
         ? entry.unlockAt
@@ -39,7 +80,8 @@ export async function fetchRewardCaseSlots(client: RoRushHttpClient): Promise<Re
           ? new Date(entry.unlockAt).toISOString()
           : null;
     const isAvailable = entry?.isAvailable !== false;
-    return { slot, label: meta.label, caseId, isAvailable, unlockAt };
+    const rankId = typeof entry?.rankId === "string" ? entry.rankId : null;
+    return { slot, label: meta.label, caseId, caseName, isAvailable, unlockAt, rankId };
   });
 }
 
@@ -157,6 +199,7 @@ export async function openRewardCaseForAccount(input: {
   const outcome = await openRewardCaseOnHub(hub, {
     caseId: slotRow.caseId,
     kind: meta.kind,
+    rankId: slotRow.rankId,
   });
 
   return {
