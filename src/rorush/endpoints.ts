@@ -51,6 +51,17 @@ export const SIGNALR = {
     receiveResultAlt: "ReceiveLimboResult",
     receiveFailure: "ReceiveLimboFailure",
   },
+  mines: {
+    start: "StartMinesGame",
+    revealTile: "MinesRevealTile",
+    cashout: "MinesCashout",
+    getCurrent: "GetCurrentMinesGame",
+    receiveStartSuccess: "ReceiveMinesStartSuccess",
+    receiveRevealSuccess: "ReceiveMinesRevealTileSuccess",
+    receiveCashoutSuccess: "ReceiveMinesCashoutSuccess",
+    receiveCurrent: "ReceiveMinesCurrentGame",
+    receiveFailure: "ReceiveMinesFailure",
+  },
   caseUnboxing: {
     subscribe: "SubscribeCaseUnboxing",
     unsubscribe: "UnsubscribeCaseUnboxing",

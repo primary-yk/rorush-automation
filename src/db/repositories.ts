@@ -24,6 +24,11 @@ export type AccountRow = {
   limbo_wager_enabled: number;
   limbo_multiplier: number;
   limbo_bet_coins: number;
+  mines_auto_enabled: number;
+  mines_count: number;
+  mines_target_multiplier: number;
+  mines_random_tiles: number;
+  mines_auto_rains_remaining: number;
   pre_wager_before_rain: number;
   auto_vault_deposit: number;
   vault_lock_minutes: number;
@@ -223,11 +228,17 @@ export function updateAccount(
   next.automation_paused = Number(next.automation_paused) !== 0 ? 1 : 0;
   next.limbo_multiplier = clampLimboMultiplier(next.limbo_multiplier);
   next.limbo_bet_coins = clampLimboBetCoins(next.limbo_bet_coins);
+  next.mines_count = Math.min(24, Math.max(1, Math.trunc(Number(next.mines_count) || 3)));
+  next.mines_target_multiplier = Math.max(1.01, Number(next.mines_target_multiplier) || 2);
+  next.mines_auto_enabled = Number(next.mines_auto_enabled) !== 0 ? 1 : 0;
+  next.mines_random_tiles = Number(next.mines_random_tiles) !== 0 ? 1 : 0;
+  next.mines_auto_rains_remaining = Math.trunc(Number(next.mines_auto_rains_remaining) || 0);
   getDb()
     .prepare(
       `UPDATE accounts SET nickname = ?, owner_discord_id = ?, username = ?, password_enc = ?, session_jwt_enc = ?, api_key_enc = ?,
        proxy_url = ?, join_rain = ?, min_rain_amount = ?, auto_open_cases = ?, auto_redeem_codes = ?,
        min_code_level = ?, limbo_wager_enabled = ?, limbo_multiplier = ?, limbo_bet_coins = ?,
+       mines_auto_enabled = ?, mines_count = ?, mines_target_multiplier = ?, mines_random_tiles = ?, mines_auto_rains_remaining = ?,
        pre_wager_before_rain = ?, auto_vault_deposit = ?, vault_lock_minutes = ?, vault_lock_expires_at = ?,
        vault_session_auto_deposit = ?,
        automation_paused = ?,
@@ -251,6 +262,11 @@ export function updateAccount(
       next.limbo_wager_enabled,
       next.limbo_multiplier,
       next.limbo_bet_coins,
+      next.mines_auto_enabled ?? 0,
+      next.mines_count ?? 3,
+      next.mines_target_multiplier ?? 2,
+      next.mines_random_tiles ?? 1,
+      next.mines_auto_rains_remaining ?? 0,
       next.pre_wager_before_rain ?? 0,
       next.auto_vault_deposit ?? 0,
       next.vault_lock_minutes ?? 0,

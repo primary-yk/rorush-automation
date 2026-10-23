@@ -309,6 +309,27 @@ export class RoRushHub {
     await this.connection!.invoke(SIGNALR.limbo.play, payload);
   }
 
+  async startMinesGame(payload: {
+    reqId: string;
+    amount: number;
+    minesCount: number;
+    currency: string;
+    clientSeed: string;
+  }): Promise<void> {
+    await this.ensureConnected();
+    await this.connection!.invoke(SIGNALR.mines.start, payload);
+  }
+
+  async minesRevealTile(payload: { reqId: string; tilePosition: number }): Promise<void> {
+    await this.ensureConnected();
+    await this.connection!.invoke(SIGNALR.mines.revealTile, payload);
+  }
+
+  async minesCashout(reqId: string): Promise<void> {
+    await this.ensureConnected();
+    await this.connection!.invoke(SIGNALR.mines.cashout, reqId);
+  }
+
   async subscribeCaseUnboxing(): Promise<void> {
     await this.ensureConnected();
     await this.connection!.invoke(SIGNALR.caseUnboxing.subscribe);
