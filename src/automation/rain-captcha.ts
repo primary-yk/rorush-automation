@@ -1,9 +1,11 @@
 import {
+  captchaProviderLabel,
   isCaptchaRetryableTaskError,
   isTransientNetworkError,
   solveCaptcha,
   type CaptchaSolveOptions,
 } from "../captcha/solve.js";
+import { loadConfig } from "../config.js";
 import {
   captchaSolveLeadMs,
   effectiveRainForTiming,
@@ -171,10 +173,13 @@ function rainCaptchaDualStartEnabled(): boolean {
   return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
 }
 
-/** When join is already open and we have no token, fire two tasks at once (slow queue rescue). */
+/** When join is already open and we have no token, fire two tasks at once (slow 2Captcha rescue only). */
 function rainCaptchaLateParallelEnabled(): boolean {
   const raw = process.env.CAPTCHA_RAIN_LATE_PARALLEL?.trim().toLowerCase();
-  return !(raw === "0" || raw === "false" || raw === "no" || raw === "off");
+  if (raw === "1" || raw === "true" || raw === "yes" || raw === "on") return true;
+  if (raw === "0" || raw === "false" || raw === "no" || raw === "off") return false;
+  const provider = (loadConfig().CAPTCHA_PROVIDER ?? "nonecap").trim().toLowerCase();
+  return provider === "2captcha" || provider === "twocaptcha";
 }
 
 function isLateRainCaptchaStart(rain: RainState, now = Date.now()): boolean {
@@ -234,7 +239,7 @@ async function solveOneRainHcaptcha(rain: RainState, budgetKey: string): Promise
 
   if (lateParallel) {
     console.warn(
-      `[rain-captcha] LATE start (join open, no token) — 2 parallel 2Captcha tasks · poll up to ${Math.round((opts.cancelAfterMs ?? 90_000) / 1000)}s`,
+      `[rain-captcha] LATE start (join open, no token) — 2 parallel ${captchaProviderLabel()} tasks · poll up to ${Math.round((opts.cancelAfterMs ?? 90_000) / 1000)}s`,
     );
     recordPaidTask(budgetKey);
     recordPaidTask(budgetKey);
@@ -295,7 +300,7 @@ async function solveOneRainHcaptcha(rain: RainState, budgetKey: string): Promise
         });
     };
 
-    launch("primary 2Captcha task");
+    launch(`primary ${captchaProviderLabel()} task`);
     const dualDelayMs = Math.max(
       0,
       Number(process.env.CAPTCHA_RAIN_DUAL_START_DELAY_MS ?? 10_000) || 10_000,
@@ -314,12 +319,12 @@ async function solveOneRainHcaptcha(rain: RainState, budgetKey: string): Promise
 }
 
 async function solveWithWorkerRetries(rain: RainState, budgetKey: string): Promise<string | null> {
+  const provider = (loadConfig().CAPTCHA_PROVIDER ?? "nonecap").trim().toLowerCase();
+  const defaultRetries =
+    provider === "nonecap" || provider === "nonecap.com" ? 1 : rainCaptchaUrgent(rain) ? 2 : 1;
   const maxAttempts = Math.max(
     1,
-    Number(
-      process.env.RAIN_CAPTCHA_WORKER_RETRIES ??
-        (rainCaptchaUrgent(rain) ? 2 : 1),
-    ) || 1,
+    Number(process.env.RAIN_CAPTCHA_WORKER_RETRIES ?? defaultRetries) || defaultRetries,
   );
   let lastErr: unknown;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -425,7 +430,9 @@ function startSolveForSlot(
       appendLog({
         accountId: accountId ?? undefined,
         category: "rain",
-        message: workerFail ? "Rain captcha unsolvable (2Captcha)" : "Rain captcha solve failed",
+        message: workerFail
+          ? `Rain captcha unsolvable (${captchaProviderLabel()})`
+          : "Rain captcha solve failed",
         detail: `${rainId.slice(0, 8)}… · ${msg.slice(0, 200)} · retry in ~${Math.round(cooldown / 1000)}s`,
       });
       return null;

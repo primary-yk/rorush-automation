@@ -13,6 +13,7 @@ import { dmHostEmbeds, isFriendsHostMode } from "./host-alerts.js";
 import { preferFriendsBotFeedsOverWebhook } from "./friends-reporting.js";
 import { resolveDiscordReportWebhookUrl } from "./report-webhook.js";
 import { classifyRainJoinFailure, type RainJoinFailureKind } from "../automation/rain-join.js";
+import { captchaProviderLabel } from "../captcha/solve.js";
 import {
   COLORS,
   formatBalanceChange,
@@ -57,7 +58,7 @@ function rainJoinFailureEmbedCopy(kind: RainJoinFailureKind): {
       return {
         title: "Rain · Captcha issue",
         description:
-          "hCaptcha / 2Captcha did not complete a valid join for this pool. This is **not** a wager issue — check API key balance and host logs.",
+          `hCaptcha / **${captchaProviderLabel()}** did not complete a valid join for this pool. This is **not** a wager issue — check API key balance and host logs.`,
         color: COLORS.rainFail,
       };
     case "funcoin":
@@ -394,7 +395,7 @@ export async function reportRainOutcome(input: {
       if (/not ready before the join window/i.test(detail)) {
         title = "Rain · Captcha not ready";
         description =
-          "2Captcha did not finish before the join window closed. Top up **2Captcha**, confirm **CAPTCHA_API_KEY** in `.env`, and watch **#host-log** for solve errors.";
+          `${captchaProviderLabel()} did not finish before the join window closed. Top up credits, confirm **CAPTCHA_API_KEY** + **CAPTCHA_PROVIDER** in \`.env\`, and watch **#host-log**.`;
       } else if (/after submitting captcha/i.test(detail)) {
         title = "Rain · Captcha rejected";
         description =
@@ -473,7 +474,7 @@ export async function reportCaptchaBalanceLow(input: {
       { name: "Balance", value: `$${input.balanceUsd.toFixed(2)}`, inline: true },
       { name: "Alert below", value: `$${input.thresholdUsd.toFixed(2)}`, inline: true },
     ],
-    footer: { text: "2Captcha / CapSolver" },
+    footer: { text: captchaProviderLabel() },
   });
 }
 
@@ -486,12 +487,13 @@ export async function reportRainJoinWindowOpen(input: {
   windowSec: number;
 }): Promise<void> {
   const solving = input.captchaSolving ?? 0;
+  const provider = captchaProviderLabel();
   const desc =
     input.captchaReady >= input.captchaTotal
       ? "All captcha tokens ready — joining pilots now."
       : solving > 0
-        ? `${solving} solve(s) already running on 2Captcha. **0 ready at window open is normal** — joins fire when tokens land.`
-        : "Join stage is live. Waiting on 2Captcha (check balance if this stays 0/ready).";
+        ? `${solving} solve(s) running on **${provider}**. **0 ready at window open is normal** — joins fire when the token lands.`
+        : `Join stage is live. Waiting on **${provider}** (one solve per account).`;
   await deliverEmbed({
     title: "Rain — Join window open",
     description: desc,

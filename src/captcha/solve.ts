@@ -35,6 +35,14 @@ function siteKey(kind: CaptchaKind): string {
   return k;
 }
 
+export function captchaProviderLabel(): string {
+  const p = providerFromEnv();
+  if (p === "nonecap") return "NoneCap";
+  if (p === "capsolver") return "CapSolver";
+  if (p === "2captcha") return "2Captcha";
+  return "captcha provider";
+}
+
 function providerFromEnv(): CaptchaProvider | "auto" {
   const raw = (loadConfig().CAPTCHA_PROVIDER ?? "nonecap").trim().toLowerCase();
   if (raw === "2captcha" || raw === "twocaptcha") return "2captcha";
