@@ -9,6 +9,7 @@
 | `/mines auto` | Turn on: mine count, target multiplier, random tiles yes/no, **wallet** (real / FunCoins), stop after N rains |
 | `/mines stop` | Turn off mines auto for an account |
 | `/mines status` | Show remaining rain rounds and settings |
+| `/mines test` | One test round (pick **real** or **FunCoins** wallet; no vault) |
 
 **Wallet:** `wallet:real` (default) uses **real coins** and vaults cashout profit. `wallet:funcoins` uses **FunCoins** on RoRush (good for testing); winnings are **not** sent to vault.
 

@@ -41,6 +41,7 @@ import {
   minesStatusForUser,
   setMinesAutoForUser,
   stopMinesAutoForUser,
+  testMinesForDiscordUser,
 } from "./mines-commands.js";
 import { runFriendsServerSetup } from "./friends-server-setup.js";
 import { autoConnectFeedOnJoin } from "./friends-auto-connect.js";
@@ -405,6 +406,34 @@ function buildSlashCommands() {
         .setName("status")
         .setDescription("Mines auto settings")
         .addStringOption((o) => savedAccountOption(o, { required: false })),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("test")
+        .setDescription("One manual mines round (real coins or FunCoins)")
+        .addStringOption((o) => savedAccountOption(o))
+        .addNumberOption((o) =>
+          o.setName("bet").setDescription("Bet in coins (uses selected wallet)").setRequired(true).setMinValue(0.01),
+        )
+        .addIntegerOption((o) =>
+          o.setName("mines").setDescription("Mines on grid (1–24)").setRequired(true).setMinValue(1).setMaxValue(24),
+        )
+        .addNumberOption((o) =>
+          o.setName("target").setDescription("Cash out at this multiplier").setRequired(true).setMinValue(1.01),
+        )
+        .addBooleanOption((o) =>
+          o.setName("random").setDescription("Random tiles? No = board in your feed").setRequired(true),
+        )
+        .addStringOption((o) =>
+          o
+            .setName("wallet")
+            .setDescription("Real coins or FunCoins")
+            .setRequired(true)
+            .addChoices(
+              { name: "Real coins", value: "real" },
+              { name: "FunCoins", value: "funcoins" },
+            ),
+        ),
     ),
   new SlashCommandBuilder().setName("pause").setDescription("Staff: pause entire engine (all accounts)"),
   new SlashCommandBuilder().setName("resume").setDescription("Staff: resume entire engine"),
@@ -1221,6 +1250,23 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
       if (sub === "status") {
         const text = minesStatusForUser(userId, accountOpt);
         await replyWithResult(interaction, text, { accountNickname: accountOpt });
+        return;
+      }
+      if (sub === "test") {
+        const { parseMinesWalletMode } = await import("../automation/mines-currency.js");
+        const walletRaw = interaction.options.getString("wallet", true);
+        const text = await testMinesForDiscordUser({
+          discordUserId: userId,
+          nickname: interaction.options.getString("account", true),
+          betCoins: interaction.options.getNumber("bet", true),
+          minesCount: interaction.options.getInteger("mines", true),
+          targetMultiplier: interaction.options.getNumber("target", true),
+          randomTiles: interaction.options.getBoolean("random", true),
+          walletMode: parseMinesWalletMode(walletRaw === "funcoins" ? "funCoin" : "coin"),
+        });
+        await replyWithResult(interaction, text, {
+          accountNickname: interaction.options.getString("account", true),
+        });
         return;
       }
     }

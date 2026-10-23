@@ -1061,6 +1061,18 @@ export class AutomationEngine {
     });
   }
 
+  async testMines(input: {
+    accountId: number;
+    betCoins: number;
+    minesCount: number;
+    targetMultiplier: number;
+    randomTiles: boolean;
+    walletMode: import("../automation/mines-currency.js").MinesWalletMode;
+  }) {
+    const { runTestMinesRound } = await import("../automation/mines-test.js");
+    return runTestMinesRound({ ...input, hubs: this.accountHubs });
+  }
+
   async openRewardCase(
     accountId: number,
     slot: import("../automation/reward-cases.js").RewardCaseSlot,

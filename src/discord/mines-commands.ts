@@ -63,6 +63,52 @@ export function stopMinesAutoForUser(discordUserId: string, nickname?: string): 
   return `**${account.nickname}** · Mines auto **OFF**.`;
 }
 
+export async function testMinesForDiscordUser(input: {
+  discordUserId: string;
+  nickname: string;
+  betCoins: number;
+  minesCount: number;
+  targetMultiplier: number;
+  randomTiles: boolean;
+  walletMode: MinesWalletMode;
+}): Promise<string> {
+  const account = findOwnedAccount(input.discordUserId, input.nickname);
+  if (!account) return `No account **${input.nickname}** saved for you. Use **/account add**.`;
+
+  const minesCount = Math.min(24, Math.max(1, Math.trunc(input.minesCount)));
+  const target = Math.max(1.01, input.targetMultiplier);
+  if (!Number.isFinite(input.betCoins) || input.betCoins < 0.01) {
+    return "Mines test bet must be at least **0.01** coins.";
+  }
+
+  const result = await engine.testMines({
+    accountId: account.id,
+    betCoins: input.betCoins,
+    minesCount,
+    targetMultiplier: target,
+    randomTiles: input.randomTiles,
+    walletMode: input.walletMode,
+  });
+
+  const wallet = minesWalletLabel(input.walletMode);
+
+  if (result.mode === "manual_started") {
+    return (
+      `**${account.nickname}** · Test mines started (**${wallet}** · **${result.betCoins.toFixed(2)}** coins).\n` +
+      "Check your **private feed thread** for the 5×5 board. Results post there when the round finishes."
+    );
+  }
+
+  const { outcome, betCoins } = result;
+  if (!outcome.ok) {
+    return `**${account.nickname}** · Mines test failed — ${outcome.reason}`;
+  }
+  const label = outcome.hit ? "Cashed out" : "Bomb";
+  return (
+    `**${account.nickname}** · Test mines **${label}** · **${wallet}** · **${betCoins.toFixed(2)}** coins · **${outcome.multiplier.toFixed(2)}×** (no vault on test)`
+  );
+}
+
 export function minesStatusForUser(discordUserId: string, nickname?: string): string {
   const account = findOwnedAccount(discordUserId, nickname);
   if (!account) return "No linked account found.";
