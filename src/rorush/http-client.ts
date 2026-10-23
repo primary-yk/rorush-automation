@@ -75,7 +75,8 @@ export class RoRushHttpClient {
       try {
         data = text ? (JSON.parse(text) as T) : ({} as T);
       } catch {
-        data = {} as T;
+        // Some RoRush endpoints return a bare ISO timestamp string (not JSON object).
+        data = (text.trim() || null) as T;
       }
       if (!res.ok) {
         const errBody = data as ApiErrorBody & { error?: string; title?: string };

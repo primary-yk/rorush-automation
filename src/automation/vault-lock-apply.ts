@@ -38,15 +38,14 @@ export async function startVaultSession(input: {
   if (!account) return "Account not found.";
   if (input.lockMinutes <= 0) throw new Error("Invalid vault lock duration.");
 
-  updateAccount(account.id, {
-    vault_lock_minutes: input.lockMinutes,
-    vault_session_auto_deposit: input.vaultRainDuringLock ? 1 : 0,
-  });
-
   const { client } = await ensureAuthenticated(account.id);
   const lock = await lockVaultForMinutes(client, input.lockMinutes);
   const expires = lock.unlockAt;
-  updateAccount(account.id, { vault_lock_expires_at: expires });
+  updateAccount(account.id, {
+    vault_lock_minutes: input.lockMinutes,
+    vault_session_auto_deposit: input.vaultRainDuringLock ? 1 : 0,
+    vault_lock_expires_at: expires,
+  });
 
   const label = formatVaultLockPreset(input.lockMinutes);
   appendLog({

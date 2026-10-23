@@ -48,8 +48,11 @@ export async function lockVaultForMinutes(
   if (!unlockAt) {
     unlockAt = await fetchVaultUnlockAt(client);
   }
-  if (!unlockAt) {
-    unlockAt = vaultLockExpiresAtIso(minutes);
+  if (!unlockAt || !isVaultLockActive(unlockAt)) {
+    throw new Error(
+      "RoRush did not confirm a vault lock (no unlock timer on the site). " +
+        "Log in on rorush.com, try locking vault once in the UI, then run `/rorush vault` again.",
+    );
   }
   return { unlockAt };
 }
@@ -58,8 +61,20 @@ export async function fetchVaultUnlockAt(
   client: RoRushHttpClient,
   currency: VaultCurrency = "CRYPTO",
 ): Promise<string | null> {
-  const info = await client.request<unknown>(`${RORUSH_PATHS.vault.info}?currency=${currency.toLowerCase()}`);
-  return parseVaultUnlockAt(info);
+  const paths = [
+    RORUSH_PATHS.vault.info,
+    `${RORUSH_PATHS.vault.info}?currency=${currency.toLowerCase()}`,
+  ];
+  for (const path of paths) {
+    try {
+      const info = await client.request<unknown>(path);
+      const unlockAt = parseVaultUnlockAt(info);
+      if (unlockAt) return unlockAt;
+    } catch {
+      /* try alternate path */
+    }
+  }
+  return null;
 }
 
 export function vaultLockExpiresAtIso(minutes: number, fromMs = Date.now()): string {

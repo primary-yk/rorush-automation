@@ -21,8 +21,11 @@ export function parseVaultUnlockAt(body: unknown): string | null {
   if (!body || typeof body !== "object") return null;
 
   const record = body as Record<string, unknown>;
-  if (record.unlockAt !== undefined && record.unlockAt !== null) {
-    return parseVaultUnlockAt(record.unlockAt);
+  for (const key of ["unlockAt", "lockedUntil", "unlockTime", "vaultUnlockAt"] as const) {
+    if (record[key] !== undefined && record[key] !== null) {
+      const parsed = parseVaultUnlockAt(record[key]);
+      if (parsed) return parsed;
+    }
   }
 
   const inner = unwrapPayload(record);

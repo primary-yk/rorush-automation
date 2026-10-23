@@ -23,6 +23,12 @@ describe("vault-lock presets", () => {
     expect(parseVaultUnlockAt({ data: "2026-10-21T20:17:00.000Z" })).toBe(
       "2026-10-21T20:17:00.000Z",
     );
+    expect(
+      parseVaultUnlockAt({ balance: 5000, unlockAt: "2026-10-21T20:17:00.000Z" }),
+    ).toBe("2026-10-21T20:17:00.000Z");
+    expect(parseVaultUnlockAt({ lockedUntil: "2026-10-21T20:17:00.000Z" })).toBe(
+      "2026-10-21T20:17:00.000Z",
+    );
   });
 
   it("maps minutes to RoRush lock API duration tokens", () => {
