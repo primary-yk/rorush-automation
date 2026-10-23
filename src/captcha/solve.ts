@@ -2,7 +2,12 @@ import { fetch } from "undici";
 import { captchaApiKey, loadConfig, reloadEnv } from "../config.js";
 
 export type CaptchaKind = "hcaptcha" | "turnstile";
-export type CaptchaProvider = "2captcha" | "capsolver";
+import { parseCaptchaApiBody } from "./parse-body.js";
+import { solveNonecapHcaptcha, verifyNonecapKey } from "./nonecap.js";
+
+export type CaptchaProvider = "2captcha" | "capsolver" | "nonecap";
+
+export { parseCaptchaApiBody } from "./parse-body.js";
 
 const DEFAULT_HCAPTCHA_SITEKEY = "d5eed048-d092-4296-8496-a040aaccc710";
 const PAGE_URL = process.env.RORUSH_SITE_URL ?? "https://rorush.com/";
@@ -31,9 +36,10 @@ function siteKey(kind: CaptchaKind): string {
 }
 
 function providerFromEnv(): CaptchaProvider | "auto" {
-  const raw = (loadConfig().CAPTCHA_PROVIDER ?? "2captcha").trim().toLowerCase();
+  const raw = (loadConfig().CAPTCHA_PROVIDER ?? "nonecap").trim().toLowerCase();
   if (raw === "2captcha" || raw === "twocaptcha") return "2captcha";
   if (raw === "capsolver") return "capsolver";
+  if (raw === "nonecap" || raw === "nonecap.com") return "nonecap";
   return "auto";
 }
 
@@ -45,37 +51,6 @@ function isTransientNetworkError(err: unknown): boolean {
 function isJsonParseError(err: unknown): boolean {
   return err instanceof SyntaxError || /JSON|Unexpected token|non-whitespace character after JSON/i.test(
     err instanceof Error ? err.message : String(err),
-  );
-}
-
-/** Some proxies/WSL setups prepend junk (e.g. `200 `) before JSON — res.json() then fails at position 4. */
-export function parseCaptchaApiBody(text: string, context: string): unknown {
-  let s = text.trim();
-  if (s.charCodeAt(0) === 0xfeff) s = s.slice(1).trim();
-  if (!s) {
-    throw new Error(`Empty captcha API response (${context})`);
-  }
-
-  const tryParse = (raw: string): unknown | null => {
-    try {
-      return JSON.parse(raw) as unknown;
-    } catch {
-      return null;
-    }
-  };
-
-  let parsed = tryParse(s);
-  if (parsed !== null) return parsed;
-
-  const jsonStart = s.search(/[{\[]/);
-  if (jsonStart > 0) {
-    parsed = tryParse(s.slice(jsonStart));
-    if (parsed !== null) return parsed;
-  }
-
-  const preview = s.slice(0, 160).replace(/\s+/g, " ");
-  throw new Error(
-    `Captcha API returned non-JSON (${context}): ${preview}${s.length > 160 ? "…" : ""}`,
   );
 }
 
@@ -109,6 +84,10 @@ async function postJson(url: string, body: unknown, attempt = 1): Promise<unknow
 }
 
 export async function detectCaptchaProvider(clientKey: string): Promise<CaptchaProvider | null> {
+  if (clientKey.trim().startsWith("nc_live_")) {
+    const v = await verifyNonecapKey(clientKey);
+    if (v.ok) return "nonecap";
+  }
   const probes: Array<{ provider: CaptchaProvider; url: string }> = [
     { provider: "2captcha", url: "https://api.2captcha.com/getBalance" },
     { provider: "capsolver", url: "https://api.capsolver.com/getBalance" },
@@ -163,9 +142,13 @@ function resultUrl(provider: CaptchaProvider): string {
 }
 
 function providerHint(provider: CaptchaProvider): string {
-  return provider === "capsolver"
-    ? "capsolver.com API key → CAPTCHA_PROVIDER=capsolver in .env"
-    : "2captcha.com API key → CAPTCHA_PROVIDER=2captcha in .env";
+  if (provider === "capsolver") {
+    return "capsolver.com API key → CAPTCHA_PROVIDER=capsolver in .env";
+  }
+  if (provider === "nonecap") {
+    return "nonecap.com API key (nc_live_…) → CAPTCHA_PROVIDER=nonecap in .env";
+  }
+  return "2captcha.com API key → CAPTCHA_PROVIDER=2captcha in .env";
 }
 
 function cancelUrl(provider: CaptchaProvider): string {
@@ -204,7 +187,7 @@ export function captchaTaskSummary(kind: CaptchaKind = "hcaptcha"): {
 } {
   const forced = providerFromEnv();
   const provider: CaptchaProvider | "auto" = forced === "auto" ? "auto" : forced;
-  const p: CaptchaProvider = provider === "auto" ? "2captcha" : provider;
+  const p: CaptchaProvider = provider === "auto" ? "nonecap" : provider;
   const websiteKey = siteKey(kind);
   const task = buildTask(p, kind, websiteKey);
   return {
@@ -314,7 +297,7 @@ async function pollTaskUntilReady(
   const waitedSec = ((Date.now() - started) / 1000).toFixed(0);
   throw new Error(
     `Captcha solve timed out after ~${waitedSec}s (${maxPolls} polls, last status ${lastStatus}). ` +
-      "2Captcha queue may be slow — use CAPTCHA_VERBOSE=1, rain dual-start env vars, or a faster hCaptcha provider when integrated. " +
+      "Captcha queue may be slow — use CAPTCHA_VERBOSE=1 or rain dual-start env vars. " +
       "Keep npm run dev up during tip stage for prewarm.",
   );
 }
@@ -327,12 +310,31 @@ async function createAndPollOnceWithOpts(
   attempts: number,
   cancelAfterMs: number,
 ): Promise<string> {
-  const websiteKey = siteKey(kind);
-  const task = buildTask(provider, kind, websiteKey);
   const clientKeyClean = clientKey.trim();
   if (!clientKeyClean) {
     throw new Error("CAPTCHA_API_KEY is empty after trim — fix .env in ~/rush-pilot");
   }
+
+  if (provider === "nonecap") {
+    if (kind !== "hcaptcha") {
+      throw new Error("NoneCap only supports hCaptcha — use CAPTCHA_PROVIDER=2captcha for Turnstile.");
+    }
+    if (attempt === 1 || /^(1|true|yes|on)$/i.test(process.env.CAPTCHA_VERBOSE?.trim() ?? "")) {
+      console.log(
+        `[captcha] NoneCap solve · key ${siteKey(kind).slice(0, 8)}… · url ${PAGE_URL}` +
+          (attempts > 1 ? ` · attempt ${attempt}/${attempts}` : ""),
+      );
+    }
+    return solveNonecapHcaptcha({
+      apiKey: clientKeyClean,
+      sitekey: siteKey(kind),
+      pageUrl: PAGE_URL,
+      cancelAfterMs,
+    });
+  }
+
+  const websiteKey = siteKey(kind);
+  const task = buildTask(provider, kind, websiteKey);
 
   const createJson = (await postJson(createUrl(provider), {
     clientKey: clientKeyClean,
@@ -346,8 +348,7 @@ async function createAndPollOnceWithOpts(
       "createTask rejected the API key";
     throw new Error(
       `${desc}\n\n` +
-        "Copy the key from 2captcha.com → Settings → API Key (32 hex chars, no quotes). " +
-        "In .env use exactly: CAPTCHA_API_KEY=your_key  and CAPTCHA_PROVIDER=2captcha",
+        `Copy the key from your captcha provider dashboard. In .env: CAPTCHA_API_KEY=… and ${providerHint(provider)}`,
     );
   }
 
@@ -445,8 +446,31 @@ export async function verify2CaptchaKey(clientKey: string): Promise<{
   }
 }
 
-export async function fetchCaptchaBalance(clientKey: string): Promise<number | null> {
+export async function verifyCaptchaKey(clientKey: string): Promise<{
+  ok: boolean;
+  balance?: number;
+  balanceUnit?: "usd" | "credits";
+  errorCode?: string;
+  errorDescription?: string;
+}> {
+  const forced = providerFromEnv();
+  const useNonecap =
+    forced === "nonecap" ||
+    (forced === "auto" && clientKey.trim().startsWith("nc_live_"));
+  if (useNonecap) {
+    const v = await verifyNonecapKey(clientKey);
+    return v.ok
+      ? { ok: true, balance: v.credits, balanceUnit: "credits" }
+      : { ok: false, errorDescription: v.errorDescription };
+  }
   const v = await verify2CaptchaKey(clientKey);
+  return v.ok
+    ? { ok: true, balance: v.balance, balanceUnit: "usd" }
+    : { ok: false, errorCode: v.errorCode, errorDescription: v.errorDescription };
+}
+
+export async function fetchCaptchaBalance(clientKey: string): Promise<number | null> {
+  const v = await verifyCaptchaKey(clientKey);
   return v.ok && v.balance != null ? v.balance : null;
 }
 
@@ -469,8 +493,8 @@ export async function resolveCaptchaProvider(
     cachedProvider = detected;
     return detected;
   }
-  cachedProvider = "2captcha";
-  return "2captcha";
+  cachedProvider = "nonecap";
+  return "nonecap";
 }
 
 export async function solveCaptcha(
@@ -487,7 +511,7 @@ export async function solveCaptcha(
   } catch (firstErr) {
     const forced = providerFromEnv();
     if (forced !== "auto") throw firstErr;
-    const others: CaptchaProvider[] = (["2captcha", "capsolver"] as const).filter(
+    const others: CaptchaProvider[] = (["nonecap", "2captcha", "capsolver"] as const).filter(
       (p) => p !== provider,
     );
     for (const alt of others) {

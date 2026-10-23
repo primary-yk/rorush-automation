@@ -1,5 +1,5 @@
 import { captchaApiKey, loadConfig } from "../config.js";
-import { verify2CaptchaKey } from "./solve.js";
+import { verifyCaptchaKey } from "./solve.js";
 
 export type CaptchaBalanceSnapshot = {
   configured: boolean;
@@ -39,9 +39,9 @@ export async function fetchCaptchaBalanceSnapshot(force = false): Promise<Captch
     return cached;
   }
 
-  const provider = (cfg.CAPTCHA_PROVIDER ?? "2captcha").trim();
+  const provider = (cfg.CAPTCHA_PROVIDER ?? "nonecap").trim();
   try {
-    const result = await verify2CaptchaKey(key);
+    const result = await verifyCaptchaKey(key);
     if (!result.ok) {
       cached = {
         configured: true,
@@ -53,12 +53,20 @@ export async function fetchCaptchaBalanceSnapshot(force = false): Promise<Captch
         error: result.errorDescription ?? result.errorCode ?? "Balance check failed",
       };
     } else {
-      const bal = result.balance ?? null;
+      const raw = result.balance ?? null;
+      const estimateUsd =
+        Math.max(0.0001, Number(process.env.CAPTCHA_ESTIMATE_USD ?? 0.003) || 0.003);
+      const balUsd =
+        raw != null
+          ? result.balanceUnit === "credits"
+            ? raw * estimateUsd
+            : raw
+          : null;
       cached = {
         configured: true,
         provider,
-        balanceUsd: bal,
-        lowBalance: bal != null && bal < lowThresholdUsd(),
+        balanceUsd: balUsd,
+        lowBalance: balUsd != null && balUsd < lowThresholdUsd(),
         lowBalanceThresholdUsd: lowThresholdUsd(),
         checkedAtMs: now,
         error: null,

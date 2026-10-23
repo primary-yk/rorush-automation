@@ -374,13 +374,13 @@ export class AutomationEngine {
       appendLog({
         category: "system",
         message: "Captcha balance low",
-        detail: `$${snap.balanceUsd.toFixed(2)} · add funds to ${snap.provider ?? "2captcha"}`,
+        detail: `$${snap.balanceUsd.toFixed(2)} · add funds to ${snap.provider ?? "nonecap"}`,
       });
       this.captchaLowBalanceAlerted = true;
       void reportCaptchaBalanceLow({
         balanceUsd: snap.balanceUsd,
         thresholdUsd: snap.lowBalanceThresholdUsd,
-        provider: snap.provider ?? "2captcha",
+        provider: snap.provider ?? "nonecap",
       });
     }
     if (!snap.lowBalance) this.captchaLowBalanceAlerted = false;

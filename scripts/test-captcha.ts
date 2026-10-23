@@ -11,7 +11,7 @@ import {
   detectCaptchaProvider,
   resolveCaptchaProvider,
   solveCaptcha,
-  verify2CaptchaKey,
+  verifyCaptchaKey,
 } from "../src/captcha/solve.js";
 
 async function main() {
@@ -20,39 +20,36 @@ async function main() {
   const key = captchaApiKey(cfg);
   if (!key) {
     console.error("\nCAPTCHA_API_KEY is not set in .env");
-    console.error("1. Sign up at https://2captcha.com (or capsolver.com)");
-    console.error("2. Add to ~/rush-pilot/.env:");
-    console.error("   CAPTCHA_API_KEY=your_key_here");
-    console.error("   CAPTCHA_PROVIDER=2captcha");
-    console.error("3. Restart npm run dev (Ctrl+C, then npm run dev again)");
+    console.error("1. Sign up at https://nonecap.com (or 2captcha.com / capsolver.com)");
+    console.error("2. Add to .env:");
+    console.error("   CAPTCHA_API_KEY=nc_live_…   # NoneCap");
+    console.error("   CAPTCHA_PROVIDER=nonecap");
+    console.error("3. Restart the bot (pm2 restart … or npm run dev)");
     process.exit(1);
   }
   console.log("Captcha API key:", captchaKeyFingerprint(key));
-  if (!/^[a-f0-9]{32}$/i.test(key)) {
-    console.warn(
-      "Warning: 2Captcha keys are usually 32 hex characters. Yours may be mistyped or include hidden characters.",
-    );
-  }
 
-  const verify = await verify2CaptchaKey(key);
+  const verify = await verifyCaptchaKey(key);
   if (!verify.ok) {
-    console.error("\n2Captcha rejected this API key (getBalance failed):");
+    console.error("\nCaptcha provider rejected this API key:");
     console.error(" ", verify.errorDescription ?? verify.errorCode ?? "unknown error");
-    console.error("\nFix ~/rush-pilot/.env — one line, no quotes, no spaces:");
-    console.error("  CAPTCHA_API_KEY=<paste from 2captcha.com → API Key>");
-    console.error("  CAPTCHA_PROVIDER=2captcha");
-    console.error("\nRemove duplicate CAPTCHA_API_KEY or old CAPMONSTER lines if the wrong one wins.");
-    console.error("Then: npm run test-captcha");
+    console.error("\nFix .env — one line, no quotes:");
+    console.error("  CAPTCHA_API_KEY=<key from dashboard>");
+    console.error("  CAPTCHA_PROVIDER=nonecap   # or 2captcha / capsolver");
     process.exit(1);
   }
-  console.log("2Captcha balance: $" + verify.balance!.toFixed(2));
+  if (verify.balanceUnit === "credits") {
+    console.log("NoneCap credits:", verify.balance);
+  } else {
+    console.log("Captcha balance: $" + verify.balance!.toFixed(2));
+  }
 
   const detected = await detectCaptchaProvider(key);
   const provider = await resolveCaptchaProvider(key);
   console.log(
     "Captcha provider:",
     provider,
-    detected ? `(detected via balance: ${detected})` : "(from CAPTCHA_PROVIDER)",
+    detected ? `(detected: ${detected})` : "(from CAPTCHA_PROVIDER)",
   );
 
   const task = captchaTaskSummary("hcaptcha");
@@ -61,14 +58,14 @@ async function main() {
   console.log("Site key:", task.websiteKey);
   console.log(
     "Poll tuning:",
-    `CAPTCHA_POLL_MS=${process.env.CAPTCHA_POLL_MS ?? "1000 (default)"}`,
+    `CAPTCHA_POLL_MS=${process.env.CAPTCHA_POLL_MS ?? "500 (default)"}`,
     `CAPTCHA_MAX_POLLS=${process.env.CAPTCHA_MAX_POLLS ?? "180 (default)"}`,
     `CAPTCHA_TASK_ATTEMPTS=${process.env.CAPTCHA_TASK_ATTEMPTS ?? "2 (default)"}`,
     `CAPTCHA_CANCEL_AFTER_MS=${process.env.CAPTCHA_CANCEL_AFTER_MS ?? "110000 (default)"}`,
   );
 
   console.log(
-    "Requesting one hCaptcha token (often 30–120s; set CAPTCHA_VERBOSE=1 to see each poll)…",
+    "Requesting one hCaptcha token (often 10–90s; set CAPTCHA_VERBOSE=1 to see each poll)…",
   );
   const started = Date.now();
   const token = await solveCaptcha("hcaptcha");
@@ -78,19 +75,12 @@ async function main() {
     process.exit(1);
   }
   console.log("\nOK — captcha solve works. Token length:", token.length, `· ${sec}s`);
-  if (Number(sec) > 75) {
-    console.log(
-      "\nNote: >75s is usually provider queue load, not Rush Pilot.",
-      "Keep npm run dev running before rain so prewarm finishes during tip stage.",
-    );
-  }
 }
 
 main().catch((e) => {
   console.error("\nFailed:", e instanceof Error ? e.message : String(e));
   console.error(
-    "\nTips: CAPTCHA_VERBOSE=1 · CAPTCHA_PROVIDER=auto (try CapSolver if you have a key) ·",
-    "off-peak hours · open 2Captcha ticket if RoRush hCaptcha stays unsolvable.",
+    "\nTips: CAPTCHA_VERBOSE=1 · confirm CAPTCHA_PROVIDER matches your key (nonecap / 2captcha).",
   );
   process.exit(1);
 });

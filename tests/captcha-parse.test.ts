@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseCaptchaApiBody } from "../src/captcha/solve.js";
+import { parseCaptchaApiBody } from "../src/captcha/parse-body.js";
 
 describe("parseCaptchaApiBody", () => {
   it("parses plain JSON", () => {

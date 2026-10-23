@@ -67,16 +67,17 @@ const envSchema = z.object({
   RORUSH_PROXY_URL: z.string().optional(),
   CAPTCHA_PROVIDER: z
     .preprocess((v) => {
-      const s = String(v ?? "2captcha")
+      const s = String(v ?? "nonecap")
         .trim()
         .toLowerCase();
       if (s === "capmonster") return "2captcha";
       if (s === "twocaptcha") return "2captcha";
-      return s || "2captcha";
-    }, z.enum(["auto", "2captcha", "capsolver"]))
+      if (s === "nonecap.com") return "nonecap";
+      return s || "nonecap";
+    }, z.enum(["auto", "2captcha", "capsolver", "nonecap"]))
     .optional()
-    .default("2captcha"),
-  /** 2Captcha or CapSolver key (RoRush rain hCaptcha). */
+    .default("nonecap"),
+  /** NoneCap, 2Captcha, or CapSolver key (RoRush rain hCaptcha). */
   CAPTCHA_API_KEY: z.preprocess(normalizeCaptchaApiKey, z.string().optional()),
   /** Legacy alias — same as CAPTCHA_API_KEY if that is unset (dcd081d-era .env). */
   CAPMONSTER_API_KEY: z.preprocess(normalizeCaptchaApiKey, z.string().optional()),

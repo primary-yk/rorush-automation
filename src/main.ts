@@ -46,7 +46,7 @@ async function main() {
   const rainAccounts = listAccounts().filter((a) => a.join_rain);
   if (rainAccounts.length > 0 && !captchaApiKey(cfg)) {
     console.warn(
-      "WARNING: CAPTCHA_API_KEY missing — rain needs hCaptcha (2Captcha/CapSolver; CapMonster no longer supports hCaptcha API).",
+      "WARNING: CAPTCHA_API_KEY missing — rain needs hCaptcha (NoneCap / 2Captcha / CapSolver).",
     );
   }
   console.log(`Project root: ${projectRoot()}`);
