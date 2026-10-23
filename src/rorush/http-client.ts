@@ -29,6 +29,10 @@ export class RoRushHttpClient {
     this.creds = creds;
   }
 
+  getCredentials(): RoRushCredentials {
+    return { ...this.creds };
+  }
+
   copySessionFrom(other: RoRushHttpClient): void {
     for (const [k, v] of other.cookieJar.entries()) {
       this.cookieJar.set(k, v);

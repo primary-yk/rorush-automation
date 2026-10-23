@@ -107,7 +107,7 @@ export async function addAccountForDiscordUser(input: {
     username: input.email.trim(),
     password_enc: encryptField(input.password),
     session_jwt_enc: encryptField(verified.jwt),
-    api_key_enc: verified.apiKey ? encryptField(verified.apiKey) : null,
+    api_key_enc: encryptField(verified.apiKey ?? ""),
     proxy_url: null,
     owner_discord_id: input.discordUserId,
   });

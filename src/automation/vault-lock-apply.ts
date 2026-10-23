@@ -39,7 +39,9 @@ export async function startVaultSession(input: {
   if (input.lockMinutes <= 0) throw new Error("Invalid vault lock duration.");
 
   const { client, creds } = await ensureAuthenticatedForVault(account.id);
-  const lock = await lockVaultForMinutes(client, input.lockMinutes, creds);
+  const lock = await lockVaultForMinutes(client, input.lockMinutes, creds, {
+    accountId: account.id,
+  });
   const expires = lock.unlockAt;
   updateAccount(account.id, {
     vault_lock_minutes: input.lockMinutes,
@@ -63,8 +65,8 @@ export async function startVaultSession(input: {
   const lockLine = lock.confirmedOnRoRush
     ? `**${account.nickname}** · Vault locked **${label}** (withdraw blocked on RoRush until **${until} UTC**).`
     : [
-        `**${account.nickname}** · Vault lock **${label}** could not be confirmed on RoRush (bot timer **${until} UTC** for rain-vault session only).`,
-        "Deposits work but lock returned no site timer — open **rorush.com → Vault** while logged in as this account. If lock works there, paste browser **apiKey** (Local Storage) into **`/account session`** and retry **`/rorush vault`**.",
+        `**${account.nickname}** · Vault lock **${label}** — RoRush did not show a site timer; bot will still vault rain until **${until} UTC** if you enabled vault rain.`,
+        "Withdraw on the site may still work until RoRush applies the lock. Run **`/account refresh`**, then **`/rorush vault`** again if you need the site timer.",
       ].join("\n");
 
   return [lockLine, rainLine, "When the timer expires, **nothing re-locks** — run **`/rorush vault`** again if you want another lock."].join(

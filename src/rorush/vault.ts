@@ -1,3 +1,4 @@
+import { rotateAccountApiKey } from "../accounts/session-manager.js";
 import { readCurrentBalanceToken } from "./balance-token.js";
 import type { RoRushHttpClient } from "./http-client.js";
 import { RORUSH_PATHS } from "./endpoints.js";
@@ -100,11 +101,57 @@ export type VaultLockResult = {
   confirmedOnRoRush: boolean;
 };
 
+export type VaultLockOptions = {
+  /** Retry lock once with a fresh x-api-key (email/password accounts). */
+  accountId?: number;
+};
+
+async function runLockPass(
+  client: RoRushHttpClient,
+  duration: string,
+  apiKey: string | null | undefined,
+): Promise<VaultLockResult | null> {
+  let unlockAt: string | null = null;
+
+  for (const attempt of lockAttempts(duration, apiKey)) {
+    const lastData = await postVaultLock(client, attempt);
+    const apiMsg = extractRoRushErrorMessage(lastData);
+    if (apiMsg && !parseVaultUnlockAt(lastData)) {
+      throw new Error(`RoRush vault lock: ${apiMsg}`);
+    }
+    unlockAt = parseVaultUnlockAt(lastData);
+    if (unlockAt && snapshotLocked({ balanceCoins: null, unlockAtIso: unlockAt })) {
+      return { unlockAt, confirmedOnRoRush: true };
+    }
+    const polled = await pollVaultLock(client, 2_500);
+    if (polled?.unlockAtIso && snapshotLocked(polled)) {
+      return { unlockAt: polled.unlockAtIso, confirmedOnRoRush: true };
+    }
+    if (!isEmptyObject(lastData) && unlockAt) {
+      return {
+        unlockAt,
+        confirmedOnRoRush: snapshotLocked({ balanceCoins: null, unlockAtIso: unlockAt }),
+      };
+    }
+  }
+
+  const finalPoll = await pollVaultLock(client, 5_000);
+  if (finalPoll?.unlockAtIso && snapshotLocked(finalPoll)) {
+    return { unlockAt: finalPoll.unlockAtIso, confirmedOnRoRush: true };
+  }
+
+  if (unlockAt && snapshotLocked({ balanceCoins: null, unlockAtIso: unlockAt })) {
+    return { unlockAt, confirmedOnRoRush: true };
+  }
+  return null;
+}
+
 /** Timed vault lock — withdraw blocked on RoRush until duration elapses; deposits still allowed. */
 export async function lockVaultForMinutes(
   client: RoRushHttpClient,
   minutes: number,
   creds?: { apiKey?: string | null },
+  options?: VaultLockOptions,
 ): Promise<VaultLockResult> {
   if (!Number.isFinite(minutes) || minutes < 1) {
     throw new Error("Vault lock duration must be at least 1 minute");
@@ -125,50 +172,32 @@ export async function lockVaultForMinutes(
     );
   }
 
-  let lastData: unknown = null;
-  let unlockAt: string | null = null;
+  let apiKey = creds?.apiKey ?? null;
+  let confirmed = await runLockPass(client, duration, apiKey);
+  if (!confirmed && options?.accountId) {
+    const rotated = rotateAccountApiKey(options.accountId);
+    const current = client.getCredentials();
+    client.setCredentials({ ...current, apiKey: rotated });
+    apiKey = rotated;
+    confirmed = await runLockPass(client, duration, apiKey);
+  }
 
-  for (const attempt of lockAttempts(duration, creds?.apiKey)) {
-    lastData = await postVaultLock(client, attempt);
-    const apiMsg = extractRoRushErrorMessage(lastData);
-    if (apiMsg && !parseVaultUnlockAt(lastData)) {
-      throw new Error(`RoRush vault lock: ${apiMsg}`);
-    }
-    unlockAt = parseVaultUnlockAt(lastData);
-    if (unlockAt && snapshotLocked({ balanceCoins: null, unlockAtIso: unlockAt })) {
-      return { unlockAt, confirmedOnRoRush: true };
-    }
-    const polled = await pollVaultLock(client, 2_500);
-    if (polled?.unlockAtIso && snapshotLocked(polled)) {
-      return { unlockAt: polled.unlockAtIso, confirmedOnRoRush: true };
-    }
-    if (!isEmptyObject(lastData) && unlockAt) {
-      return { unlockAt, confirmedOnRoRush: snapshotLocked({ balanceCoins: null, unlockAtIso: unlockAt }) };
+  if (confirmed) {
+    return confirmed;
+  }
+
+  for (let i = 0; i < 8; i++) {
+    await new Promise((r) => setTimeout(r, i === 0 ? 200 : 400));
+    const snap = await fetchVaultSnapshot(client);
+    if (snap.unlockAtIso && snapshotLocked(snap)) {
+      return { unlockAt: snap.unlockAtIso, confirmedOnRoRush: true };
     }
   }
 
-  const finalPoll = await pollVaultLock(client, 5_000);
-  if (finalPoll?.unlockAtIso && snapshotLocked(finalPoll)) {
-    return { unlockAt: finalPoll.unlockAtIso, confirmedOnRoRush: true };
-  }
-
-  if (unlockAt && snapshotLocked({ balanceCoins: null, unlockAtIso: unlockAt })) {
-    return { unlockAt, confirmedOnRoRush: true };
-  }
-
-  const emptyHint =
-    before.balanceCoins == null || before.balanceCoins < 0.01
-      ? " Vault balance is 0 — deposit a small amount on rorush.com, then lock once in the UI."
-      : "";
-  const keyHint = creds?.apiKey?.trim()
-    ? ""
-    : " Paste browser **apiKey** (Local Storage on rorush.com) via **`/account session`**.";
-  throw new Error(
-    "RoRush vault lock failed — /vault/info still shows no unlock timer." +
-      emptyHint +
-      keyHint +
-      " Run: npm run test-vault-lock -- --nick YOURNAME --verbose --lock 10m",
-  );
+  return {
+    unlockAt: vaultLockExpiresAtIso(minutes),
+    confirmedOnRoRush: false,
+  };
 }
 
 export async function depositCoinsToVault(
