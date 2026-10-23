@@ -1003,24 +1003,6 @@ export async function settleRainForAccount(input: {
     });
   };
 
-  const { minesAutoActive, runMinesAfterRain } = await import("./mines-after-rain.js");
-  if (minesAutoActive(account) && earned != null && earned >= 0.01) {
-    try {
-      await runMinesAfterRain({
-        accountId,
-        rainId,
-        rainProfitCoins: earned,
-        client,
-        hubs,
-      });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      appendLog({ accountId, category: "mines", message: "Mines after rain failed", detail: msg });
-    }
-    await runVaultStep();
-    return;
-  }
-
   if (!account.limbo_wager_enabled) {
     await runVaultStep();
     return;

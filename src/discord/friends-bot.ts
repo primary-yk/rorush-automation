@@ -35,14 +35,11 @@ import {
   testLimboForDiscordUser,
 } from "./friends-commands.js";
 import { bindFriendsFeedClient, notifyStaffSlashError } from "./friends-feed.js";
-import { bindMinesBoardClient, MINES_BOARD_PREFIX } from "./mines-board.js";
-import { handleMinesTileButton } from "./mines-interaction.js";
 import {
-  minesStatusForUser,
-  setMinesAutoForUser,
-  stopMinesAutoForUser,
-  testMinesForDiscordUser,
-} from "./mines-commands.js";
+  scheduleStatusForUser,
+  startScheduleForUser,
+  stopScheduleForUser,
+} from "./schedule-commands.js";
 import { runFriendsServerSetup } from "./friends-server-setup.js";
 import { autoConnectFeedOnJoin } from "./friends-auto-connect.js";
 import { executeConnectForUser, FRIENDS_CONNECT_BUTTON_ID } from "./friends-connect.js";
@@ -360,80 +357,33 @@ function buildSlashCommands() {
         .addBooleanOption((o) => o.setName("pre_wager").setDescription("Small limbo before join window")),
     ),
   new SlashCommandBuilder()
-    .setName("mines")
-    .setDescription("Auto-bet rain profit on Mines (cashout → vault)")
+    .setName("schedule")
+    .setDescription("Run rain + cases for N hours, then auto-off")
     .addSubcommand((sub) =>
       sub
-        .setName("auto")
-        .setDescription("After each rain, bet rain profit on mines until N rains")
+        .setName("start")
+        .setDescription("Turn on rain & cases for a set number of hours")
         .addStringOption((o) => savedAccountOption(o))
-        .addIntegerOption((o) =>
-          o.setName("mines").setDescription("Mines on grid (1–24)").setRequired(true).setMinValue(1).setMaxValue(24),
-        )
         .addNumberOption((o) =>
-          o.setName("target").setDescription("Cash out at this multiplier (e.g. 5)").setRequired(true).setMinValue(1.01),
-        )
-        .addBooleanOption((o) =>
-          o.setName("random").setDescription("Random tiles? No = clickable board in your feed").setRequired(true),
-        )
-        .addIntegerOption((o) =>
           o
-            .setName("stop_after_rains")
-            .setDescription("Turn off after this many rains (e.g. 5)")
+            .setName("hours")
+            .setDescription("How long to run (e.g. 4)")
             .setRequired(true)
-            .setMinValue(1)
-            .setMaxValue(500),
-        )
-        .addStringOption((o) =>
-          o
-            .setName("wallet")
-            .setDescription("Real coins or FunCoins on RoRush")
-            .setRequired(false)
-            .addChoices(
-              { name: "Real coins (vault on cashout)", value: "real" },
-              { name: "FunCoins (practice — no vault)", value: "funcoins" },
-            ),
+            .setMinValue(0.25)
+            .setMaxValue(168),
         ),
     )
     .addSubcommand((sub) =>
       sub
         .setName("stop")
-        .setDescription("Turn off mines auto")
+        .setDescription("Cancel schedule and turn rain/cases off now")
         .addStringOption((o) => savedAccountOption(o, { required: false })),
     )
     .addSubcommand((sub) =>
       sub
         .setName("status")
-        .setDescription("Mines auto settings")
+        .setDescription("Time left on your schedule")
         .addStringOption((o) => savedAccountOption(o, { required: false })),
-    )
-    .addSubcommand((sub) =>
-      sub
-        .setName("test")
-        .setDescription("One manual mines round (real coins or FunCoins)")
-        .addStringOption((o) => savedAccountOption(o))
-        .addNumberOption((o) =>
-          o.setName("bet").setDescription("Bet in coins (uses selected wallet)").setRequired(true).setMinValue(0.01),
-        )
-        .addIntegerOption((o) =>
-          o.setName("mines").setDescription("Mines on grid (1–24)").setRequired(true).setMinValue(1).setMaxValue(24),
-        )
-        .addNumberOption((o) =>
-          o.setName("target").setDescription("Cash out at this multiplier").setRequired(true).setMinValue(1.01),
-        )
-        .addBooleanOption((o) =>
-          o.setName("random").setDescription("Random tiles? No = board in your feed").setRequired(true),
-        )
-        .addStringOption((o) =>
-          o
-            .setName("wallet")
-            .setDescription("Real coins or FunCoins")
-            .setRequired(true)
-            .addChoices(
-              { name: "Real coins", value: "real" },
-              { name: "FunCoins", value: "funcoins" },
-            ),
-        ),
     ),
   new SlashCommandBuilder().setName("pause").setDescription("Staff: pause entire engine (all accounts)"),
   new SlashCommandBuilder().setName("resume").setDescription("Staff: resume entire engine"),
@@ -518,7 +468,6 @@ export async function startFriendsDiscordBot(): Promise<void> {
 
   client.once(Events.ClientReady, async (c) => {
     bindFriendsFeedClient(client);
-    bindMinesBoardClient(client);
     const watching = botWatchingPresenceName();
     c.user.setPresence({
       activities: [{ name: watching, type: ActivityType.Watching }],
@@ -591,9 +540,6 @@ export async function startFriendsDiscordBot(): Promise<void> {
       if (isRemoveConfirmButton(interaction.customId)) {
         void handleRemoveAccountButton(interaction, interaction.user.id);
       }
-      if (interaction.customId.startsWith(MINES_BOARD_PREFIX)) {
-        void handleMinesTileButton(interaction);
-      }
     }
   });
 
@@ -663,7 +609,6 @@ export async function startFriendsDiscordBot(): Promise<void> {
     await client.destroy().catch(() => undefined);
     client = null;
     bindFriendsFeedClient(null);
-    bindMinesBoardClient(null);
     if (/disallowed intents/i.test(msg)) {
       throw new Error(`${msg} — ${serverMembersIntentHelp()} Or set DISCORD_SERVER_MEMBERS_INTENT=0 if the Portal toggle is off.`);
     }
@@ -675,7 +620,6 @@ export async function stopFriendsDiscordBot(): Promise<void> {
   await client?.destroy();
   client = null;
   bindFriendsFeedClient(null);
-  bindMinesBoardClient(null);
 }
 
 async function handleConnectButton(interaction: ButtonInteraction): Promise<void> {
@@ -1218,7 +1162,7 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
       return;
     }
 
-    if (interaction.commandName === "mines") {
+    if (interaction.commandName === "schedule") {
       const block = requirePaidSeat(userId);
       if (block) {
         await interaction.reply({ ephemeral: true, content: out(block) });
@@ -1227,46 +1171,25 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
       const sub = interaction.options.getSubcommand();
       await interaction.deferReply({ ephemeral: true });
       const accountOpt = interaction.options.getString("account") ?? undefined;
-      if (sub === "auto") {
-        const { parseMinesWalletMode } = await import("../automation/mines-currency.js");
-        const walletRaw = interaction.options.getString("wallet") ?? "real";
-        const text = await setMinesAutoForUser({
-          discordUserId: userId,
-          nickname: accountOpt,
-          minesCount: interaction.options.getInteger("mines", true),
-          targetMultiplier: interaction.options.getNumber("target", true),
-          randomTiles: interaction.options.getBoolean("random", true),
-          stopAfterRains: interaction.options.getInteger("stop_after_rains", true),
-          walletMode: parseMinesWalletMode(walletRaw === "funcoins" ? "funCoin" : "coin"),
-        });
-        await replyWithResult(interaction, text, { accountNickname: accountOpt });
-        return;
-      }
-      if (sub === "stop") {
-        const text = stopMinesAutoForUser(userId, accountOpt);
-        await replyWithResult(interaction, text, { accountNickname: accountOpt });
-        return;
-      }
-      if (sub === "status") {
-        const text = minesStatusForUser(userId, accountOpt);
-        await replyWithResult(interaction, text, { accountNickname: accountOpt });
-        return;
-      }
-      if (sub === "test") {
-        const { parseMinesWalletMode } = await import("../automation/mines-currency.js");
-        const walletRaw = interaction.options.getString("wallet", true);
-        const text = await testMinesForDiscordUser({
+      if (sub === "start") {
+        const text = await startScheduleForUser({
           discordUserId: userId,
           nickname: interaction.options.getString("account", true),
-          betCoins: interaction.options.getNumber("bet", true),
-          minesCount: interaction.options.getInteger("mines", true),
-          targetMultiplier: interaction.options.getNumber("target", true),
-          randomTiles: interaction.options.getBoolean("random", true),
-          walletMode: parseMinesWalletMode(walletRaw === "funcoins" ? "funCoin" : "coin"),
+          hours: interaction.options.getNumber("hours", true),
         });
         await replyWithResult(interaction, text, {
           accountNickname: interaction.options.getString("account", true),
         });
+        return;
+      }
+      if (sub === "stop") {
+        const text = await stopScheduleForUser(userId, accountOpt);
+        await replyWithResult(interaction, text, { accountNickname: accountOpt });
+        return;
+      }
+      if (sub === "status") {
+        const text = scheduleStatusForUser(userId, accountOpt);
+        await replyWithResult(interaction, text, { accountNickname: accountOpt });
         return;
       }
     }

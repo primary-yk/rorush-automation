@@ -102,6 +102,7 @@ export class AutomationEngine {
   private captchaLowBalanceAlerted = false;
   private captchaBalanceTimer: NodeJS.Timeout | null = null;
   private funCoinCheckTimer: NodeJS.Timeout | null = null;
+  private scheduleTimer: NodeJS.Timeout | null = null;
   private rainJoinWaitLogKeys = new Set<string>();
 
   private funCoinCheckIntervalMs(): number {
@@ -169,7 +170,12 @@ export class AutomationEngine {
     this.funCoinCheckTimer = setInterval(() => {
       void this.safeRun(this.periodicFunCoinWalletCheck());
     }, this.funCoinCheckIntervalMs());
+    this.scheduleTimer = setInterval(() => {
+      void this.safeRun(this.runScheduleExpiryTick());
+    }, 30_000);
     void this.safeRun(this.refreshAccountStats());
+    void this.safeRun(this.runScheduleExpiryTick());
+    void import("../discord/schedule-commands.js").then((m) => m.disableMinesOnAllAccounts());
     void this.safeRun(this.periodicFunCoinWalletCheck());
     void this.safeRun(this.checkCaptchaBalance());
   }
@@ -199,10 +205,17 @@ export class AutomationEngine {
     if (this.rainPrepTimer) clearInterval(this.rainPrepTimer);
     if (this.captchaBalanceTimer) clearInterval(this.captchaBalanceTimer);
     if (this.funCoinCheckTimer) clearInterval(this.funCoinCheckTimer);
+    if (this.scheduleTimer) clearInterval(this.scheduleTimer);
     await this.sharedRainHub?.disconnect();
     this.sharedRainHub = null;
     await this.accountHubs.disconnectAll();
     appendLog({ category: "system", message: "Automation engine stopped" });
+  }
+
+  private async runScheduleExpiryTick(): Promise<void> {
+    const { expireDueAccountSchedules } = await import("../automation/account-schedule.js");
+    const n = await expireDueAccountSchedules();
+    if (n > 0) await this.reloadAccounts();
   }
 
   private async safeRun(fn: Promise<void>): Promise<void> {
@@ -1059,18 +1072,6 @@ export class AutomationEngine {
       multiplier,
       hubs: this.accountHubs,
     });
-  }
-
-  async testMines(input: {
-    accountId: number;
-    betCoins: number;
-    minesCount: number;
-    targetMultiplier: number;
-    randomTiles: boolean;
-    walletMode: import("../automation/mines-currency.js").MinesWalletMode;
-  }) {
-    const { runTestMinesRound } = await import("../automation/mines-test.js");
-    return runTestMinesRound({ ...input, hubs: this.accountHubs });
   }
 
   async openRewardCase(

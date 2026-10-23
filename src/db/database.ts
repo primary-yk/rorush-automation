@@ -83,6 +83,7 @@ function migrateAccounts(db: Database.Database): void {
     ["vault_balance", "REAL"],
     ["wallet_balance_token", "TEXT"],
     ["automation_paused", "INTEGER NOT NULL DEFAULT 0"],
+    ["schedule_ends_at_ms", "INTEGER"],
   ];
   for (const [name, type] of add) {
     if (!cols.has(name)) {
@@ -104,6 +105,11 @@ function migrateAccounts(db: Database.Database): void {
   }
   if (cols.has("join_rain")) {
     db.prepare("UPDATE accounts SET join_rain = 1 WHERE join_rain IS NULL").run();
+  }
+  if (cols.has("mines_auto_enabled")) {
+    db.prepare(
+      "UPDATE accounts SET mines_auto_enabled = 0, mines_auto_rains_remaining = 0 WHERE mines_auto_enabled != 0 OR mines_auto_rains_remaining != 0",
+    ).run();
   }
 }
 

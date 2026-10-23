@@ -46,6 +46,8 @@ export type AccountRow = {
   lifetime_rain: number;
   lifetime_cases: number;
   lifetime_codes: number;
+  /** Unix ms when /schedule auto-off fires; null if none. */
+  schedule_ends_at_ms: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -245,6 +247,7 @@ export function updateAccount(
        pre_wager_before_rain = ?, auto_vault_deposit = ?, vault_lock_minutes = ?, vault_lock_expires_at = ?,
        vault_session_auto_deposit = ?,
        automation_paused = ?,
+       schedule_ends_at_ms = ?,
        status = ?, last_error = ?, balance = ?, vault_balance = ?, level = ?,
        lifetime_rain = ?, lifetime_cases = ?, lifetime_codes = ?, updated_at = ?
        WHERE id = ?`,
@@ -277,6 +280,7 @@ export function updateAccount(
       next.vault_lock_expires_at ?? null,
       next.vault_session_auto_deposit ?? 0,
       next.automation_paused ?? 0,
+      next.schedule_ends_at_ms ?? null,
       next.status,
       next.last_error,
       next.balance,
