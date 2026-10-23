@@ -50,20 +50,26 @@ export async function startVaultSession(input: {
   const label = formatVaultLockPreset(input.lockMinutes);
   appendLog({
     accountId: account.id,
-    category: "system",
-    message: "Vault session started",
-    detail: `${label} · until ${expires.slice(0, 19)}Z · rain vault ${input.vaultRainDuringLock ? "on" : "off"}`,
+    category: lock.confirmedOnRoRush ? "system" : "vault",
+    message: lock.confirmedOnRoRush ? "Vault session started" : "Vault session started (RoRush timer unconfirmed)",
+    detail: `${label} · until ${expires.slice(0, 19)}Z · rain vault ${input.vaultRainDuringLock ? "on" : "off"} · confirmed ${lock.confirmedOnRoRush ? "yes" : "no"}`,
   });
 
   const rainLine = input.vaultRainDuringLock
     ? "Rain profits **auto-move to vault** until the timer ends."
     : "Rain stays in your wallet (use **`/account vault on:true`** for always-on rain vault).";
 
-  return [
-    `**${account.nickname}** · Vault locked **${label}** (withdraw blocked on RoRush until **${expires.slice(11, 19)} UTC**).`,
-    rainLine,
-    "When the timer expires, **nothing re-locks** — run **`/rorush vault`** again if you want another lock.",
-  ].join("\n");
+  const until = expires.slice(11, 19);
+  const lockLine = lock.confirmedOnRoRush
+    ? `**${account.nickname}** · Vault locked **${label}** (withdraw blocked on RoRush until **${until} UTC**).`
+    : [
+        `**${account.nickname}** · Vault lock **${label}** saved on the bot (until **${until} UTC**).`,
+        "RoRush did not return a site timer — check **rorush.com → Vault** for a countdown. If missing, lock once on the site or add browser **apiKey** via **`/account session`**, then run **`/rorush vault`** again.",
+      ].join("\n");
+
+  return [lockLine, rainLine, "When the timer expires, **nothing re-locks** — run **`/rorush vault`** again if you want another lock."].join(
+    "\n",
+  );
 }
 
 export function vaultLockStatusLine(account: {

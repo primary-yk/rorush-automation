@@ -77,7 +77,7 @@ async function main() {
 
   console.log(`\nCalling POST ${RORUSH_PATHS.vault.lock} (${minutes} min)…`);
   const result = await lockVaultForMinutes(client, minutes);
-  console.log("Confirmed unlockAt:", result.unlockAt);
+  console.log("unlockAt:", result.unlockAt, "· confirmed on RoRush:", result.confirmedOnRoRush);
   const after = await fetchVaultUnlockAt(client);
   console.log("Vault info after:", after ?? "(none)");
 }

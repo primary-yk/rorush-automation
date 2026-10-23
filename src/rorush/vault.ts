@@ -1,5 +1,4 @@
 import { parseBalanceCents } from "./balance-level.js";
-import { readCurrentBalanceToken } from "./balance-token.js";
 import type { RoRushHttpClient } from "./http-client.js";
 import { RORUSH_PATHS } from "./endpoints.js";
 import { vaultLockApiDurationFromMinutes } from "./vault-lock.js";
@@ -29,31 +28,9 @@ export async function depositCoinsToVault(
 
 export type VaultLockResult = {
   unlockAt: string;
+  /** RoRush /vault/info (or lock body) showed an active unlock timer — not a local estimate. */
+  confirmedOnRoRush: boolean;
 };
-
-async function prepareVaultLockContext(client: RoRushHttpClient): Promise<void> {
-  const token = await readCurrentBalanceToken(client);
-  if (token !== "coin") {
-    await client.setBalanceToken("coin").catch(() => undefined);
-  }
-}
-
-function isEmptyLockResponse(data: unknown): boolean {
-  return (
-    data == null ||
-    (typeof data === "object" && !Array.isArray(data) && Object.keys(data as object).length === 0)
-  );
-}
-
-async function postVaultLock(
-  client: RoRushHttpClient,
-  body: Record<string, string>,
-): Promise<unknown> {
-  return client.request<unknown>(RORUSH_PATHS.vault.lock, {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
-}
 
 /** Timed vault lock — withdraw blocked on RoRush until duration elapses; deposits still allowed. */
 export async function lockVaultForMinutes(
@@ -69,16 +46,11 @@ export async function lockVaultForMinutes(
       "Unsupported vault lock duration. Use 10m, 30m, 1h, 6h, 12h, or 1d (same as rorush.com).",
     );
   }
-  await prepareVaultLockContext(client);
-  const beforeUnlock = await fetchVaultUnlockAt(client);
 
-  const bodies: Record<string, string>[] = [{ duration }, { duration, currency: "CRYPTO" }];
-  let data: unknown = null;
-  for (const body of bodies) {
-    data = await postVaultLock(client, body);
-    if (!isEmptyLockResponse(data) && parseVaultUnlockAt(data)) break;
-    if (!isEmptyLockResponse(data) && extractRoRushErrorMessage(data)) break;
-  }
+  const data = await client.request<unknown>(RORUSH_PATHS.vault.lock, {
+    method: "POST",
+    body: JSON.stringify({ duration }),
+  });
 
   const apiMsg = extractRoRushErrorMessage(data);
   if (apiMsg && !parseVaultUnlockAt(data)) {
@@ -86,36 +58,26 @@ export async function lockVaultForMinutes(
   }
 
   let unlockAt = parseVaultUnlockAt(data);
-  for (let i = 0; i < 6 && (!unlockAt || !isVaultLockActive(unlockAt)); i++) {
-    await new Promise((r) => setTimeout(r, 400));
-    unlockAt = await fetchVaultUnlockAt(client);
-    if (unlockAt && isVaultLockActive(unlockAt)) break;
+  let confirmedOnRoRush = !!(unlockAt && isVaultLockActive(unlockAt));
+
+  if (!confirmedOnRoRush) {
+    for (let i = 0; i < 8; i++) {
+      await new Promise((r) => setTimeout(r, i === 0 ? 200 : 400));
+      const fromInfo = await fetchVaultUnlockAt(client);
+      if (fromInfo && isVaultLockActive(fromInfo)) {
+        unlockAt = fromInfo;
+        confirmedOnRoRush = true;
+        break;
+      }
+      if (fromInfo && !unlockAt) unlockAt = fromInfo;
+    }
   }
-  if (!unlockAt || !isVaultLockActive(unlockAt)) {
-    const afterUnlock = unlockAt ?? (await fetchVaultUnlockAt(client));
-    if (afterUnlock && isVaultLockActive(afterUnlock)) {
-      return { unlockAt: afterUnlock };
-    }
-    if (beforeUnlock && isVaultLockActive(beforeUnlock)) {
-      const until = beforeUnlock.slice(11, 19);
-      throw new Error(
-        `Vault is already locked on RoRush until ${until} UTC. Wait for that timer, or unlock on the site, then run /rorush vault again.`,
-      );
-    }
-    if (isEmptyLockResponse(data)) {
-      throw new Error(
-        "RoRush vault lock returned an empty response (no timer). " +
-          "On rorush.com open DevTools → Application → Local Storage → copy **apiKey**, then run " +
-          "`/account session` with **api_key** set to that value (email/password login often omits it). " +
-          "Zero vault balance is OK — lock should still work once apiKey matches the site.",
-      );
-    }
-    throw new Error(
-      "RoRush did not confirm a vault lock (no unlock timer on /vault/info). " +
-        "Try `/account session` with JWT + api_key from the browser, then test again.",
-    );
+
+  if (!unlockAt) {
+    unlockAt = vaultLockExpiresAtIso(minutes);
   }
-  return { unlockAt };
+
+  return { unlockAt, confirmedOnRoRush };
 }
 
 export async function fetchVaultUnlockAt(
@@ -131,8 +93,7 @@ export async function fetchVaultUnlockAt(
       const info = await client.request<unknown>(path);
       if (isBareBalanceCentsBody(info)) continue;
       const unlockAt = parseVaultUnlockAt(info);
-      if (unlockAt && isVaultLockActive(unlockAt)) return unlockAt;
-      if (unlockAt && path === RORUSH_PATHS.vault.info) return unlockAt;
+      if (unlockAt) return unlockAt;
     } catch {
       /* try alternate path */
     }
