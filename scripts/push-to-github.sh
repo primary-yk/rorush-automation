@@ -5,8 +5,14 @@
 #   npm run push-github
 set -euo pipefail
 cd "$(dirname "$0")/.."
+if [[ -z "${GITHUB_TOKEN:-}" && -f deploy/github-push.env ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source deploy/github-push.env
+  set +a
+fi
 if [[ -z "${GITHUB_TOKEN:-}" ]]; then
-  echo "Set GITHUB_TOKEN (GitHub PAT with repo scope), then re-run."
+  echo "Set GITHUB_TOKEN (GitHub PAT with repo scope) or add deploy/github-push.env, then re-run."
   exit 1
 fi
 git push "https://x-access-token:${GITHUB_TOKEN}@github.com/primary-yk/rorush-automation.git" main:main
