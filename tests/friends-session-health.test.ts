@@ -22,6 +22,7 @@ function baseRow(overrides: Partial<AccountRow>): AccountRow {
     mines_target_multiplier: 2,
     mines_random_tiles: 1,
     mines_auto_rains_remaining: 0,
+    mines_wallet_mode: "coin",
     auto_vault_deposit: 0,
     vault_session_auto_deposit: 0,
     automation_paused: 0,

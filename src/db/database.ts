@@ -75,6 +75,7 @@ function migrateAccounts(db: Database.Database): void {
     ["mines_target_multiplier", "REAL NOT NULL DEFAULT 2"],
     ["mines_random_tiles", "INTEGER NOT NULL DEFAULT 1"],
     ["mines_auto_rains_remaining", "INTEGER NOT NULL DEFAULT 0"],
+    ["mines_wallet_mode", "TEXT NOT NULL DEFAULT 'coin'"],
     ["auto_vault_deposit", "INTEGER NOT NULL DEFAULT 0"],
     ["vault_lock_minutes", "INTEGER NOT NULL DEFAULT 0"],
     ["vault_lock_expires_at", "TEXT"],

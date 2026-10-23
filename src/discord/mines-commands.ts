@@ -1,3 +1,4 @@
+import { parseMinesWalletMode, minesWalletLabel, type MinesWalletMode } from "../automation/mines-currency.js";
 import { getAccount, listAccounts, updateAccount, type AccountRow } from "../db/repositories.js";
 import { engine } from "../worker/engine.js";
 
@@ -17,6 +18,7 @@ export async function setMinesAutoForUser(input: {
   targetMultiplier: number;
   randomTiles: boolean;
   stopAfterRains: number;
+  walletMode: MinesWalletMode;
 }): Promise<string> {
   const account = findOwnedAccount(input.discordUserId, input.nickname);
   if (!account) {
@@ -35,13 +37,18 @@ export async function setMinesAutoForUser(input: {
     mines_target_multiplier: target,
     mines_random_tiles: input.randomTiles ? 1 : 0,
     mines_auto_rains_remaining: rains,
+    mines_wallet_mode: input.walletMode,
   });
   await engine.reloadAccounts();
 
   const mode = input.randomTiles ? "random tiles" : "**manual board** in your feed thread (run **`/connect`** if you have not)";
+  const vaultLine =
+    input.walletMode === "coin"
+      ? "cashout at **{target}×** → **vault**"
+      : "cashout at **{target}×** (FunCoins — **not** vaulted)";
   return (
     `**${account.nickname}** · Mines auto **ON** for **${rains}** rain(s).\n` +
-    `Each rain profit → mines · **${minesCount}** mines · cashout at **${target.toFixed(2)}×** → **vault** · ${mode}.\n` +
+    `Wallet: **${minesWalletLabel(input.walletMode)}** · each rain profit → mines · **${minesCount}** mines · ${vaultLine.replace("{target}", target.toFixed(2))} · ${mode}.\n` +
     "Post-rain limbo is **skipped** while this is on. Stop early with **`/mines stop`**."
   );
 }
@@ -64,8 +71,9 @@ export function minesStatusForUser(discordUserId: string, nickname?: string): st
   }
   const left = account.mines_auto_rains_remaining;
   const mode = Number(account.mines_random_tiles) !== 0 ? "random" : "manual board";
+  const wallet = minesWalletLabel(parseMinesWalletMode(account.mines_wallet_mode));
   return (
     `**${account.nickname}** · Mines auto **on** · **${left}** rain(s) left\n` +
-    `${account.mines_count} mines · target **${account.mines_target_multiplier.toFixed(2)}×** · ${mode}`
+    `${wallet} · ${account.mines_count} mines · target **${account.mines_target_multiplier.toFixed(2)}×** · ${mode}`
   );
 }

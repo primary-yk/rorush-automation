@@ -6,11 +6,13 @@
 
 | Command | Purpose |
 |---------|---------|
-| `/mines auto` | Turn on: mine count, target multiplier, random tiles yes/no, stop after N rains |
+| `/mines auto` | Turn on: mine count, target multiplier, random tiles yes/no, **wallet** (real / FunCoins), stop after N rains |
 | `/mines stop` | Turn off mines auto for an account |
 | `/mines status` | Show remaining rain rounds and settings |
 
-**Manual board (random = no):** 5×5 button grid in the user’s private feed thread. Click tiles to reveal; bot syncs to RoRush. Cashout at target → vault.
+**Wallet:** `wallet:real` (default) uses **real coins** and vaults cashout profit. `wallet:funcoins` uses **FunCoins** on RoRush (good for testing); winnings are **not** sent to vault.
+
+**Manual board (random = no):** 5×5 button grid in the user’s private feed thread. Click tiles to reveal; bot syncs to RoRush. Cashout at target → vault (real coins only).
 
 **Random = yes:** Bot picks random unrevealed tiles until target multiplier or bomb.
 

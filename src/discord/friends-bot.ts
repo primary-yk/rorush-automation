@@ -382,6 +382,16 @@ function buildSlashCommands() {
             .setRequired(true)
             .setMinValue(1)
             .setMaxValue(500),
+        )
+        .addStringOption((o) =>
+          o
+            .setName("wallet")
+            .setDescription("Real coins or FunCoins on RoRush")
+            .setRequired(false)
+            .addChoices(
+              { name: "Real coins (vault on cashout)", value: "real" },
+              { name: "FunCoins (practice — no vault)", value: "funcoins" },
+            ),
         ),
     )
     .addSubcommand((sub) =>
@@ -1189,6 +1199,8 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
       await interaction.deferReply({ ephemeral: true });
       const accountOpt = interaction.options.getString("account") ?? undefined;
       if (sub === "auto") {
+        const { parseMinesWalletMode } = await import("../automation/mines-currency.js");
+        const walletRaw = interaction.options.getString("wallet") ?? "real";
         const text = await setMinesAutoForUser({
           discordUserId: userId,
           nickname: accountOpt,
@@ -1196,6 +1208,7 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
           targetMultiplier: interaction.options.getNumber("target", true),
           randomTiles: interaction.options.getBoolean("random", true),
           stopAfterRains: interaction.options.getInteger("stop_after_rains", true),
+          walletMode: parseMinesWalletMode(walletRaw === "funcoins" ? "funCoin" : "coin"),
         });
         await replyWithResult(interaction, text, { accountNickname: accountOpt });
         return;

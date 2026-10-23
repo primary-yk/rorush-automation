@@ -6,6 +6,8 @@ import {
   closeManualMinesSession,
   createManualMinesSession,
 } from "./mines-manual-session.js";
+import { applyMinesWalletMode, parseMinesWalletMode, minesWalletLabel } from "./mines-currency.js";
+import { parseBalanceCents } from "../rorush/balance-level.js";
 import { postMinesBoardToOwner } from "../discord/mines-board.js";
 import { deliverFriendsReporterEmbed } from "../discord/friends-feed.js";
 import { COLORS } from "../discord/embeds.js";
@@ -53,15 +55,36 @@ export async function runMinesAfterRain(input: {
   if (!account || !minesAutoActive(account)) return;
 
   const hub = await input.hubs.ensure(input.accountId, { rain: true, cases: true });
+  const walletMode = parseMinesWalletMode(account.mines_wallet_mode);
+  await applyMinesWalletMode(input.client, walletMode);
+  const balBody = await input.client.getBalance("crypto");
+  const balCents = parseBalanceCents(balBody);
+  const walletCoins = balCents != null ? balCents / 100 : 0;
+  let betCoins = Math.floor(input.rainProfitCoins * 100) / 100;
+  if (walletMode === "funCoin") {
+    betCoins = Math.min(betCoins, Math.floor(walletCoins * 100) / 100);
+    if (betCoins < 0.01) {
+      appendLog({
+        accountId: account.id,
+        category: "mines",
+        message: "Mines skipped (FunCoins)",
+        detail: `Rain profit ${input.rainProfitCoins.toFixed(2)} but FunCoin balance ${walletCoins.toFixed(2)} — add FunCoins on site or use wallet:real`,
+      });
+      decrementRainsRemaining(account.id);
+      return;
+    }
+  }
+
   const config = {
     accountId: account.id,
     nickname: account.nickname,
-    betCoins: Math.floor(input.rainProfitCoins * 100) / 100,
+    betCoins,
     minesCount: Math.trunc(account.mines_count),
     targetMultiplier: account.mines_target_multiplier,
     randomTiles: Number(account.mines_random_tiles) !== 0,
     rainId: input.rainId,
     vaultAfterCashout: true,
+    walletMode,
   };
 
   if (config.randomTiles) {
@@ -97,7 +120,7 @@ export async function runMinesAfterRain(input: {
     minesCount: config.minesCount,
     targetMultiplier: config.targetMultiplier,
     revealed: session.revealed,
-    status: "Click a tile to reveal (rain profit is your bet).",
+    status: `Click a tile to reveal (${minesWalletLabel(config.walletMode)} · rain profit is your bet).`,
   });
 
   if (!posted) {

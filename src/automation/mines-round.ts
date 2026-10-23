@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { applyMinesWalletMode, type MinesWalletMode, minesWalletLabel } from "./mines-currency.js";
 import { getManualMinesSession } from "./mines-manual-session.js";
 import { appendLog } from "../db/repositories.js";
 import { depositCoinsToVault } from "../rorush/vault.js";
@@ -17,6 +18,7 @@ export type MinesRoundConfig = {
   randomTiles: boolean;
   rainId: string;
   vaultAfterCashout: boolean;
+  walletMode: MinesWalletMode;
 };
 
 export type MinesRoundOutcome =
@@ -107,11 +109,13 @@ export async function startMinesRoundOnHub(input: {
   const clientSeed = randomUUID();
   const startReqId = randomUUID();
 
+  await applyMinesWalletMode(client, config.walletMode);
+
   appendLog({
     accountId: config.accountId,
     category: "mines",
     message: "Mines round started",
-    detail: `${config.betCoins.toFixed(2)} coins · ${config.minesCount} mines · target ${config.targetMultiplier.toFixed(2)}×`,
+    detail: `${config.betCoins.toFixed(2)} ${minesWalletLabel(config.walletMode)} · ${config.minesCount} mines · target ${config.targetMultiplier.toFixed(2)}×`,
   });
 
   const balanceBeforeRound = await readBalanceCoins(client);
@@ -199,8 +203,16 @@ export async function startMinesRoundOnHub(input: {
     await waitForHubEvent(hub, [SIGNALR.mines.receiveCashoutSuccess], 30_000);
 
     let vaulted: number | null = null;
-    if (config.vaultAfterCashout) {
+    if (config.vaultAfterCashout && config.walletMode === "coin") {
+      await applyMinesWalletMode(client, "coin");
       vaulted = await vaultMinesProfit(client, balanceBeforeRound);
+    } else if (config.vaultAfterCashout && config.walletMode === "funCoin") {
+      appendLog({
+        accountId: config.accountId,
+        category: "mines",
+        message: "Mines cashout (FunCoins — not vaulted)",
+        detail: "Vault is real-coins only; winnings stay in FunCoins wallet",
+      });
     }
 
     appendLog({
