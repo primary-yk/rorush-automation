@@ -7,7 +7,7 @@
 import "../src/bootstrap-env.js";
 import { getDb } from "../src/db/database.js";
 import { getAccount, listAccounts } from "../src/db/repositories.js";
-import { ensureAuthenticated } from "../src/accounts/session-manager.js";
+import { ensureAuthenticatedForVault } from "../src/accounts/session-manager.js";
 import {
   debugVaultLockProbe,
   fetchVaultBalanceCoins,
@@ -39,7 +39,7 @@ async function main() {
     process.exit(1);
   }
 
-  const { client, creds } = await ensureAuthenticated(account.id);
+  const { client, creds } = await ensureAuthenticatedForVault(account.id);
   console.log(`Has x-api-key: ${creds.apiKey ? "yes (saved)" : "no — vault lock often needs browser apiKey"}`);
   const balance = await fetchVaultBalanceCoins(client);
   const unlock = await fetchVaultUnlockAt(client);
@@ -65,7 +65,7 @@ async function main() {
 
   if (verbose) {
     console.log(`\n[verbose] POST ${RORUSH_PATHS.vault.lock} (${minutes} min)…`);
-    const probe = await debugVaultLockProbe(client, minutes);
+    const probe = await debugVaultLockProbe(client, minutes, creds);
     console.log("[verbose] lock response:", JSON.stringify(probe.lockResponse));
     for (const row of probe.infoPaths) {
       console.log(`[verbose] GET ${row.path}:`, JSON.stringify(row.body));
@@ -76,7 +76,7 @@ async function main() {
   }
 
   console.log(`\nCalling POST ${RORUSH_PATHS.vault.lock} (${minutes} min)…`);
-  const result = await lockVaultForMinutes(client, minutes);
+  const result = await lockVaultForMinutes(client, minutes, creds);
   console.log("unlockAt:", result.unlockAt, "· confirmed on RoRush:", result.confirmedOnRoRush);
   const after = await fetchVaultUnlockAt(client);
   console.log("Vault info after:", after ?? "(none)");

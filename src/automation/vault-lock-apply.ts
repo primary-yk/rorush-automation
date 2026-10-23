@@ -1,4 +1,4 @@
-import { ensureAuthenticated } from "../accounts/session-manager.js";
+import { ensureAuthenticatedForVault } from "../accounts/session-manager.js";
 import { appendLog, getAccount, updateAccount } from "../db/repositories.js";
 import { formatVaultLockPreset } from "../rorush/vault-lock.js";
 import { isVaultLockActive, lockVaultForMinutes } from "../rorush/vault.js";
@@ -38,8 +38,8 @@ export async function startVaultSession(input: {
   if (!account) return "Account not found.";
   if (input.lockMinutes <= 0) throw new Error("Invalid vault lock duration.");
 
-  const { client } = await ensureAuthenticated(account.id);
-  const lock = await lockVaultForMinutes(client, input.lockMinutes);
+  const { client, creds } = await ensureAuthenticatedForVault(account.id);
+  const lock = await lockVaultForMinutes(client, input.lockMinutes, creds);
   const expires = lock.unlockAt;
   updateAccount(account.id, {
     vault_lock_minutes: input.lockMinutes,
@@ -63,8 +63,8 @@ export async function startVaultSession(input: {
   const lockLine = lock.confirmedOnRoRush
     ? `**${account.nickname}** · Vault locked **${label}** (withdraw blocked on RoRush until **${until} UTC**).`
     : [
-        `**${account.nickname}** · Vault lock **${label}** saved on the bot (until **${until} UTC**).`,
-        "RoRush did not return a site timer — check **rorush.com → Vault** for a countdown. If missing, lock once on the site or add browser **apiKey** via **`/account session`**, then run **`/rorush vault`** again.",
+        `**${account.nickname}** · Vault lock **${label}** could not be confirmed on RoRush (bot timer **${until} UTC** for rain-vault session only).`,
+        "Deposits work but lock returned no site timer — open **rorush.com → Vault** while logged in as this account. If lock works there, paste browser **apiKey** (Local Storage) into **`/account session`** and retry **`/rorush vault`**.",
       ].join("\n");
 
   return [lockLine, rainLine, "When the timer expires, **nothing re-locks** — run **`/rorush vault`** again if you want another lock."].join(

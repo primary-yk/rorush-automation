@@ -12,6 +12,7 @@ export type RoRushCredentials = {
 
 export class RoRushHttpClient {
   private readonly limiter: RateLimiter;
+  private readonly cookieJar = new Map<string, string>();
   private readonly dispatcher = loadConfig().RORUSH_PROXY_URL
     ? new ProxyAgent(loadConfig().RORUSH_PROXY_URL!)
     : undefined;
@@ -21,6 +22,29 @@ export class RoRushHttpClient {
     private readonly accountProxyUrl?: string | null,
   ) {
     this.limiter = new RateLimiter(loadConfig().REQUEST_MIN_INTERVAL_MS);
+  }
+
+  private storeSetCookies(headers: Headers): void {
+    const list =
+      typeof headers.getSetCookie === "function"
+        ? headers.getSetCookie()
+        : headers.get("set-cookie")
+          ? [headers.get("set-cookie")!]
+          : [];
+    for (const raw of list) {
+      const part = raw.split(";")[0]?.trim();
+      if (!part) continue;
+      const eq = part.indexOf("=");
+      if (eq <= 0) continue;
+      const name = part.slice(0, eq).trim();
+      const value = part.slice(eq + 1).trim();
+      if (name) this.cookieJar.set(name, value);
+    }
+  }
+
+  private cookieHeader(): string | undefined {
+    if (this.cookieJar.size === 0) return undefined;
+    return [...this.cookieJar.entries()].map(([k, v]) => `${k}=${v}`).join("; ");
   }
 
   private getDispatcher() {
@@ -48,6 +72,8 @@ export class RoRushHttpClient {
     }
     // Match rorush.com fetch client (always sends the header, even when empty).
     headers["x-api-key"] = this.creds.apiKey?.trim() ?? "";
+    const cookie = this.cookieHeader();
+    if (cookie) headers.Cookie = cookie;
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), init.timeoutMs ?? 25_000);
@@ -69,6 +95,7 @@ export class RoRushHttpClient {
         { maxAttempts: loadConfig().MAX_REQUEST_FAILURES },
       );
 
+      this.storeSetCookies(res.headers);
       const text = await res.text();
       let data: T;
       try {

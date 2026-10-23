@@ -1,34 +1,80 @@
-import { parseBalanceCents } from "./balance-level.js";
 import type { RoRushHttpClient } from "./http-client.js";
 import { RORUSH_PATHS } from "./endpoints.js";
 import { vaultLockApiDurationFromMinutes } from "./vault-lock.js";
-import {
-  extractRoRushErrorMessage,
-  isBareBalanceCentsBody,
-  parseVaultUnlockAt,
-} from "./vault-unlock.js";
+import { extractRoRushErrorMessage, parseVaultUnlockAt } from "./vault-unlock.js";
+import { fetchVaultSnapshot, snapshotLocked, type VaultSnapshot } from "./vault-state.js";
 
 export type VaultCurrency = "CRYPTO" | "ROBUX";
 
-/** RoRush vault deposit (wallet → vault). Amount is in coins; API uses cents like limbo. */
-export async function depositCoinsToVault(
-  client: RoRushHttpClient,
-  amountCoins: number,
-  currency: VaultCurrency = "CRYPTO",
-): Promise<void> {
-  if (!Number.isFinite(amountCoins) || amountCoins < 0.01) {
-    throw new Error("Vault deposit must be at least 0.01 coins");
+const SITE_ORIGIN = "https://rorush.com";
+
+function browserLikeHeaders(): Record<string, string> {
+  return {
+    Origin: SITE_ORIGIN,
+    Referer: `${SITE_ORIGIN}/`,
+  };
+}
+
+function isEmptyObject(data: unknown): boolean {
+  return (
+    data != null &&
+    typeof data === "object" &&
+    !Array.isArray(data) &&
+    Object.keys(data as object).length === 0
+  );
+}
+
+async function prepareVaultSession(client: RoRushHttpClient): Promise<VaultSnapshot> {
+  await client.setBalanceToken("coin").catch(() => undefined);
+  return fetchVaultSnapshot(client);
+}
+
+type LockAttempt = { path: string; body: Record<string, string> };
+
+function lockAttempts(duration: string, apiKey: string | null | undefined): LockAttempt[] {
+  const base = RORUSH_PATHS.vault.lock;
+  const qCrypto = `${base}?currency=crypto`;
+  const withKey =
+    apiKey?.trim() ?
+      [`${base}?api_key=${encodeURIComponent(apiKey.trim())}`, `${qCrypto}&api_key=${encodeURIComponent(apiKey.trim())}`]
+    : [];
+  const paths = [base, qCrypto, ...withKey];
+  const bodies: Record<string, string>[] = [{ duration }, { duration, currency: "CRYPTO" }];
+  const out: LockAttempt[] = [];
+  for (const path of paths) {
+    for (const body of bodies) {
+      out.push({ path, body });
+    }
   }
-  const amountCents = Math.max(1, Math.round(amountCoins * 100));
-  await client.request(RORUSH_PATHS.vault.deposit, {
+  return out;
+}
+
+async function postVaultLock(
+  client: RoRushHttpClient,
+  attempt: LockAttempt,
+): Promise<unknown> {
+  return client.request<unknown>(attempt.path, {
     method: "POST",
-    body: JSON.stringify({ amount: amountCents, currency }),
+    headers: browserLikeHeaders(),
+    body: JSON.stringify(attempt.body),
   });
+}
+
+async function pollVaultLock(
+  client: RoRushHttpClient,
+  maxMs = 4_000,
+): Promise<VaultSnapshot | null> {
+  const deadline = Date.now() + maxMs;
+  while (Date.now() < deadline) {
+    const snap = await fetchVaultSnapshot(client);
+    if (snapshotLocked(snap)) return snap;
+    await new Promise((r) => setTimeout(r, 350));
+  }
+  return null;
 }
 
 export type VaultLockResult = {
   unlockAt: string;
-  /** RoRush /vault/info (or lock body) showed an active unlock timer — not a local estimate. */
   confirmedOnRoRush: boolean;
 };
 
@@ -36,6 +82,7 @@ export type VaultLockResult = {
 export async function lockVaultForMinutes(
   client: RoRushHttpClient,
   minutes: number,
+  creds?: { apiKey?: string | null },
 ): Promise<VaultLockResult> {
   if (!Number.isFinite(minutes) || minutes < 1) {
     throw new Error("Vault lock duration must be at least 1 minute");
@@ -47,58 +94,70 @@ export async function lockVaultForMinutes(
     );
   }
 
-  const data = await client.request<unknown>(RORUSH_PATHS.vault.lock, {
-    method: "POST",
-    body: JSON.stringify({ duration }),
-  });
+  await prepareVaultSession(client);
 
-  const apiMsg = extractRoRushErrorMessage(data);
-  if (apiMsg && !parseVaultUnlockAt(data)) {
-    throw new Error(`RoRush vault lock: ${apiMsg}`);
-  }
+  let lastData: unknown = null;
+  let unlockAt: string | null = null;
 
-  let unlockAt = parseVaultUnlockAt(data);
-  let confirmedOnRoRush = !!(unlockAt && isVaultLockActive(unlockAt));
-
-  if (!confirmedOnRoRush) {
-    for (let i = 0; i < 8; i++) {
-      await new Promise((r) => setTimeout(r, i === 0 ? 200 : 400));
-      const fromInfo = await fetchVaultUnlockAt(client);
-      if (fromInfo && isVaultLockActive(fromInfo)) {
-        unlockAt = fromInfo;
-        confirmedOnRoRush = true;
-        break;
-      }
-      if (fromInfo && !unlockAt) unlockAt = fromInfo;
+  for (const attempt of lockAttempts(duration, creds?.apiKey)) {
+    lastData = await postVaultLock(client, attempt);
+    const apiMsg = extractRoRushErrorMessage(lastData);
+    if (apiMsg && !parseVaultUnlockAt(lastData)) {
+      throw new Error(`RoRush vault lock: ${apiMsg}`);
+    }
+    unlockAt = parseVaultUnlockAt(lastData);
+    if (unlockAt && snapshotLocked({ balanceCoins: null, unlockAtIso: unlockAt })) {
+      return { unlockAt, confirmedOnRoRush: true };
+    }
+    const polled = await pollVaultLock(client, 2_500);
+    if (polled?.unlockAtIso && snapshotLocked(polled)) {
+      return { unlockAt: polled.unlockAtIso, confirmedOnRoRush: true };
+    }
+    if (!isEmptyObject(lastData) && unlockAt) {
+      return { unlockAt, confirmedOnRoRush: snapshotLocked({ balanceCoins: null, unlockAtIso: unlockAt }) };
     }
   }
 
-  if (!unlockAt) {
-    unlockAt = vaultLockExpiresAtIso(minutes);
+  const finalPoll = await pollVaultLock(client, 2_000);
+  if (finalPoll?.unlockAtIso && snapshotLocked(finalPoll)) {
+    return { unlockAt: finalPoll.unlockAtIso, confirmedOnRoRush: true };
   }
 
-  return { unlockAt, confirmedOnRoRush };
+  if (unlockAt) {
+    return {
+      unlockAt,
+      confirmedOnRoRush: snapshotLocked({ balanceCoins: null, unlockAtIso: unlockAt }),
+    };
+  }
+
+  return {
+    unlockAt: vaultLockExpiresAtIso(minutes),
+    confirmedOnRoRush: false,
+  };
+}
+
+export async function depositCoinsToVault(
+  client: RoRushHttpClient,
+  amountCoins: number,
+  currency: VaultCurrency = "CRYPTO",
+): Promise<void> {
+  if (!Number.isFinite(amountCoins) || amountCoins < 0.01) {
+    throw new Error("Vault deposit must be at least 0.01 coins");
+  }
+  const amountCents = Math.max(1, Math.round(amountCoins * 100));
+  await client.request(RORUSH_PATHS.vault.deposit, {
+    method: "POST",
+    headers: browserLikeHeaders(),
+    body: JSON.stringify({ amount: amountCents, currency }),
+  });
 }
 
 export async function fetchVaultUnlockAt(
   client: RoRushHttpClient,
-  currency: VaultCurrency = "CRYPTO",
+  _currency: VaultCurrency = "CRYPTO",
 ): Promise<string | null> {
-  const paths = [
-    RORUSH_PATHS.vault.info,
-    `${RORUSH_PATHS.vault.info}?currency=${currency.toLowerCase()}`,
-  ];
-  for (const path of paths) {
-    try {
-      const info = await client.request<unknown>(path);
-      if (isBareBalanceCentsBody(info)) continue;
-      const unlockAt = parseVaultUnlockAt(info);
-      if (unlockAt) return unlockAt;
-    } catch {
-      /* try alternate path */
-    }
-  }
-  return null;
+  const snap = await fetchVaultSnapshot(client);
+  return snap.unlockAtIso;
 }
 
 export function vaultLockExpiresAtIso(minutes: number, fromMs = Date.now()): string {
@@ -106,42 +165,23 @@ export function vaultLockExpiresAtIso(minutes: number, fromMs = Date.now()): str
 }
 
 export function isVaultLockActive(expiresAtIso: string | null | undefined): boolean {
-  if (!expiresAtIso?.trim()) return false;
-  const t = Date.parse(expiresAtIso);
-  return !Number.isNaN(t) && t > Date.now();
+  return snapshotLocked({ balanceCoins: null, unlockAtIso: expiresAtIso ?? null });
 }
 
-export async function fetchVaultBalanceCoins(
-  client: RoRushHttpClient,
-  currency: VaultCurrency = "CRYPTO",
-): Promise<number | null> {
-  const paths = [
-    RORUSH_PATHS.vault.info,
-    `${RORUSH_PATHS.vault.info}?currency=${currency.toLowerCase()}`,
-  ];
-  for (const path of paths) {
-    try {
-      const info = await client.request<unknown>(path);
-      const cents = parseBalanceCents(info);
-      if (cents != null) return cents / 100;
-    } catch {
-      /* try next */
-    }
-  }
-  return null;
+export async function fetchVaultBalanceCoins(client: RoRushHttpClient): Promise<number | null> {
+  const snap = await fetchVaultSnapshot(client);
+  return snap.balanceCoins;
 }
 
-/** Debug: raw lock response + vault info (for VPS troubleshooting). */
 export async function debugVaultLockProbe(
   client: RoRushHttpClient,
   minutes: number,
+  creds?: { apiKey?: string | null },
 ): Promise<{ lockResponse: unknown; infoPaths: Array<{ path: string; body: unknown }> }> {
   const duration = vaultLockApiDurationFromMinutes(minutes);
   if (!duration) throw new Error("Invalid lock duration");
-  const lockResponse = await client.request<unknown>(RORUSH_PATHS.vault.lock, {
-    method: "POST",
-    body: JSON.stringify({ duration }),
-  });
+  await prepareVaultSession(client);
+  const lockResponse = await postVaultLock(client, { path: RORUSH_PATHS.vault.lock, body: { duration } });
   const infoPaths: Array<{ path: string; body: unknown }> = [];
   for (const path of [
     RORUSH_PATHS.vault.info,
@@ -156,5 +196,6 @@ export async function debugVaultLockProbe(
       });
     }
   }
+  void creds;
   return { lockResponse, infoPaths };
 }

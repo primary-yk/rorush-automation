@@ -54,7 +54,7 @@ export async function verifyRoRushEmailPassword(
     return {
       ok: true,
       jwt,
-      apiKey: login.userInfo?.apiKey ?? null,
+      apiKey: login.userInfo?.apiKey ?? parseApiKey(login) ?? null,
       level: typeof level === "number" && Number.isFinite(level) ? Math.trunc(level) : null,
     };
   } catch (err) {
@@ -91,7 +91,7 @@ export async function resolveCredentials(account: AccountRow): Promise<RoRushCre
   if (!jwt) {
     throw new Error(login.message ?? "Login failed");
   }
-  const apiKey = login.userInfo?.apiKey ?? null;
+  const apiKey = login.userInfo?.apiKey ?? parseApiKey(login) ?? null;
   const level = login.userInfo?.level;
   const walletToken = parseCurrentBalanceToken(login.userInfo ?? login);
   updateAccount(account.id, {
@@ -103,6 +103,16 @@ export async function resolveCredentials(account: AccountRow): Promise<RoRushCre
     ...(walletToken ? { wallet_balance_token: walletToken } : {}),
   });
   return { jwt, apiKey };
+}
+
+/** Vault lock often needs a fresh login (session cookies + JWT). Deposit/rain can reuse cached JWT. */
+export async function ensureAuthenticatedForVault(accountId: number): Promise<{
+  account: AccountRow;
+  client: RoRushHttpClient;
+  creds: RoRushCredentials;
+}> {
+  updateAccount(accountId, { session_jwt_enc: null });
+  return ensureAuthenticated(accountId);
 }
 
 export async function ensureAuthenticated(accountId: number): Promise<{
