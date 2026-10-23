@@ -15,6 +15,7 @@
     "update-account": "tsx scripts/update-account-cli.ts",
     "test-login": "tsx scripts/test-login.ts",
     "test-vault": "tsx scripts/test-vault.ts",
+    "test-vault-lock": "tsx scripts/test-vault-lock.ts",
     "test-stats": "tsx scripts/test-stats.ts",
     "last-rain-errors": "tsx scripts/last-rain-errors.ts",
     "show-daily-cases": "tsx scripts/show-daily-cases.ts",

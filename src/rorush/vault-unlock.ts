@@ -1,5 +1,22 @@
 /** Parse RoRush vault lock / info unlock timestamp from assorted API shapes. */
 
+function epochMsFromUnknown(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    if (value >= 1_000_000_000_000) return Math.round(value);
+    if (value >= 1_000_000_000 && value < 10_000_000_000) return Math.round(value * 1000);
+    return null;
+  }
+  if (typeof value === "string") {
+    const t = value.trim();
+    if (/^\d+$/.test(t)) {
+      return epochMsFromUnknown(Number(t));
+    }
+    const parsed = Date.parse(t);
+    if (!Number.isNaN(parsed)) return parsed;
+  }
+  return null;
+}
+
 function unwrapPayload(record: Record<string, unknown>): unknown {
   if ("data" in record && record.data !== undefined) return record.data;
   if ("result" in record && record.result !== undefined) return record.result;
@@ -8,15 +25,13 @@ function unwrapPayload(record: Record<string, unknown>): unknown {
 
 /** Lock endpoint often returns the unlock ISO string as the entire JSON body (see rorush.com client). */
 export function parseVaultUnlockAt(body: unknown): string | null {
+  const epoch = epochMsFromUnknown(body);
+  if (epoch != null) return new Date(epoch).toISOString();
+
   if (typeof body === "string") {
     const t = body.trim();
     if (!t) return null;
-    const ms = Date.parse(t);
-    if (!Number.isNaN(ms)) return new Date(ms).toISOString();
     return t;
-  }
-  if (typeof body === "number" && Number.isFinite(body)) {
-    return new Date(body).toISOString();
   }
   if (!body || typeof body !== "object") return null;
 

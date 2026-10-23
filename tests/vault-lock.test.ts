@@ -17,6 +17,9 @@ describe("vault-lock presets", () => {
 
   it("parses vault unlock timestamps from RoRush lock/info bodies", () => {
     expect(parseVaultUnlockAt("2026-10-21T20:17:00.000Z")).toBe("2026-10-21T20:17:00.000Z");
+    expect(parseVaultUnlockAt(1_762_000_000_000)).toBe(new Date(1_762_000_000_000).toISOString());
+    expect(parseVaultUnlockAt("1762000000000")).toBe(new Date(1_762_000_000_000).toISOString());
+    expect(parseVaultUnlockAt(1_762_000_000)).toBe(new Date(1_762_000_000_000).toISOString());
     expect(parseVaultUnlockAt({ unlockAt: "2026-10-21T20:17:00.000Z" })).toBe(
       "2026-10-21T20:17:00.000Z",
     );

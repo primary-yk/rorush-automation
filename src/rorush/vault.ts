@@ -40,18 +40,31 @@ export async function lockVaultForMinutes(
       "Unsupported vault lock duration. Use 10m, 30m, 1h, 6h, 12h, or 1d (same as rorush.com).",
     );
   }
+  const beforeUnlock = await fetchVaultUnlockAt(client);
+
   const data = await client.request<unknown>(RORUSH_PATHS.vault.lock, {
     method: "POST",
-    body: JSON.stringify({ duration }),
+    body: JSON.stringify({ duration, currency: "CRYPTO" }),
   });
   let unlockAt = parseVaultUnlockAt(data);
   if (!unlockAt) {
+    await new Promise((r) => setTimeout(r, 450));
     unlockAt = await fetchVaultUnlockAt(client);
   }
   if (!unlockAt || !isVaultLockActive(unlockAt)) {
+    const afterUnlock = unlockAt ?? (await fetchVaultUnlockAt(client));
+    if (afterUnlock && isVaultLockActive(afterUnlock)) {
+      return { unlockAt: afterUnlock };
+    }
+    if (beforeUnlock && isVaultLockActive(beforeUnlock)) {
+      const until = beforeUnlock.slice(11, 19);
+      throw new Error(
+        `Vault is already locked on RoRush until **${until} UTC**. Wait for that timer, or unlock on the site, then run \`/rorush vault\` again.`,
+      );
+    }
     throw new Error(
-      "RoRush did not confirm a vault lock (no unlock timer on the site). " +
-        "Log in on rorush.com, try locking vault once in the UI, then run `/rorush vault` again.",
+      "RoRush did not confirm a vault lock (lock API returned no unlock timer). " +
+        "Refresh the account session (**`/account session`**), confirm you can lock vault on rorush.com while logged in as this account, then try again.",
     );
   }
   return { unlockAt };
