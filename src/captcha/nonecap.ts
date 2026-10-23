@@ -55,14 +55,37 @@ async function nonecapRequest<T>(
   return { status: res.status, data };
 }
 
+function nonecapKeyLooksValid(apiKey: string): boolean {
+  return /^nc_live_[A-Za-z0-9_-]{20,}$/.test(apiKey.trim());
+}
+
+/** Balance check needs `account` scope; rain solves only need `solve` scope. */
+export function isNonecapAccountScopeError(message: string): boolean {
+  return /missing the ['"]account['"] scope|account scope|lacks the scope.*account/i.test(
+    message,
+  );
+}
+
 export async function verifyNonecapKey(apiKey: string): Promise<{
   ok: boolean;
   credits?: number;
   errorDescription?: string;
+  /** Key is valid for solves but /v1/me was blocked (no account scope on the key). */
+  balanceUnavailable?: boolean;
 }> {
+  const trimmed = apiKey.trim();
+  if (!nonecapKeyLooksValid(trimmed)) {
+    return {
+      ok: false,
+      errorDescription: "NoneCap keys start with nc_live_ — copy from dashboard.nonecap.com → Keys",
+    };
+  }
   try {
-    const { data } = await nonecapRequest<NonecapMe>("GET", "/me", apiKey);
+    const { data } = await nonecapRequest<NonecapMe>("GET", "/me", trimmed);
     if (data.error?.message) {
+      if (isNonecapAccountScopeError(data.error.message)) {
+        return { ok: true, balanceUnavailable: true };
+      }
       return { ok: false, errorDescription: data.error.message };
     }
     if (typeof data.credits_balance !== "number") {
@@ -70,10 +93,11 @@ export async function verifyNonecapKey(apiKey: string): Promise<{
     }
     return { ok: true, credits: data.credits_balance };
   } catch (err) {
-    return {
-      ok: false,
-      errorDescription: err instanceof Error ? err.message : String(err),
-    };
+    const msg = err instanceof Error ? err.message : String(err);
+    if (isNonecapAccountScopeError(msg)) {
+      return { ok: true, balanceUnavailable: true };
+    }
+    return { ok: false, errorDescription: msg };
   }
 }
 

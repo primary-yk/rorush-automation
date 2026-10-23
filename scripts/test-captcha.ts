@@ -38,10 +38,14 @@ async function main() {
     console.error("  CAPTCHA_PROVIDER=nonecap   # or 2captcha / capsolver");
     process.exit(1);
   }
-  if (verify.balanceUnit === "credits") {
+  if (verify.errorDescription === "balance_unavailable") {
+    console.log(
+      "NoneCap key OK (solve scope only — add **account** scope on the key in the dashboard to show credits here).",
+    );
+  } else if (verify.balanceUnit === "credits" && verify.balance != null) {
     console.log("NoneCap credits:", verify.balance);
-  } else {
-    console.log("Captcha balance: $" + verify.balance!.toFixed(2));
+  } else if (verify.balance != null) {
+    console.log("Captcha balance: $" + verify.balance.toFixed(2));
   }
 
   const detected = await detectCaptchaProvider(key);

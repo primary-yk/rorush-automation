@@ -10,7 +10,7 @@ CAPTCHA_PROVIDER=nonecap
 RORUSH_SITE_URL=https://rorush.com/
 ```
 
-Get a key from the NoneCap dashboard (`nc_live_…` prefix). Balance is in **credits** (`GET /v1/me`); the host dashboard estimates USD using `CAPTCHA_ESTIMATE_USD`.
+Get a key from the NoneCap dashboard (`nc_live_…` prefix). Rain needs the **`solve`** scope (default on new keys). Optional **`account`** scope lets `npm run test-captcha` and the host dashboard show credit balance via `GET /v1/me`.
 
 ## Verify
 

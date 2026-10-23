@@ -460,7 +460,12 @@ export async function verifyCaptchaKey(clientKey: string): Promise<{
   if (useNonecap) {
     const v = await verifyNonecapKey(clientKey);
     return v.ok
-      ? { ok: true, balance: v.credits, balanceUnit: "credits" }
+      ? {
+          ok: true,
+          balance: v.credits,
+          balanceUnit: "credits",
+          ...(v.balanceUnavailable ? { errorDescription: "balance_unavailable" } : {}),
+        }
       : { ok: false, errorDescription: v.errorDescription };
   }
   const v = await verify2CaptchaKey(clientKey);
