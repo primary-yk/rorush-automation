@@ -1,4 +1,4 @@
-import type { RorushBalanceToken } from "../rorush/balance-token.js";
+import { readCurrentBalanceToken, type RorushBalanceToken } from "../rorush/balance-token.js";
 import type { RoRushHttpClient } from "../rorush/http-client.js";
 
 /** RoRush mines uses currency CRYPTO; wallet mode is balance token (coin vs funCoin). */
@@ -20,5 +20,7 @@ export async function applyMinesWalletMode(
   client: RoRushHttpClient,
   mode: MinesWalletMode,
 ): Promise<void> {
+  const current = await readCurrentBalanceToken(client).catch(() => null);
+  if (current === mode) return;
   await client.setBalanceToken(mode);
 }

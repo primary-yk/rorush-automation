@@ -23,6 +23,8 @@ export class HubRegistry {
     if (!hub) {
       hub = new RoRushHub(creds, {}, account.proxy_url);
       this.hubs.set(accountId, hub);
+    } else {
+      await hub.syncCredentials(creds);
     }
     if (!hub.isConnected()) await hub.connect();
     if (opts.rain) await hub.ensureRainSubscribed();

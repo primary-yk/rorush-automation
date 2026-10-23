@@ -53,10 +53,23 @@ export class RoRushHub {
   private wantCases = false;
 
   constructor(
-    private readonly creds: RoRushCredentials,
+    private creds: RoRushCredentials,
     private readonly handlers: HubHandlers = {},
     private readonly accountProxyUrl?: string | null,
   ) {}
+
+  /** Keep hub JWT/apiKey in sync after session refresh (SignalR uses these on invoke). */
+  async syncCredentials(next: RoRushCredentials): Promise<void> {
+    const jwtChanged = next.jwt !== this.creds.jwt;
+    this.creds = { jwt: next.jwt, apiKey: next.apiKey ?? null };
+    if (
+      jwtChanged &&
+      this.connection &&
+      this.connection.state === HubConnectionState.Connected
+    ) {
+      await this.disconnect();
+    }
+  }
 
   private hubUrl(): string {
     const cfg = loadConfig();

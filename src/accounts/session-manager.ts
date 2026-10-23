@@ -261,7 +261,7 @@ export async function ensureAuthenticated(
   }
 }
 
-function looksLikeAuthError(message: string): boolean {
+export function looksLikeAuthError(message: string): boolean {
   const m = message.toLowerCase();
   return (
     m.includes("401") ||
@@ -303,6 +303,35 @@ async function validateSession(client: RoRushHttpClient): Promise<boolean> {
     const message = err instanceof Error ? err.message : String(err);
     if (looksLikeAuthError(message)) return true;
     throw err;
+  }
+}
+
+/** Re-login once when RoRush returns invalid/expired session mid-flow (mines, wallet switch, etc.). */
+export async function withRoRushAuthRecovery<T>(
+  accountId: number,
+  run: (client: RoRushHttpClient) => Promise<T>,
+  opts?: { disconnectHub?: () => Promise<void> },
+): Promise<T> {
+  const retryOnce = async (): Promise<T> => {
+    updateAccount(accountId, { session_jwt_enc: null });
+    if (opts?.disconnectHub) await opts.disconnectHub().catch(() => undefined);
+    const opened = await ensureAuthenticated(accountId);
+    return run(opened.client);
+  };
+
+  try {
+    const opened = await ensureAuthenticated(accountId);
+    try {
+      return await run(opened.client);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!looksLikeAuthError(msg)) throw err;
+      return retryOnce();
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!looksLikeAuthError(msg)) throw err;
+    return retryOnce();
   }
 }
 

@@ -2,6 +2,8 @@ import { parseMinesWalletMode, minesWalletLabel, type MinesWalletMode } from "..
 import { getAccount, listAccounts, updateAccount, type AccountRow } from "../db/repositories.js";
 import { engine } from "../worker/engine.js";
 import { ownerHasFeedThread, postMinesManualArmedNotice } from "./mines-board.js";
+import { appendSessionHintIfNeeded } from "./friends-auth-hints.js";
+import { looksLikeAuthError } from "../accounts/session-manager.js";
 
 function findOwnedAccount(discordUserId: string, nickname?: string): AccountRow | undefined {
   const owned = listAccounts().filter((a) => a.owner_discord_id === discordUserId);
@@ -106,14 +108,23 @@ export async function testMinesForDiscordUser(input: {
     return "Mines test bet must be at least **0.01** coins.";
   }
 
-  const result = await engine.testMines({
-    accountId: account.id,
-    betCoins: input.betCoins,
-    minesCount,
-    targetMultiplier: target,
-    randomTiles: input.randomTiles,
-    walletMode: input.walletMode,
-  });
+  let result;
+  try {
+    result = await engine.testMines({
+      accountId: account.id,
+      betCoins: input.betCoins,
+      minesCount,
+      targetMultiplier: target,
+      randomTiles: input.randomTiles,
+      walletMode: input.walletMode,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (looksLikeAuthError(msg)) {
+      return appendSessionHintIfNeeded(`**${account.nickname}** · RoRush rejected the session (**${msg}**).`, account);
+    }
+    throw err;
+  }
 
   const wallet = minesWalletLabel(input.walletMode);
 

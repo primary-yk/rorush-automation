@@ -5,13 +5,17 @@
 
 ## Push to GitHub
 
-Token is stored in **`deploy/github-push.env`** (loaded automatically):
+Token lives in **`deploy/github-push.env`** (gitignored — GitHub rejects PATs in commits). Copy from example once:
 
 ```bash
+cp deploy/github-push.env.example deploy/github-push.env
+# edit deploy/github-push.env
 npm run push-github
 ```
 
-Override with env if needed: `export GITHUB_TOKEN=ghp_… && npm run push-github`
+On the VPS, create the same file after `git pull` so `npm run push-github` works there too.
+
+Override with env: `export GITHUB_TOKEN=ghp_… && npm run push-github`
 
 ## VPS after GitHub has main
 

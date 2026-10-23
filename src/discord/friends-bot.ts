@@ -1426,10 +1426,14 @@ async function handleInteraction(interaction: ChatInputCommandInteraction): Prom
       );
     }
     if (dupAck) return;
+    const { isSessionJwtError, appendSessionHintIfNeeded } = await import("./friends-auth-hints.js");
+    const authHint = isSessionJwtError(msg) ? appendSessionHintIfNeeded(msg) : msg;
     const friendMsg =
       isFriendsHostMode() && !isHost(interaction.user.id)
-        ? `Something went wrong — ${discordSupportLine()}`
-        : msg;
+        ? isSessionJwtError(msg)
+          ? authHint
+          : `Something went wrong — ${discordSupportLine()}`
+        : authHint;
     const errEmbed = buildErrorEmbed(out(friendMsg));
     await replyEphemeralEmbed(interaction, errEmbed);
   }

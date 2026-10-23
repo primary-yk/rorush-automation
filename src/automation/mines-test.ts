@@ -1,4 +1,4 @@
-import { ensureAuthenticated } from "../accounts/session-manager.js";
+import { ensureAuthenticated, withRoRushAuthRecovery } from "../accounts/session-manager.js";
 import { applyMinesWalletMode, minesWalletLabel, type MinesWalletMode } from "./mines-currency.js";
 import { parseBalanceCents } from "../rorush/balance-level.js";
 import type { HubRegistry } from "../worker/hub-registry.js";
@@ -11,26 +11,29 @@ import { postMinesBoardToOwner } from "../discord/mines-board.js";
 import { deliverFriendsReporterEmbed } from "../discord/friends-feed.js";
 import { COLORS } from "../discord/embeds.js";
 import { getAccount } from "../db/repositories.js";
+import type { RoRushHttpClient } from "../rorush/http-client.js";
 
 export type MinesTestResult =
   | { mode: "done"; outcome: MinesRoundOutcome; betCoins: number }
   | { mode: "manual_started"; betCoins: number };
 
-export async function runTestMinesRound(input: {
-  accountId: number;
-  betCoins: number;
-  minesCount: number;
-  targetMultiplier: number;
-  randomTiles: boolean;
-  walletMode: MinesWalletMode;
-  hubs: HubRegistry;
-}): Promise<MinesTestResult> {
+async function runTestMinesRoundInner(
+  input: {
+    accountId: number;
+    betCoins: number;
+    minesCount: number;
+    targetMultiplier: number;
+    randomTiles: boolean;
+    walletMode: MinesWalletMode;
+    hubs: HubRegistry;
+  },
+  client: RoRushHttpClient,
+): Promise<MinesTestResult> {
   const account = getAccount(input.accountId);
   if (!account) {
     return { mode: "done", outcome: { ok: false, reason: "Account not found" }, betCoins: 0 };
   }
 
-  const { client } = await ensureAuthenticated(input.accountId);
   await applyMinesWalletMode(client, input.walletMode);
   const balBody = await client.getBalance("crypto");
   const balCents = parseBalanceCents(balBody);
@@ -127,4 +130,24 @@ export async function runTestMinesRound(input: {
   })();
 
   return { mode: "manual_started", betCoins };
+}
+
+export async function runTestMinesRound(input: {
+  accountId: number;
+  betCoins: number;
+  minesCount: number;
+  targetMultiplier: number;
+  randomTiles: boolean;
+  walletMode: MinesWalletMode;
+  hubs: HubRegistry;
+}): Promise<MinesTestResult> {
+  if (!getAccount(input.accountId)) {
+    return { mode: "done", outcome: { ok: false, reason: "Account not found" }, betCoins: 0 };
+  }
+
+  return withRoRushAuthRecovery(
+    input.accountId,
+    (client) => runTestMinesRoundInner(input, client),
+    { disconnectHub: () => input.hubs.disconnect(input.accountId) },
+  );
 }
