@@ -1,4 +1,5 @@
 import { parseBalanceCents } from "./balance-level.js";
+import { readCurrentBalanceToken } from "./balance-token.js";
 import type { RoRushHttpClient } from "./http-client.js";
 import { RORUSH_PATHS } from "./endpoints.js";
 import { vaultLockApiDurationFromMinutes } from "./vault-lock.js";
@@ -30,6 +31,30 @@ export type VaultLockResult = {
   unlockAt: string;
 };
 
+async function prepareVaultLockContext(client: RoRushHttpClient): Promise<void> {
+  const token = await readCurrentBalanceToken(client);
+  if (token !== "coin") {
+    await client.setBalanceToken("coin").catch(() => undefined);
+  }
+}
+
+function isEmptyLockResponse(data: unknown): boolean {
+  return (
+    data == null ||
+    (typeof data === "object" && !Array.isArray(data) && Object.keys(data as object).length === 0)
+  );
+}
+
+async function postVaultLock(
+  client: RoRushHttpClient,
+  body: Record<string, string>,
+): Promise<unknown> {
+  return client.request<unknown>(RORUSH_PATHS.vault.lock, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
 /** Timed vault lock — withdraw blocked on RoRush until duration elapses; deposits still allowed. */
 export async function lockVaultForMinutes(
   client: RoRushHttpClient,
@@ -44,13 +69,16 @@ export async function lockVaultForMinutes(
       "Unsupported vault lock duration. Use 10m, 30m, 1h, 6h, 12h, or 1d (same as rorush.com).",
     );
   }
+  await prepareVaultLockContext(client);
   const beforeUnlock = await fetchVaultUnlockAt(client);
-  const vaultBal = await fetchVaultBalanceCoins(client);
 
-  const data = await client.request<unknown>(RORUSH_PATHS.vault.lock, {
-    method: "POST",
-    body: JSON.stringify({ duration }),
-  });
+  const bodies: Record<string, string>[] = [{ duration }, { duration, currency: "CRYPTO" }];
+  let data: unknown = null;
+  for (const body of bodies) {
+    data = await postVaultLock(client, body);
+    if (!isEmptyLockResponse(data) && parseVaultUnlockAt(data)) break;
+    if (!isEmptyLockResponse(data) && extractRoRushErrorMessage(data)) break;
+  }
 
   const apiMsg = extractRoRushErrorMessage(data);
   if (apiMsg && !parseVaultUnlockAt(data)) {
@@ -58,9 +86,10 @@ export async function lockVaultForMinutes(
   }
 
   let unlockAt = parseVaultUnlockAt(data);
-  if (!unlockAt) {
-    await new Promise((r) => setTimeout(r, 450));
+  for (let i = 0; i < 6 && (!unlockAt || !isVaultLockActive(unlockAt)); i++) {
+    await new Promise((r) => setTimeout(r, 400));
     unlockAt = await fetchVaultUnlockAt(client);
+    if (unlockAt && isVaultLockActive(unlockAt)) break;
   }
   if (!unlockAt || !isVaultLockActive(unlockAt)) {
     const afterUnlock = unlockAt ?? (await fetchVaultUnlockAt(client));
@@ -73,14 +102,17 @@ export async function lockVaultForMinutes(
         `Vault is already locked on RoRush until ${until} UTC. Wait for that timer, or unlock on the site, then run /rorush vault again.`,
       );
     }
-    const emptyHint =
-      vaultBal == null || vaultBal < 0.01
-        ? " Your vault balance is 0 — on rorush.com deposit a small amount to vault, then try lock in the UI once."
-        : "";
+    if (isEmptyLockResponse(data)) {
+      throw new Error(
+        "RoRush vault lock returned an empty response (no timer). " +
+          "On rorush.com open DevTools → Application → Local Storage → copy **apiKey**, then run " +
+          "`/account session` with **api_key** set to that value (email/password login often omits it). " +
+          "Zero vault balance is OK — lock should still work once apiKey matches the site.",
+      );
+    }
     throw new Error(
-      "RoRush did not confirm a vault lock (no unlock timer returned)." +
-        emptyHint +
-        " Email/password accounts are fine — the bot logs in the same way. If lock works on the site for this account, run: npm run test-vault-lock -- --nick YOURNAME --verbose --lock 10m",
+      "RoRush did not confirm a vault lock (no unlock timer on /vault/info). " +
+        "Try `/account session` with JWT + api_key from the browser, then test again.",
     );
   }
   return { unlockAt };

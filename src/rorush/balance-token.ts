@@ -6,6 +6,27 @@ export type RorushBalanceToken = "coin" | "funCoin";
 
 export type FunCoinCorrectReason = "detected" | "permission_denied" | "periodic";
 
+/** RoRush web client sends `localStorage.apiKey` on every request (including vault lock). */
+export function parseApiKey(body: unknown): string | null {
+  if (!body || typeof body !== "object") return null;
+  const seen = new Set<unknown>();
+  const walk = (node: unknown): string | null => {
+    if (!node || typeof node !== "object" || seen.has(node)) return null;
+    seen.add(node);
+    const record = node as Record<string, unknown>;
+    for (const key of ["apiKey", "api_key", "xApiKey"] as const) {
+      const v = record[key];
+      if (typeof v === "string" && v.trim()) return v.trim();
+    }
+    for (const nested of ["userInfo", "user", "value", "data", "result"] as const) {
+      const fromInner = walk(record[nested]);
+      if (fromInner) return fromInner;
+    }
+    return null;
+  };
+  return walk(body);
+}
+
 export function parseCurrentBalanceToken(body: unknown): RorushBalanceToken | null {
   if (!body || typeof body !== "object") return null;
   const seen = new Set<unknown>();

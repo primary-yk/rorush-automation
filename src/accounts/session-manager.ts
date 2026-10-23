@@ -6,7 +6,7 @@ import {
   updateAccount,
   type AccountRow,
 } from "../db/repositories.js";
-import { parseCurrentBalanceToken } from "../rorush/balance-token.js";
+import { parseApiKey, parseCurrentBalanceToken } from "../rorush/balance-token.js";
 import { RoRushHttpClient, type RoRushCredentials } from "../rorush/http-client.js";
 
 export type AccountSecrets = {
@@ -118,6 +118,7 @@ export async function ensureAuthenticated(accountId: number): Promise<{
     if (!creds) throw new Error("No credentials configured");
 
     let client = new RoRushHttpClient(creds, account.proxy_url);
+    ({ creds, client } = await refreshApiKeyFromRoRush(accountId, client, creds));
     const sessionInvalid = await validateSession(client);
     if (sessionInvalid) {
       updateAccount(accountId, { session_jwt_enc: null, api_key_enc: null });
@@ -125,11 +126,12 @@ export async function ensureAuthenticated(accountId: number): Promise<{
       creds = await resolveCredentials(account);
       if (!creds) throw new Error("Session expired and re-login failed");
       client = new RoRushHttpClient(creds, account.proxy_url);
+      ({ creds, client } = await refreshApiKeyFromRoRush(accountId, client, creds));
       const stillBad = await validateSession(client);
       if (stillBad) throw new Error("Session expired and re-login failed");
     }
 
-    return { account, client, creds };
+    return { account: getAccount(accountId)!, client, creds };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (!isTransientNetworkError(err)) {
@@ -152,6 +154,25 @@ function looksLikeAuthError(message: string): boolean {
 }
 
 /** Returns true when stored JWT should be discarded and login retried. */
+async function refreshApiKeyFromRoRush(
+  accountId: number,
+  client: RoRushHttpClient,
+  creds: RoRushCredentials,
+): Promise<{ creds: RoRushCredentials; client: RoRushHttpClient }> {
+  try {
+    const status = await client.authStatus();
+    const fromAuth = parseApiKey(status);
+    if (!fromAuth || fromAuth === creds.apiKey) {
+      return { creds, client };
+    }
+    updateAccount(accountId, { api_key_enc: encryptField(fromAuth) });
+    const next = { ...creds, apiKey: fromAuth };
+    return { creds: next, client: new RoRushHttpClient(next, getAccount(accountId)?.proxy_url) };
+  } catch {
+    return { creds, client };
+  }
+}
+
 async function validateSession(client: RoRushHttpClient): Promise<boolean> {
   try {
     const status = await client.authStatus();

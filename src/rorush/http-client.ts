@@ -46,9 +46,8 @@ export class RoRushHttpClient {
     if (!init.skipAuth && this.creds.jwt) {
       headers.Authorization = `Bearer ${this.creds.jwt}`;
     }
-    if (this.creds.apiKey) {
-      headers["x-api-key"] = this.creds.apiKey;
-    }
+    // Match rorush.com fetch client (always sends the header, even when empty).
+    headers["x-api-key"] = this.creds.apiKey?.trim() ?? "";
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), init.timeoutMs ?? 25_000);
