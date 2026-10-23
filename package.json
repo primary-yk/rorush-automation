@@ -27,6 +27,7 @@
     "show-urls": "tsx scripts/show-dashboard-url.ts",
     "setup-discord-webhook": "tsx scripts/setup-discord-webhook.ts",
     "discord-bot-doctor": "tsx scripts/discord-bot-doctor.ts",
+    "push-github": "bash scripts/push-to-github.sh",
     "discord-login-smoke": "tsx scripts/discord-login-smoke.ts",
     "set-discord-env": "tsx scripts/set-discord-env.ts",
     "build": "next build && tsc -p tsconfig.server.json",
