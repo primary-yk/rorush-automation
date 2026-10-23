@@ -1,3 +1,4 @@
+import { parseJwtExpiryUtc } from "../accounts/jwt-expiry.js";
 import { decryptField } from "../accounts/session-manager.js";
 import type { AccountRow } from "../db/repositories.js";
 import { isSessionJwtError } from "./friends-auth-hints.js";
@@ -14,19 +15,7 @@ export type SessionHealthSummary = {
 const MS_DAY = 86_400_000;
 const MS_HOUR = 3_600_000;
 
-/** Best-effort JWT `exp` (display only; not verified). */
-export function parseJwtExpiryUtc(jwt: string): Date | null {
-  const parts = jwt.trim().split(".");
-  if (parts.length < 2) return null;
-  try {
-    const payloadJson = Buffer.from(parts[1]!, "base64url").toString("utf8");
-    const payload = JSON.parse(payloadJson) as { exp?: unknown };
-    if (typeof payload.exp !== "number" || !Number.isFinite(payload.exp)) return null;
-    return new Date(payload.exp * 1000);
-  } catch {
-    return null;
-  }
-}
+export { parseJwtExpiryUtc } from "../accounts/jwt-expiry.js";
 
 function formatExpiryRelative(exp: Date, now = Date.now()): string {
   const delta = exp.getTime() - now;

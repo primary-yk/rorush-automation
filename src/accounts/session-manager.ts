@@ -7,6 +7,7 @@ import {
   updateAccount,
   type AccountRow,
 } from "../db/repositories.js";
+import { parseJwtExpiryUtc } from "./jwt-expiry.js";
 import { parseApiKey, parseCurrentBalanceToken } from "../rorush/balance-token.js";
 import { RoRushHttpClient, type RoRushCredentials } from "../rorush/http-client.js";
 
@@ -233,6 +234,17 @@ export async function ensureAuthenticated(
   let account = getAccount(accountId);
   if (!account) throw new Error("Account not found");
 
+  if (account.password_enc?.trim() && account.session_jwt_enc?.trim()) {
+    const cachedJwt = decryptField(account.session_jwt_enc);
+    if (cachedJwt) {
+      const exp = parseJwtExpiryUtc(cachedJwt);
+      if (exp && exp.getTime() <= Date.now() + 5 * 60_000) {
+        updateAccount(accountId, { session_jwt_enc: null });
+        account = getAccount(accountId)!;
+      }
+    }
+  }
+
   try {
     let opened = await openAuthenticatedClient(account, opts);
     if (!opened) throw new Error("No credentials configured");
@@ -313,9 +325,14 @@ export async function withRoRushAuthRecovery<T>(
   opts?: { disconnectHub?: () => Promise<void> },
 ): Promise<T> {
   const retryOnce = async (): Promise<T> => {
-    updateAccount(accountId, { session_jwt_enc: null });
     if (opts?.disconnectHub) await opts.disconnectHub().catch(() => undefined);
-    const opened = await ensureAuthenticated(accountId);
+    const row = getAccount(accountId);
+    const opened = row?.password_enc?.trim()
+      ? await ensureAuthenticatedForVault(accountId)
+      : await (async () => {
+          updateAccount(accountId, { session_jwt_enc: null });
+          return ensureAuthenticated(accountId);
+        })();
     return run(opened.client);
   };
 

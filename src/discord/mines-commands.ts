@@ -121,7 +121,10 @@ export async function testMinesForDiscordUser(input: {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (looksLikeAuthError(msg)) {
-      return appendSessionHintIfNeeded(`**${account.nickname}** · RoRush rejected the session (**${msg}**).`, account);
+      const lead = account.password_enc?.trim()
+        ? `**${account.nickname}** · RoRush rejected the login (**${msg}**).`
+        : `**${account.nickname}** · RoRush rejected the session (**${msg}**).`;
+      return appendSessionHintIfNeeded(lead, account);
     }
     throw err;
   }
