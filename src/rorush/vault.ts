@@ -2,7 +2,11 @@ import { parseBalanceCents } from "./balance-level.js";
 import type { RoRushHttpClient } from "./http-client.js";
 import { RORUSH_PATHS } from "./endpoints.js";
 import { vaultLockApiDurationFromMinutes } from "./vault-lock.js";
-import { parseVaultUnlockAt } from "./vault-unlock.js";
+import {
+  extractRoRushErrorMessage,
+  isBareBalanceCentsBody,
+  parseVaultUnlockAt,
+} from "./vault-unlock.js";
 
 export type VaultCurrency = "CRYPTO" | "ROBUX";
 
@@ -41,11 +45,18 @@ export async function lockVaultForMinutes(
     );
   }
   const beforeUnlock = await fetchVaultUnlockAt(client);
+  const vaultBal = await fetchVaultBalanceCoins(client);
 
   const data = await client.request<unknown>(RORUSH_PATHS.vault.lock, {
     method: "POST",
-    body: JSON.stringify({ duration, currency: "CRYPTO" }),
+    body: JSON.stringify({ duration }),
   });
+
+  const apiMsg = extractRoRushErrorMessage(data);
+  if (apiMsg && !parseVaultUnlockAt(data)) {
+    throw new Error(`RoRush vault lock: ${apiMsg}`);
+  }
+
   let unlockAt = parseVaultUnlockAt(data);
   if (!unlockAt) {
     await new Promise((r) => setTimeout(r, 450));
@@ -59,12 +70,17 @@ export async function lockVaultForMinutes(
     if (beforeUnlock && isVaultLockActive(beforeUnlock)) {
       const until = beforeUnlock.slice(11, 19);
       throw new Error(
-        `Vault is already locked on RoRush until **${until} UTC**. Wait for that timer, or unlock on the site, then run \`/rorush vault\` again.`,
+        `Vault is already locked on RoRush until ${until} UTC. Wait for that timer, or unlock on the site, then run /rorush vault again.`,
       );
     }
+    const emptyHint =
+      vaultBal == null || vaultBal < 0.01
+        ? " Your vault balance is 0 — on rorush.com deposit a small amount to vault, then try lock in the UI once."
+        : "";
     throw new Error(
-      "RoRush did not confirm a vault lock (lock API returned no unlock timer). " +
-        "Refresh the account session (**`/account session`**), confirm you can lock vault on rorush.com while logged in as this account, then try again.",
+      "RoRush did not confirm a vault lock (no unlock timer returned)." +
+        emptyHint +
+        " Email/password accounts are fine — the bot logs in the same way. If lock works on the site for this account, run: npm run test-vault-lock -- --nick YOURNAME --verbose --lock 10m",
     );
   }
   return { unlockAt };
@@ -81,8 +97,10 @@ export async function fetchVaultUnlockAt(
   for (const path of paths) {
     try {
       const info = await client.request<unknown>(path);
+      if (isBareBalanceCentsBody(info)) continue;
       const unlockAt = parseVaultUnlockAt(info);
-      if (unlockAt) return unlockAt;
+      if (unlockAt && isVaultLockActive(unlockAt)) return unlockAt;
+      if (unlockAt && path === RORUSH_PATHS.vault.info) return unlockAt;
     } catch {
       /* try alternate path */
     }
@@ -104,7 +122,46 @@ export async function fetchVaultBalanceCoins(
   client: RoRushHttpClient,
   currency: VaultCurrency = "CRYPTO",
 ): Promise<number | null> {
-  const info = await client.request<unknown>(`${RORUSH_PATHS.vault.info}?currency=${currency.toLowerCase()}`);
-  const cents = parseBalanceCents(info);
-  return cents != null ? cents / 100 : null;
+  const paths = [
+    RORUSH_PATHS.vault.info,
+    `${RORUSH_PATHS.vault.info}?currency=${currency.toLowerCase()}`,
+  ];
+  for (const path of paths) {
+    try {
+      const info = await client.request<unknown>(path);
+      const cents = parseBalanceCents(info);
+      if (cents != null) return cents / 100;
+    } catch {
+      /* try next */
+    }
+  }
+  return null;
+}
+
+/** Debug: raw lock response + vault info (for VPS troubleshooting). */
+export async function debugVaultLockProbe(
+  client: RoRushHttpClient,
+  minutes: number,
+): Promise<{ lockResponse: unknown; infoPaths: Array<{ path: string; body: unknown }> }> {
+  const duration = vaultLockApiDurationFromMinutes(minutes);
+  if (!duration) throw new Error("Invalid lock duration");
+  const lockResponse = await client.request<unknown>(RORUSH_PATHS.vault.lock, {
+    method: "POST",
+    body: JSON.stringify({ duration }),
+  });
+  const infoPaths: Array<{ path: string; body: unknown }> = [];
+  for (const path of [
+    RORUSH_PATHS.vault.info,
+    `${RORUSH_PATHS.vault.info}?currency=crypto`,
+  ]) {
+    try {
+      infoPaths.push({ path, body: await client.request<unknown>(path) });
+    } catch (err) {
+      infoPaths.push({
+        path,
+        body: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+  return { lockResponse, infoPaths };
 }

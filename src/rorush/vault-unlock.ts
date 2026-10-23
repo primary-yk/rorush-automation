@@ -51,3 +51,21 @@ export function parseVaultUnlockAt(body: unknown): string | null {
 
   return null;
 }
+
+/** True when the JSON body is a bare balance (cents), not a vault info object. */
+export function isBareBalanceCentsBody(body: unknown): boolean {
+  if (typeof body === "number" && Number.isFinite(body)) {
+    return body >= 0 && body < 1_000_000_000;
+  }
+  return false;
+}
+
+export function extractRoRushErrorMessage(body: unknown): string | null {
+  if (!body || typeof body !== "object") return null;
+  const r = body as Record<string, unknown>;
+  for (const key of ["message", "error", "title", "detail"] as const) {
+    const v = r[key];
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+  return null;
+}

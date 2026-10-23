@@ -9,11 +9,13 @@ import { getDb } from "../src/db/database.js";
 import { getAccount, listAccounts } from "../src/db/repositories.js";
 import { ensureAuthenticated } from "../src/accounts/session-manager.js";
 import {
+  debugVaultLockProbe,
   fetchVaultBalanceCoins,
   fetchVaultUnlockAt,
   isVaultLockActive,
   lockVaultForMinutes,
 } from "../src/rorush/vault.js";
+import { parseVaultUnlockAt } from "../src/rorush/vault-unlock.js";
 import { parseVaultLockPreset } from "../src/rorush/vault-lock.js";
 import { RORUSH_PATHS } from "../src/rorush/endpoints.js";
 
@@ -56,6 +58,20 @@ async function main() {
   if (!minutes || minutes <= 0) {
     console.error("Invalid --lock duration (use 10m, 30m, 1h, 6h, 12h, 1d).");
     process.exit(1);
+  }
+
+  const verbose = process.argv.includes("--verbose");
+
+  if (verbose) {
+    console.log(`\n[verbose] POST ${RORUSH_PATHS.vault.lock} (${minutes} min)…`);
+    const probe = await debugVaultLockProbe(client, minutes);
+    console.log("[verbose] lock response:", JSON.stringify(probe.lockResponse));
+    for (const row of probe.infoPaths) {
+      console.log(`[verbose] GET ${row.path}:`, JSON.stringify(row.body));
+    }
+    const parsed = parseVaultUnlockAt(probe.lockResponse);
+    console.log("[verbose] parsed unlock from lock:", parsed ?? "(none)");
+    return;
   }
 
   console.log(`\nCalling POST ${RORUSH_PATHS.vault.lock} (${minutes} min)…`);
